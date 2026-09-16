@@ -6,12 +6,16 @@ import { canonicalPick, candidateHash } from './_idBilling.js';
 export const config = { maxDuration: 60 };
 const PATH = '/api/preview-id-serialization-comparison';
 const CONTROL = 'preview_id_encoder_comparison:1e4122d:v7';
-const END = Date.parse('2026-09-16T18:00:00Z'), RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
+const END = Date.parse('2026-09-19T00:00:00Z'), RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
 const nonce = () => randomBytes(32).toString('hex');
 const hex = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
 const CODES = ['transport', 'upstream_status', 'response_json', 'upstream_error', 'result_shape',
-  'in_progress', 'missing_run', 'checkpoint_unavailable', 'deadline', 'internal'];
-class Diagnostic extends Error { constructor(code) { super('diagnostic'); this.code = code; } }
+  'in_progress', 'missing_run', 'checkpoint_unavailable', 'deadline', 'internal', 'invalid_stored_state'];
+// Cause is request-local and non-enumerable. Never log/serialize Error objects:
+// every outward path selects only codeOf(error), not message, stack or cause.
+class Diagnostic extends Error {
+  constructor(code, cause) { super('diagnostic', cause === undefined ? undefined : { cause }); this.code = code; }
+}
 const codeOf = e => e instanceof Diagnostic && CODES.includes(e.code) ? e.code : 'internal';
 const TYPES = ['nil', 'string', 'table', 'other', 'throw'];
 const SETUP = ['ready', 'fixture_input', 'fixture_decode', 'fixture_shape', 'result_encoding', 'comparison_controls', 'comparison_error'];
@@ -140,12 +144,12 @@ async function kv(args) {
     response = await fetch(process.env.KV_REST_API_URL, { method: 'POST', redirect: 'error',
       headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(args), signal: AbortSignal.timeout(3000) });
-  } catch (_) { throw new Diagnostic('transport'); }
+  } catch (e) { throw new Diagnostic('transport', e); }
   if (!response.ok) throw new Diagnostic('upstream_status');
-  try { data = await response.json(); } catch (_) { throw new Diagnostic('response_json'); }
+  try { data = await response.json(); } catch (e) { throw new Diagnostic('response_json', e); }
   if (!data || typeof data !== 'object' || Array.isArray(data))
     throw new Diagnostic('result_shape');
-  if (data.error) throw new Diagnostic('upstream_error');
+  if (data.error) throw new Diagnostic('upstream_error', data.error);
   if (data.result === undefined) throw new Diagnostic('result_shape');
   return data.result;
 }
@@ -197,16 +201,18 @@ function validRecord(r) {
 async function record() {
   const raw = await kv(['GET', CONTROL]);
   if (raw === null) return null;
-  let r; try { r = JSON.parse(raw); } catch (_) { throw new Diagnostic('result_shape'); }
-  if (!validRecord(r)) throw new Diagnostic('result_shape'); return r;
+  let r; try { r = JSON.parse(raw); } catch (e) { throw new Diagnostic('invalid_stored_state', e); }
+  if (!validRecord(r)) throw new Diagnostic('invalid_stored_state'); return r;
 }
 function artifact(r) {
   if (!r.artifact) return fresh();
   let data; try { data = JSON.parse(Buffer.from(r.artifact, 'base64').toString()); }
-  catch (_) { throw new Diagnostic('result_shape'); }
+  catch (e) { throw new Diagnostic('invalid_stored_state', e); }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Diagnostic('invalid_stored_state');
   const out = fresh();
   // Persist the numeric vector, then re-project all output on every download.
-  if (data.vector) Object.assign(out, project(data.vector));
+  try { if (data.vector) Object.assign(out, project(data.vector)); }
+  catch (e) { throw new Diagnostic('invalid_stored_state', e); }
   out.status = ['CAPTURED', 'UNDETERMINED', 'INVALID', 'FAIL', 'UNRUN'].includes(data.status) ? data.status : 'FAIL';
   out.error = CODES.includes(data.error) ? data.error : null;
   for (const k of ['cleanup', 'recoveryCleanup']) if (data[k]) out[k] = {
@@ -269,22 +275,33 @@ async function recover() {
   await finish({ ...r, worker }, data);
   return artifact({ artifact: Buffer.from(JSON.stringify(data)).toString('base64') });
 }
-function permitted(req) {
-  if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !== 'fix/listing-export-identity'
-      || Date.now() >= RECOVERY_END) return false;
+// First-failure categories only. Never echo configuration, request values or
+// upstream errors, and never normalize a rejected host/path/query into access.
+function deniedReason(req) {
+  if (process.env.VERCEL_ENV !== 'preview') return 'guard_preview_environment';
+  if (process.env.VERCEL_GIT_COMMIT_REF !== 'fix/listing-export-identity') return 'guard_feature_branch';
+  if (Date.now() >= RECOVERY_END) return 'guard_recovery_deadline';
   const host = process.env.VERCEL_URL;
-  if (!host || !/^[a-z0-9-]+\.vercel\.app$/.test(host) || req.headers.host !== host
-      || req.url !== PATH || Object.keys(req.query || {}).length) return false;
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return false;
+  if (!host || !/^[a-z0-9-]+\.vercel\.app$/.test(host)) return 'guard_host_configuration';
+  if (req.headers.host !== host) return 'guard_host_mismatch';
+  if (req.url !== PATH) return typeof req.url === 'string' && req.url.startsWith(PATH + '?')
+    ? 'guard_request_query' : 'guard_request_path';
+  if (Object.keys(req.query || {}).length) return 'guard_request_query';
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return 'guard_kv_missing';
   try {
     const u = new URL(process.env.KV_REST_API_URL);
     return u.protocol === 'https:' && u.hostname.endsWith('.upstash.io') && !u.username && !u.password
-      && !u.port && !u.search && !u.hash && u.pathname === '/';
-  } catch (_) { return false; }
+      && !u.port && !u.search && !u.hash && u.pathname === '/' ? null : 'guard_kv_url_shape';
+  } catch (_) { return 'guard_kv_url_parse'; }
 }
+const REASONS = ['guard_preview_environment', 'guard_feature_branch', 'guard_recovery_deadline',
+  'guard_host_configuration', 'guard_host_mismatch', 'guard_request_path', 'guard_request_query',
+  'guard_kv_missing', 'guard_kv_url_shape', 'guard_kv_url_parse', 'request_method', 'request_get_body',
+  'request_origin', 'request_fetch_site', 'request_content_type', 'request_body_shape', 'request_operation',
+  'run_deadline', 'state_read_failed', 'state_projection_failed', 'operation_failed'];
 const escapeHtml = value => String(value).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error = null, canRun = false } = {}) {
+function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error = null, canRun = false, reason = null } = {}) {
   const token = nonce();
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline');
@@ -304,7 +321,9 @@ function html(res, { status = 200, evidence = null, state = 'UNAVAILABLE', error
     + '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic encoder comparison</title>'
     + `<style nonce="${token}">body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#f6f7f9;color:#192433}main{max-width:850px;margin:auto;padding:24px 18px}h1{font-size:26px;line-height:1.2}button{font:inherit;min-height:44px;padding:10px 14px;margin:8px 0;border:1px solid #526271;border-radius:6px;background:white;color:#192433}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;padding:16px;background:white;border:1px solid #d4dbe2;border-radius:6px;font-size:13px}small{display:block}form{display:inline-block;margin-right:10px}</style></head><body><main>`
     + '<h1>Synthetic encoder comparison</h1><p>Controlled encoder evidence only. No billing acceptance, authenticated-client or HTTP-loss proof.</p>'
+    + '<p id="execution-window">Execution deadline: September 18, 2026 at 8:00 PM EDT (UTC−04:00; September 19, 2026 at 00:00 UTC). Recovery and saved-results deadline: September 23, 2026 at 2:00 PM EDT (UTC−04:00; September 23, 2026 at 18:00 UTC). Extending the window does not reset a consumed run.</p>'
     + `<p id="run-state" data-state="${Object.hasOwn(messages, state) ? state : 'UNAVAILABLE'}">${message}</p>`
+    + (REASONS.includes(reason) ? `<p id="denied-reason">Diagnostic: ${reason}</p><p>HTTP status: ${status}. This is the first failed check, not a report of the saved run state. Stop here; do not retry the experiment.</p>` : '')
     + (state === 'RESPONSE_ONLY' ? `<p><a href="${PATH}">Open saved results (read-only)</a></p>` : '')
     + (error && CODES.includes(error) ? `<p id="error">Status: ${error}</p>` : '')
     + (canRun && state === 'NOT_CONSUMED'
@@ -333,22 +352,33 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
-  if (!permitted(req)) return html(res, { status: 404 });
-  if (!['GET', 'POST'].includes(req.method)) return html(res, { status: 405 });
+  const denied = deniedReason(req);
+  if (denied) return html(res, { status: 404, reason: denied });
+  if (!['GET', 'POST'].includes(req.method)) return html(res, { status: 405, reason: 'request_method' });
+  let failureStage = 'operation_failed';
   try {
     if (req.method === 'GET') {
-      if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length)) return html(res, { status: 400 });
+      if (req.body && (typeof req.body !== 'object' || Object.keys(req.body).length))
+        return html(res, { status: 400, reason: 'request_get_body' });
+      failureStage = 'state_read_failed';
       const old = await record();
+      failureStage = 'state_projection_failed';
       return html(res, { evidence: old?.artifact ? artifact(old) : null,
         state: old ? old.artifact ? 'CONSUMED_SAVED' : 'CONSUMED_NO_RESULTS' : 'NOT_CONSUMED',
         canRun: !old && Date.now() < END });
     }
     const body = req.body;
-    if (req.headers.origin !== `https://${process.env.VERCEL_URL}` || req.headers['sec-fetch-site'] !== 'same-origin'
-        || !['application/x-www-form-urlencoded', 'application/json'].includes((req.headers['content-type'] || '').split(';')[0])
-        || !body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1
-        || !['run', 'recover', 'download'].includes(body.operation)) return html(res, { status: 400 });
-    if (body.operation === 'run' && Date.now() >= END) return html(res, { status: 410 });
+    if (req.headers.origin !== `https://${process.env.VERCEL_URL}`)
+      return html(res, { status: 400, reason: 'request_origin' });
+    if (req.headers['sec-fetch-site'] !== 'same-origin')
+      return html(res, { status: 400, reason: 'request_fetch_site' });
+    if (!['application/x-www-form-urlencoded', 'application/json'].includes((req.headers['content-type'] || '').split(';')[0]))
+      return html(res, { status: 400, reason: 'request_content_type' });
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1)
+      return html(res, { status: 400, reason: 'request_body_shape' });
+    if (!['run', 'recover', 'download'].includes(body.operation))
+      return html(res, { status: 400, reason: 'request_operation' });
+    if (body.operation === 'run' && Date.now() >= END) return html(res, { status: 410, reason: 'run_deadline' });
     let evidence;
     if (body.operation === 'run') evidence = await run();
     else if (body.operation === 'recover') evidence = await recover();
@@ -359,5 +389,5 @@ export default async function handler(req, res) {
       return res.status(200).send(JSON.stringify(evidence, null, 2));
     }
     return html(res, { evidence, state: 'RESPONSE_ONLY' });
-  } catch (e) { return html(res, { status: 503, error: codeOf(e) }); }
+  } catch (e) { return html(res, { status: 503, error: codeOf(e), reason: failureStage }); }
 }

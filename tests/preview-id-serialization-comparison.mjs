@@ -49,7 +49,7 @@ globalThis.fetch = async (url, init) => {
   const res = await redisRest(url, { ...init, body: JSON.stringify(a) }, commands);
   if (comparison && fault === 'lost') throw new Error(CANARY);
   if (comparison && fault === 'shape') return Response.json({ result: [CANARY] });
-  if (comparison && fault === 'advance') now = Date.parse('2026-09-16T19:00:00Z');
+  if (comparison && fault === 'advance') now = Date.parse('2026-09-19T01:00:00Z');
   return res;
 };
 async function invoke(operation = 'run', overrides = {}) {
@@ -73,6 +73,58 @@ const safe = value => ![CANARY, 'Bearer', 'Authorization', 'upstash.io', 'KV_RES
   'preview-comparison-', 'preview_id_', 'scans:', 'owner', 'headers', 'stack'].some(v => JSON.stringify(value).includes(v));
 const evidence = [];
 try {
+  const baseline = execFileSync('git', ['show', 'af95bb8:api/preview-id-serialization-comparison.js'],
+    { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
+  const oldPermitted = new Function('req', 'PATH', 'RECOVERY_END',
+    baseline.slice(baseline.indexOf('function permitted(req)'), baseline.indexOf('const escapeHtml ='))
+      + '\nreturn permitted(req);');
+  const guardCases = [
+    ['guard_preview_environment', () => { process.env.VERCEL_ENV = CANARY; }],
+    ['guard_feature_branch', () => { process.env.VERCEL_GIT_COMMIT_REF = CANARY; }],
+    ['guard_recovery_deadline', () => { now = Date.parse('2026-09-23T18:00:00Z'); }],
+    ['guard_host_configuration', () => { process.env.VERCEL_URL = CANARY; }],
+    ['guard_host_mismatch', null, { headers: { host: CANARY } }],
+    ['guard_request_path', null, { url: PATH + '.js' }],
+    ['guard_request_query', null, { url: PATH + '?__system=' + CANARY }],
+    ['guard_request_query', null, { url: PATH + '?x=1', query: { x: '1' } }],
+    ['guard_request_query', null, { query: { __system: CANARY } }],
+    ['guard_kv_missing', () => { delete process.env.KV_REST_API_TOKEN; }],
+    ['guard_kv_missing', () => { delete process.env.KV_REST_API_URL; }],
+    ['guard_kv_url_parse', () => { process.env.KV_REST_API_URL = CANARY; }],
+    ['guard_kv_url_shape', () => { process.env.KV_REST_API_URL = `https://${CANARY}.invalid`; }],
+    ['guard_preview_environment', () => {
+      process.env.VERCEL_ENV = CANARY; process.env.VERCEL_GIT_COMMIT_REF = CANARY;
+    }, { url: CANARY }],
+    [null, null, {}],
+  ];
+  for (const [reason, change, overrides = {}] of guardCases) {
+    reset(); change?.();
+    const req = { method: 'GET', url: PATH, query: {}, body: undefined, ...overrides,
+      headers: { host: HOST, ...overrides.headers } };
+    const oldAllowed = oldPermitted(req, PATH, Date.parse('2026-09-23T18:00:00Z'));
+    const r = await invoke(null, req);
+    t.check(`${reason || 'allowed'}:original guard predicate outcome unchanged; fixed first denial only`,
+      (r.statusCode === 200) === oldAllowed && safe(r.body)
+      && (reason ? r.body.includes(`Diagnostic: ${reason}</p>`) && r.statusCode === 404
+        && commands.length === 0 && !r.body.includes('<form')
+        : r.body.includes('NOT_CONSUMED') && r.body.includes('Run comparison once')
+          && commands.length === 1 && comparisonCalls().length === 0));
+  }
+  for (const [reason, overrides] of [
+    ['request_method', { method: 'OPTIONS' }],
+    ['request_get_body', { method: 'GET', body: CANARY }],
+    ['request_origin', { headers: { origin: CANARY } }],
+    ['request_fetch_site', { headers: { 'sec-fetch-site': CANARY } }],
+    ['request_content_type', { headers: { 'content-type': CANARY } }],
+    ['request_body_shape', { body: { operation: 'run', extra: CANARY } }],
+    ['request_operation', { body: { operation: CANARY } }],
+  ]) {
+    reset(); const r = await invoke('run', overrides);
+    t.check(`${reason}:distinct fixed request diagnostic, no values or Redis calls`,
+      r.statusCode === (reason === 'request_method' ? 405 : 400)
+      && r.body.includes(`Diagnostic: ${reason}</p>`) && safe(r.body) && !r.body.includes('<form')
+      && commands.length === 0);
+  }
   for (const [name, change] of [
     ['production', () => { process.env.VERCEL_ENV = 'production'; }],
     ['missing env', () => { delete process.env.VERCEL_ENV; }],
@@ -116,8 +168,10 @@ try {
     && !page.body.includes('<script') && page.headers['Cache-Control'] === 'no-store'
     && page.headers['Content-Type'] === 'text/html; charset=utf-8'
     && page.headers['Content-Disposition'] === 'inline');
-  reset(); now = Date.parse('2026-09-16T18:00:00Z');
-  t.check('absolute run expiry blocks new action before Redis', (await invoke()).statusCode === 410 && commands.length === 0);
+  reset(); now = Date.parse('2026-09-19T00:00:00Z');
+  const expiredPost = await invoke();
+  t.check('absolute run expiry blocks new action before Redis with distinct execution deadline reason',
+    expiredPost.statusCode === 410 && expiredPost.body.includes('Diagnostic: run_deadline</p>') && commands.length === 0);
   const expiredPage = await invoke(null, { method: 'GET', body: undefined });
   t.check('unconsumed GET after execution expiry offers no run form and does not claim control',
     expiredPage.body.includes('NOT_CONSUMED') && expiredPage.body.includes('deadline has passed')
@@ -200,16 +254,61 @@ try {
     .equals(execFileSync('git', ['show', '5289043:api/preview-id-billing-reproduction.js'], { cwd: new URL('..', import.meta.url) })));
   const source = readFileSync(new URL('../api/preview-id-serialization-comparison.js', import.meta.url), 'utf8');
   const comparison = comparisonCalls()[0].args[1];
+  const baselineFixture = JSON.parse(comparisonCalls()[0].args[3]);
   const originalRoute = execFileSync('git', ['show', '0b72bd0:api/preview-id-serialization-comparison.js'],
     { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
-  t.check('same v7 control, comparison Lua, fixture, one-shot logic, projection and guards remain byte-identical',
-    source.split('const escapeHtml =')[0] === originalRoute.split('export default async function handler')[0]);
+  const section = (text, start, end) => text.slice(text.indexOf(start), text.indexOf(end));
+  t.check('same v7 control, comparison Lua and durable control script remain byte-identical',
+    section(source, 'const COMPARE =', 'async function kv') === section(originalRoute, 'const COMPARE =', 'async function kv')
+    && source.includes("const CONTROL = 'preview_id_encoder_comparison:1e4122d:v7';"));
+  t.check('fixture, numeric comparison projection and one-shot lifecycle remain byte-identical',
+    section(source, 'function fixture(', 'async function record(') === section(originalRoute, 'function fixture(', 'async function record(')
+    && section(source, 'async function finish(', '// First-failure categories only.') === section(originalRoute, 'async function finish(', 'function permitted(req)'));
+  const DiagnosticClass = new Function(
+    section(source, 'class Diagnostic extends Error', 'const codeOf') + ';return Diagnostic;')();
+  const originalError = new Error(CANARY), chained = new DiagnosticClass('transport', originalError);
+  t.check('original exception remains same internal non-enumerable cause; JSON contains no secret message/stack/cause',
+    chained.cause === originalError && Object.getOwnPropertyDescriptor(chained, 'cause').enumerable === false
+    && JSON.stringify(chained) === '{"code":"transport"}' && !/console\./.test(source));
+  const actualKv = new Function('Diagnostic',
+    section(source, 'async function kv(', 'function fixture(') + ';return kv;')(DiagnosticClass);
+  const localFetch = globalThis.fetch;
+  try {
+    for (const [code, stub] of [
+      ['transport', async () => { throw originalError; }],
+      ['response_json', async () => ({ ok: true, json: async () => { throw originalError; } })],
+      ['upstream_error', async () => ({ ok: true, json: async () => ({ error: originalError }) })],
+    ]) {
+      globalThis.fetch = stub;
+      let captured; try { await actualKv(['GET', CONTROL]); } catch (e) { captured = e; }
+      t.check(`${code}:actual helper retains original cause internally, no error details in serialization`,
+        captured?.code === code && captured.cause === originalError
+        && !Object.keys(captured).includes('cause') && safe(JSON.stringify(captured)));
+    }
+  } finally { globalThis.fetch = localFetch; }
+  reset(); now = Date.parse('2026-09-16T19:31:00Z');
+  const extendedPage = await invoke(null, { method: 'GET', body: undefined });
+  t.check('authorized extended window enables Run on absent control after old expiry, GET never claims',
+    extendedPage.statusCode === 200 && extendedPage.body.includes('NOT_CONSUMED')
+    && extendedPage.body.includes('Run comparison once') && !store.get(CONTROL)
+    && commands.every(c => c.cmd === 'get' && c.key === CONTROL) && comparisonCalls().length === 0
+    && extendedPage.body.includes('September 18, 2026 at 8:00 PM EDT')
+    && extendedPage.body.includes('September 19, 2026 at 00:00 UTC')
+    && extendedPage.body.includes('September 23, 2026 at 2:00 PM EDT'));
+  await invoke(); const preservedAcrossWindow = store.get(CONTROL); commands = [];
+  now = Date.parse('2026-09-18T23:59:00Z');
+  const preservedPage = await invoke(null, { method: 'GET', body: undefined });
+  const preservedReplay = await invoke();
+  t.check('window extension never resets consumed control; late GET and POST replay do not reexecute',
+    preservedPage.body.includes('CONSUMED_SAVED') && !preservedPage.body.includes('<form')
+    && preservedReplay.evidence.status === 'CAPTURED' && store.get(CONTROL) === preservedAcrossWindow
+    && comparisonCalls().length === 0);
   t.check('comparison is in-memory only; no Redis commands, encoder config, JSON clone or global fetch patch',
     !/redis\.(call|pcall)|KEYS\[/.test(comparison) && !/encode_(?:sparse|invalid|keep|number|max)/.test(comparison)
     && source.includes('out[k]=copy(x)') && !/globalThis\.fetch\s*=/.test(source));
   // Local-only fixture-shape equivalence against unchanged actual billing.
   // This is NOT part of the deployed comparison: its EVAL still has zero keys.
-  const base = JSON.parse(comparisonCalls()[0].args[3]);
+  const base = baselineFixture;
   const receipt = createHash('sha256').update(base.owner).digest('hex');
   const ctx = { owner: base.owner, scan: base.scan, receipt, grant: 1, stamp: '2026_09' };
   const localKeys = [`id_billing:${receipt}`, base.free_key, `scans:${base.owner}:id_paid_left`];
@@ -247,9 +346,24 @@ try {
   const readFailure = await invoke(null, { method: 'GET', body: undefined });
   t.check('unavailable saved-state read remains UNKNOWN with no run/copy/download/cleanup action',
     readFailure.statusCode === 503 && readFailure.body.includes('UNAVAILABLE')
+    && readFailure.body.includes('Diagnostic: state_read_failed</p>') && readFailure.body.includes('Status: transport</p>')
     && !readFailure.body.includes('<button') && !readFailure.body.includes('<form')
     && !readFailure.body.includes(CANARY) && store.get(CONTROL) === consumedBytes);
   fault = null;
+  store.set(CONTROL, CANARY);
+  const invalidState = await invoke(null, { method: 'GET', body: undefined });
+  t.check('malformed saved control identifies state-read validation failure without mutation or disclosure',
+    invalidState.statusCode === 503 && invalidState.body.includes('Diagnostic: state_read_failed</p>')
+    && invalidState.body.includes('Status: invalid_stored_state</p>') && safe(invalidState.body)
+    && !invalidState.body.includes('<form') && store.get(CONTROL) === CANARY && comparisonCalls().length === 0);
+  const brokenProjection = JSON.parse(consumedBytes);
+  brokenProjection.artifact = Buffer.from(JSON.stringify({ vector: [CANARY] })).toString('base64');
+  const brokenBytes = JSON.stringify(brokenProjection); store.set(CONTROL, brokenBytes);
+  const projectionFailure = await invoke(null, { method: 'GET', body: undefined });
+  t.check('malformed saved evidence identifies projection failure, preserves exact control, never offers Run',
+    projectionFailure.statusCode === 503 && projectionFailure.body.includes('Diagnostic: state_projection_failed</p>')
+    && projectionFailure.body.includes('Status: invalid_stored_state</p>') && safe(projectionFailure.body)
+    && !projectionFailure.body.includes('<form') && store.get(CONTROL) === brokenBytes && comparisonCalls().length === 0);
   const malicious = JSON.parse(consumedBytes), polluted = JSON.parse(Buffer.from(malicious.artifact, 'base64').toString());
   polluted.scope = '</pre><script>window.INJECTED=true</script>';
   malicious.artifact = Buffer.from(JSON.stringify(polluted)).toString('base64'); store.set(CONTROL, JSON.stringify(malicious));
@@ -286,7 +400,7 @@ try {
     const downloadPromise = browserPage.waitForEvent('download');
     await browserPage.getByRole('button', { name: 'Optional: download displayed .json', exact: true }).click();
     const download = await downloadPromise;
-    const downloadedPath = '/home/user/workspace/preview_v7_html_local_download_20260916.json';
+    const downloadedPath = '/home/user/workspace/preview_v7_extended_guard_local_download_20260916.json';
     await download.saveAs(downloadedPath);
     t.check('optional local Blob download is nonzero complete JSON, never server POST',
       download.suggestedFilename() === 'cardresell-synthetic-encoder-comparison.json'
@@ -302,7 +416,17 @@ try {
       && store.get(CONTROL) === consumedBytes);
     t.check('mobile results do not overflow viewport',
       await browserPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-    await browserPage.screenshot({ path: '/home/user/workspace/preview_v7_html_mobile_chromium_20260916.png', fullPage: true });
+    await browserPage.screenshot({ path: '/home/user/workspace/preview_v7_extended_guard_results_mobile_chromium_20260916.png', fullPage: true });
+    const beforeDenied = commands.length;
+    process.env.VERCEL_GIT_COMMIT_REF = CANARY;
+    const deniedResponse = await browserPage.reload();
+    t.check('mobile denied page shows fixed first-failure and HTTP404, no actions or Redis request',
+      deniedResponse.status() === 404
+      && await browserPage.locator('#denied-reason').textContent() === 'Diagnostic: guard_feature_branch'
+      && await browserPage.getByRole('button').count() === 0 && commands.length === beforeDenied
+      && !(await browserPage.locator('body').textContent()).includes(CANARY));
+    await browserPage.screenshot({ path: '/home/user/workspace/preview_v7_extended_guard_denied_mobile_chromium_20260916.png', fullPage: true });
+    process.env.VERCEL_GIT_COMMIT_REF = 'fix/listing-export-identity';
     await ctx.close();
   } finally { await browser.close(); }
   t.check('all retrieval actions preserve exact control bytes and only issue fixed GET reads',
@@ -357,10 +481,10 @@ try {
       && methods.join() === 'GET,POST,GET,GET'
       && await view.getByRole('button', { name: 'Run comparison once', exact: true }).count() === 0
       && JSON.stringify(JSON.parse(await view.locator('#evidence').textContent())) === JSON.stringify(inline));
-    await view.screenshot({ path: '/home/user/workspace/preview_v7_run_once_mobile_chromium_20260916.png', fullPage: true });
+    await view.screenshot({ path: '/home/user/workspace/preview_v7_extended_guard_run_once_mobile_chromium_20260916.png', fullPage: true });
     await ctx.close();
   } finally { await formBrowser.close(); }
-  writeFileSync('/home/user/workspace/preview_v7_run_once_offline_evidence_20260916.json',
+  writeFileSync('/home/user/workspace/preview_v7_extended_guard_diagnostics_offline_evidence_20260916.json',
     JSON.stringify({ sourceSha256: createHash('sha256').update(source).digest('hex'),
       scope: 'LOCAL ONLY: native local Redis and injected hypotheses; no managed encoder result claimed', evidence }, null, 2));
 } finally { globalThis.fetch = originalFetch; Date.now = originalNow; }
