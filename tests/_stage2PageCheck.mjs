@@ -18,7 +18,7 @@ export async function stage2PageCheck({ invoke, token, uid, email, check }) {
     if (u.hostname === 'www.gstatic.com' && u.pathname.endsWith('firebase-app.js'))
       return intercepted.fulfill({ contentType: 'application/javascript', body: 'export const initializeApp=()=>({});' });
     if (u.hostname === 'www.gstatic.com' && u.pathname.endsWith('firebase-auth.js')) {
-      const user = JSON.stringify({ uid, email, emailVerified: true, providerData: [{ providerId: 'password' }] });
+      const user = JSON.stringify({ uid, email, emailVerified: true, isAnonymous: false, providerData: [{ providerId: 'password' }] });
       return intercepted.fulfill({ contentType: 'application/javascript', body: `
         const user={...${user},getIdToken:async()=>${JSON.stringify(token)},reload:async()=>{}};
         export const initializeAuth=()=>({currentUser:user});
@@ -53,7 +53,7 @@ export async function stage2PageCheck({ invoke, token, uid, email, check }) {
     await page.waitForFunction(() => document.getElementById('app').contentWindow._fbAuth?.currentUser
       && typeof document.getElementById('app').contentWindow._renderIdentityConfirmation === 'function');
     check('protected page CSP allows unchanged picker and auth module in same-origin frame', true);
-    check('loading protected UI creates no setup or acceptance POST', apiWrites.length === 0);
+    check('loading protected UI creates no setup or acceptance POST', apiWrites.every(x => x.action === 'preflight'));
     await page.locator('#attest').check();
     await page.locator('#bind').click();
     await page.waitForFunction(() => document.getElementById('output').textContent.includes('"step": "idle"'));

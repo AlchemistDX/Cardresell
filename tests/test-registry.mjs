@@ -91,6 +91,9 @@ const EXCLUDED = {
     'Required temporary worker gate: node tests/preview-id-authenticated-worker.mjs. ' +
     'Actual isolated Redis state transitions plus real local HTTP/normal-verifier ' +
     'and shipped srcdoc picker service-worker suppression/retry. Not managed Safari.',
+  'preview-id-auth-preflight.mjs':
+    'Required temporary strict-auth gate: node tests/preview-id-auth-preflight.mjs. ' +
+    'Real signature verification, raw-claim and browser identity matching, read-only preflight and signout; local fixtures only.',
   'preview-id-authenticated-acceptance.mjs':
     'Required temporary Stage2 gate: node tests/preview-id-authenticated-acceptance.mjs. ' +
     'Private Redis executes actual Lua, normal production signature verification uses ' +

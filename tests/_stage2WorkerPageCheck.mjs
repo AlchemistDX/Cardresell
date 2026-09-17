@@ -16,7 +16,7 @@ export async function stage2WorkerPageCheck({ check, reset, getStore }) {
   const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'worker-offline' };
   const uid='worker-local-dedicated',email='worker-local@example.test';
   const enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url'),now=Math.floor(Date.now()/1000);
-  const unsigned=enc({alg:'RS256',kid:jwk.kid})+'.'+enc({sub:uid,email,email_verified:true,
+  const unsigned=enc({alg:'RS256',kid:jwk.kid})+'.'+enc({sub:uid,email,email_verified:true,firebase:{sign_in_provider:'password'},
     aud:'cardresell-e0329',iss:'https://securetoken.google.com/cardresell-e0329',iat:now,exp:now+3600});
   const token=unsigned+'.'+sign('RSA-SHA256',Buffer.from(unsigned),privateKey).toString('base64url');
   process.env.VERCEL_URL='worker-offline.vercel.app';
@@ -104,7 +104,7 @@ export async function stage2WorkerPageCheck({ check, reset, getStore }) {
       if(u.hostname==='www.gstatic.com'&&u.pathname.endsWith('firebase-app.js'))
         return r.fulfill({contentType:'application/javascript',body:'export const initializeApp=()=>({});'});
       if(u.hostname==='www.gstatic.com'&&u.pathname.endsWith('firebase-auth.js')){
-        const user=JSON.stringify({uid,email,emailVerified:true,providerData:[{providerId:'password'}]});
+        const user=JSON.stringify({uid,email,emailVerified:true,isAnonymous:false,providerData:[{providerId:'password'}]});
         return r.fulfill({contentType:'application/javascript',body:`
           const user={...${user},getIdToken:async()=>${JSON.stringify(token)},reload:async()=>{}};
           export const initializeAuth=()=>({currentUser:user});

@@ -1,7 +1,7 @@
 // Temporary protected normal-auth confirmation acceptance. Synthetic offer, NOT
 // live initial scan/vision. All identities come from normal Firebase verification.
 import { randomBytes } from 'node:crypto';
-import { verifyFirebaseToken } from './_verifyToken.js';
+import { stage2VerifiedIdentity, stage2MatchBrowserIdentity } from './_previewIdStage2Auth.js';
 import { stage2LossAction, stage2LossStatus, stage2LossDisarm } from './_previewIdStage2Loss.js';
 import { STAGE2_PATH, STAGE2_CONTROL, STAGE2_END, STAGE2_RECOVERY_END,
   stage2Guard, stage2State, stage2Bind, stage2Next, stage2Payload, stage2Observation,
@@ -17,9 +17,9 @@ export function stage2Html(nonce, host) {
 <p>Normal Firebase sign-in; deterministic synthetic offer; unchanged shipped picker and acceptance handler. Not live scan accuracy or physical Safari proof.</p>
 <p>Execution ends September 18, 2026, 8:00 PM EDT (September 19, 00:00 UTC). Recovery ends September 23, 2026, 2:00 PM EDT (18:00 UTC). Never reuse your ordinary account. No purchases, grading, collection, drafts or referral actions.</p>
 <a href="/signin?next=${STAGE2_PATH}">Sign in normally with the dedicated test account</a>
-<p id="account">Loading normal app session…</p>
+<p id="account">Checking dedicated account with the server…</p><button id="signout">Sign out and use dedicated test account</button>
 <label><input type="checkbox" id="attest"> I confirm this is a fresh dedicated test account in the isolated Preview.</label>
-<button id="bind">Bind account once</button><button id="next">Start next fixed phase</button>
+<button id="bind" disabled>Bind account once</button><button id="next">Start next fixed phase</button>
 <button id="show">Show current offer again</button><button id="duplicate">Send six same-selection duplicates</button>
 <button id="armLoss">Arm response suppression once (phase 3 only)</button>
 <button id="deplete">Deplete final rejection fixture</button><button id="status">Read observations</button>
@@ -29,6 +29,44 @@ export function stage2Html(nonce, host) {
 <script nonce="${nonce}">
 const app=document.getElementById('app'), out=document.getElementById('output');
 let payload=null;
+let confirmedIdentity=null,authGeneration=0,checkingAuth=false,lastAuthFingerprint='',lastAuthCheck=0,bindAvailable=false,lastSDKUser=null,signedOutSDKUser=null;
+const authMessage='Sign out and use dedicated test account';
+function browserIdentity(){
+ const u=app.contentWindow._fbAuth?.currentUser;
+ if(!u||u===signedOutSDKUser||u.isAnonymous!==false||u.emailVerified!==true||typeof u.uid!=='string'||!u.uid.trim()
+   ||typeof u.email!=='string'||!u.email.includes('@')||!Array.isArray(u.providerData))throw Error('normal_signin_required');
+ const providers=[...new Set(u.providerData.map(p=>p.providerId))].sort();
+ if(!providers.length||providers.some(p=>!['password','google.com','apple.com'].includes(p)))throw Error('normal_signin_required');
+ return {uid:u.uid,email:u.email,providers};
+}
+function invalidateAuth(){confirmedIdentity=null;bindAvailable=false;document.getElementById('bind').disabled=true;document.getElementById('account').textContent=authMessage}
+async function preflight(force=false){
+ if(checkingAuth&&!force)return;
+ const generation=++authGeneration;checkingAuth=true;invalidateAuth();
+ try{
+  const identity=browserIdentity(),fingerprint=JSON.stringify(identity),sdkUser=app.contentWindow._fbAuth.currentUser;
+  lastAuthFingerprint=fingerprint;
+  const token=await app.contentWindow._fbAuth.currentUser.getIdToken(true);
+  const r=await fetch('${STAGE2_PATH}',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+   body:JSON.stringify({action:'preflight',identity}),signal:AbortSignal.timeout(12000)});
+  const d=await r.json();
+  if(generation!==authGeneration)return;
+  if(!r.ok||!d.ok||d.identity?.uid!==identity.uid||d.identity?.email!==identity.email
+    ||!identity.providers.includes(d.identity?.provider)||app.contentWindow._fbAuth.currentUser!==sdkUser
+    ||JSON.stringify(browserIdentity())!==fingerprint)throw Error('identity_mismatch');
+  confirmedIdentity=identity;lastAuthFingerprint=fingerprint;bindAvailable=d.setup==='NOT_BOUND'&&d.canBind===true;
+  document.getElementById('account').textContent='Server confirmed dedicated sign-in as '+d.identity.email+'. Confirm this is the dedicated account before binding.';
+  document.getElementById('bind').disabled=!bindAvailable||!document.getElementById('attest').checked;
+ }catch(_){if(generation===authGeneration)invalidateAuth()}
+ finally{if(generation===authGeneration){checkingAuth=false;lastAuthCheck=Date.now()}}
+}
+document.getElementById('attest').onchange=()=>{document.getElementById('bind').disabled=!confirmedIdentity||!bindAvailable||!document.getElementById('attest').checked};
+document.getElementById('signout').onclick=async()=>{
+ signedOutSDKUser=app.contentWindow._fbAuth?.currentUser;
+ ++authGeneration;checkingAuth=false;lastAuthFingerprint='';invalidateAuth();
+ try{await app.contentWindow._fbSignOut()}catch(_){}
+ invalidateAuth();
+};
 let browserLossPhase='NOT_ARMED',browserRetryClicks=0;
 const workerPath='/api/preview-id-authenticated-worker',workerScope='${STAGE2_PATH}';
 const bounded=p=>Promise.race([p,new Promise((_,reject)=>setTimeout(()=>reject(Error('worker_timeout')),12000))]);
@@ -68,9 +106,10 @@ function clientObservation(){
 }
 async function session(){const u=app.contentWindow._fbAuth?.currentUser;if(!u)throw Error('normal_signin_required');return u.getIdToken()}
 async function request(action,extra={}){
+ if(action==='bind'){await preflight(true);if(!confirmedIdentity)throw Error('normal_signin_required')}
  if(action==='bind')sessionStorage.setItem(baselineKey,JSON.stringify({local:localBaseline,session:sessionBaseline}));
  if(action==='cleanup'&&app.contentWindow._scanCandidateDebitPending)throw Error('wait_for_pending_request');
- const body=action==='bind'?{action,attest:document.getElementById('attest').checked}:{action,...extra};
+ const body=action==='bind'?{action,attest:document.getElementById('attest').checked,identity:confirmedIdentity}:{action,...extra};
  const r=await fetch('${STAGE2_PATH}',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await session()},body:JSON.stringify(body)});
  const d=await r.json();const {payload:offered,binding,...observed}=d;display({server:observed,client:clientObservation()});
  if(!r.ok)throw Error(d.error||'request_failed');if(offered)payload=offered;return d;
@@ -132,7 +171,13 @@ document.getElementById('armLoss').onclick=async()=>{
   display({error:'response_suppression_unavailable',browserLossPhase,note:'Do not rearm or infer a pass. Read observations and clean up.'});
  }finally{app.style.visibility='visible'}
 };
-setInterval(()=>{const u=app.contentWindow._fbAuth?.currentUser;document.getElementById('account').textContent=u?'Signed in normally as '+(u.email||'account without email')+'. Confirm this is the dedicated account before binding.':'Normal sign-in required.'},1000);
+setInterval(()=>{
+ const sdkUser=app.contentWindow._fbAuth?.currentUser;
+ if(sdkUser!==lastSDKUser){lastSDKUser=sdkUser;lastAuthFingerprint='';++authGeneration;checkingAuth=false;invalidateAuth()}
+ let fingerprint='';try{fingerprint=JSON.stringify(browserIdentity())}catch(_){}
+ if(!fingerprint){++authGeneration;checkingAuth=false;lastAuthFingerprint='';invalidateAuth();return}
+ if(!checkingAuth&&(fingerprint!==lastAuthFingerprint||Date.now()-lastAuthCheck>30000))preflight();
+},500);
 </script></html>`;
 }
 export default async function handler(req, res) {
@@ -159,11 +204,19 @@ export default async function handler(req, res) {
       'loss-unknown': ['clientId','requestBody','category'],
     };
     if (!body || typeof body !== 'object' || Array.isArray(body)
-        || !['bind', 'next', 'status', 'deplete', 'cleanup', 'loss-disarm', ...Object.keys(lossFields)].includes(body.action)
-        || Object.keys(body).some(k => !['action', ...(body.action === 'bind' ? ['attest'] : lossFields[body.action] || [])].includes(k))
+        || !['preflight', 'bind', 'next', 'status', 'deplete', 'cleanup', 'loss-disarm', ...Object.keys(lossFields)].includes(body.action)
+        || Object.keys(body).some(k => !['action', ...(body.action === 'bind' ? ['attest','identity'] : body.action === 'preflight' ? ['identity'] : lossFields[body.action] || [])].includes(k))
         || (body.action === 'bind' && body.attest !== true)) throw new Stage2Error('input_guard');
-    if (!['status', 'cleanup', 'loss-disarm'].includes(body.action) && Date.now() >= STAGE2_END) throw new Stage2Error('expired');
-    const user = await verifyFirebaseToken((req.headers.authorization || '').replace('Bearer ', '').trim());
+    if (!['preflight', 'status', 'cleanup', 'loss-disarm'].includes(body.action) && Date.now() >= STAGE2_END) throw new Stage2Error('expired');
+    const user = await stage2VerifiedIdentity((req.headers.authorization || '').replace('Bearer ', '').trim());
+    if (['preflight','bind'].includes(body.action)) {
+      const identity = stage2MatchBrowserIdentity(user, body.identity);
+      if (body.action === 'preflight') {
+        const existing = await stage2State();
+        return res.status(200).json({ ok: true, identity, canBind: !existing && Date.now() < STAGE2_END,
+          setup: !existing ? 'NOT_BOUND' : existing.owner === user.uid ? 'BOUND_TO_THIS_ACCOUNT' : 'BOUND_TO_OTHER_ACCOUNT' });
+      }
+    }
     let s = await stage2State();
     if (s && s.owner !== user.uid) throw new Stage2Error('owner_guard');
     if (body.action === 'bind') s = await stage2Bind(user);

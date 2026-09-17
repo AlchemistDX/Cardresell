@@ -27,7 +27,7 @@ const EMAIL = 'stage2@example.test';
 function token(uid = UID) {
   const enc = x => Buffer.from(JSON.stringify(x)).toString('base64url'), now = Math.floor(Date.now() / 1000);
   const data = enc({ alg: 'RS256', kid: jwk.kid }) + '.' + enc({ sub: uid, email: EMAIL,
-    email_verified: true, aud: 'cardresell-e0329', iss: 'https://securetoken.google.com/cardresell-e0329',
+    email_verified: true, firebase: { sign_in_provider: 'password' }, aud: 'cardresell-e0329', iss: 'https://securetoken.google.com/cardresell-e0329',
     iat: now, exp: now + 3600 });
   return data + '.' + sign('RSA-SHA256', Buffer.from(data), privateKey).toString('base64url');
 }
@@ -53,6 +53,10 @@ globalThis.fetch = async (input, init = {}) => {
   blocked.push(u.hostname); throw new Error('offline-network-denied');
 };
 async function invoke(handler = route, body = { action: 'status' }, extra = {}) {
+  // Baseline valid-account calls carry the same browser identity as the signed
+  // fixture. Missing/mismatched identity bypasses have their own strict-auth suite.
+  if (handler === route && body?.action === 'bind' && body.identity === undefined)
+    body = { ...body, identity: { uid: UID, email: EMAIL, providers: ['password'] } };
   const req = { method: 'POST', url: stage.STAGE2_PATH, query: {}, body,
     headers: { host: process.env.VERCEL_URL, origin: `https://${process.env.VERCEL_URL}`,
       authorization: 'Bearer ' + auth, 'sec-fetch-site': 'same-origin' }, ...extra };
