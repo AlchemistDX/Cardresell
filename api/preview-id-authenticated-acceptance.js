@@ -15,8 +15,8 @@ export function stage2Html(nonce, host) {
 <style nonce="${nonce}">body{font:16px system-ui;max-width:1000px;margin:auto;padding:20px;background:#111827;color:#f3f4f6}button,a{margin:5px;padding:10px;color:inherit}button{background:#334155;border:1px solid #94a3b8;border-radius:5px}a{display:inline-block}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1f2937;padding:14px}iframe{width:100%;height:85vh;max-height:760px;border:1px solid #64748b}label{display:block;margin:15px 0}</style>
 <h1>Authenticated confirmation acceptance</h1>
 <p>Normal Firebase sign-in; deterministic synthetic offer; unchanged shipped picker and acceptance handler. Not live scan accuracy or physical Safari proof.</p>
-<p>Execution ends September 18, 2026, 8:00 PM EDT (September 19, 00:00 UTC). Recovery ends September 23, 2026, 2:00 PM EDT (18:00 UTC). Never reuse your ordinary account. No purchases, grading, collection, drafts or referral actions.</p>
-<a href="/signin?next=${STAGE2_PATH}">Sign in normally with the dedicated test account</a>
+<p>Execution ends September 21, 2026, 8:00 PM EDT (September 22, 00:00 UTC). Recovery ends September 23, 2026, 2:00 PM EDT (18:00 UTC). Never reuse your ordinary account. No purchases, grading, collection, drafts or referral actions.</p>
+<button id="chooseGoogle" disabled>Sign in with a different Google account</button>
 <p id="account">Checking dedicated account with the server…</p><button id="signout">Sign out and use dedicated test account</button>
 <label><input type="checkbox" id="attest"> I confirm this is a fresh dedicated test account in the isolated Preview.</label>
 <button id="bind" disabled>Bind account once</button><button id="next">Start next fixed phase</button>
@@ -25,11 +25,12 @@ export function stage2Html(nonce, host) {
 <button id="deplete">Deplete final rejection fixture</button><button id="status">Read observations</button>
 <button id="cleanup">Finish and clean up</button><button id="copy">Copy observations</button><button id="download">Download observations</button>
 <p>Phases: 1 cancel; 2 choose Synthetic Set 7, then duplicates; 3 click Arm response suppression once, choose Set 7, wait for the real Retry button, then click Retry and Read observations; 4 deplete then choose Set 7 and verify rejection. This is browser-network response suppression after a corroborated server response, not physical packet loss. Phase 3 acceptance alone is not proof. Read/copy observations before advancing. Cleanup retains four terminal journals, consumed setup and loss guards; credit fixtures are removed.</p>
-<iframe id="app" title="Unchanged CardResell picker with normal authentication"></iframe><pre id="output">No test executed. GET does not claim or seed anything.</pre>
+<iframe id="app" inert title="Unchanged CardResell picker with normal authentication"></iframe><pre id="output">No test executed. GET does not claim or seed anything.</pre>
 <script nonce="${nonce}">
 const app=document.getElementById('app'), out=document.getElementById('output');
 let payload=null;
 let confirmedIdentity=null,authGeneration=0,checkingAuth=false,lastAuthFingerprint='',lastAuthCheck=0,bindAvailable=false,lastSDKUser=null,signedOutSDKUser=null;
+let accountTransition='idle',transitionGeneration=0;
 const authMessage='Sign out and use dedicated test account';
 function browserIdentity(){
  const u=app.contentWindow._fbAuth?.currentUser;
@@ -39,8 +40,9 @@ function browserIdentity(){
  if(!providers.length||providers.some(p=>!['password','google.com','apple.com'].includes(p)))throw Error('normal_signin_required');
  return {uid:u.uid,email:u.email,providers};
 }
-function invalidateAuth(){confirmedIdentity=null;bindAvailable=false;document.getElementById('bind').disabled=true;document.getElementById('account').textContent=authMessage}
-async function preflight(force=false){
+function invalidateAuth(){confirmedIdentity=null;bindAvailable=false;app.inert=true;document.getElementById('bind').disabled=true;document.getElementById('account').textContent=authMessage}
+async function preflight(force=false,requiredProvider=null){
+ if(accountTransition!=='idle')return;
  if(checkingAuth&&!force)return;
  const generation=++authGeneration;checkingAuth=true;invalidateAuth();
  try{
@@ -52,9 +54,10 @@ async function preflight(force=false){
   const d=await r.json();
   if(generation!==authGeneration)return;
   if(!r.ok||!d.ok||d.identity?.uid!==identity.uid||d.identity?.email!==identity.email
+    ||(requiredProvider&&d.identity?.provider!==requiredProvider)
     ||!identity.providers.includes(d.identity?.provider)||app.contentWindow._fbAuth.currentUser!==sdkUser
     ||JSON.stringify(browserIdentity())!==fingerprint)throw Error('identity_mismatch');
-  confirmedIdentity=identity;lastAuthFingerprint=fingerprint;bindAvailable=d.setup==='NOT_BOUND'&&d.canBind===true;
+  confirmedIdentity=identity;lastAuthFingerprint=fingerprint;bindAvailable=d.setup==='NOT_BOUND'&&d.canBind===true;app.inert=false;
   document.getElementById('account').textContent='Server confirmed dedicated sign-in as '+d.identity.email+'. Confirm this is the dedicated account before binding.';
   document.getElementById('bind').disabled=!bindAvailable||!document.getElementById('attest').checked;
  }catch(_){if(generation===authGeneration)invalidateAuth()}
@@ -62,10 +65,45 @@ async function preflight(force=false){
 }
 document.getElementById('attest').onchange=()=>{document.getElementById('bind').disabled=!confirmedIdentity||!bindAvailable||!document.getElementById('attest').checked};
 document.getElementById('signout').onclick=async()=>{
+ if(['signing_out','choosing'].includes(accountTransition))return;
+ const generation=++transitionGeneration,auth=app.contentWindow._fbAuth;
+ accountTransition='signing_out';document.getElementById('chooseGoogle').disabled=true;
  signedOutSDKUser=app.contentWindow._fbAuth?.currentUser;
  ++authGeneration;checkingAuth=false;lastAuthFingerprint='';invalidateAuth();
- try{await app.contentWindow._fbSignOut()}catch(_){}
- invalidateAuth();
+ document.getElementById('account').textContent='Signing out of embedded Firebase…';
+ try{
+  if(!auth||typeof app.contentWindow._stage2SignOut!=='function')throw Error('auth_not_ready');
+  await bounded(app.contentWindow._stage2SignOut());
+  if(generation!==transitionGeneration||app.contentWindow._fbAuth!==auth||auth.currentUser!==null)throw Error('signout_not_confirmed');
+  accountTransition='signed_out';lastSDKUser=null;
+  document.getElementById('account').textContent='Signed out of embedded Firebase. Choose the dedicated Google account.';
+  document.getElementById('chooseGoogle').disabled=false;
+ }catch(_){
+  if(generation!==transitionGeneration)return;
+  accountTransition='failed';
+  document.getElementById('account').textContent='Sign-out not confirmed. Retry sign-out; account chooser and binding remain disabled.';
+ }
+};
+document.getElementById('chooseGoogle').onclick=async()=>{
+ if(accountTransition!=='signed_out'||app.contentWindow._fbAuth?.currentUser!==null)return;
+ const generation=++transitionGeneration;accountTransition='choosing';
+ document.getElementById('chooseGoogle').disabled=true;document.getElementById('attest').checked=false;
+ ++authGeneration;checkingAuth=false;invalidateAuth();
+ document.getElementById('account').textContent='Choose the dedicated Google account. Server verification is required.';
+ try{
+  // Called immediately in the explicit click gesture; no async import here.
+  if(typeof app.contentWindow._stage2ChooseGoogle!=='function')throw Error('chooser_not_ready');
+  const chosen=await Promise.race([app.contentWindow._stage2ChooseGoogle(),
+   new Promise((_,reject)=>setTimeout(()=>reject(Error('chooser_timeout')),120000))]);
+  if(generation!==transitionGeneration||!chosen||app.contentWindow._fbAuth?.currentUser!==chosen)throw Error('signin_changed');
+  accountTransition='idle';lastSDKUser=chosen;signedOutSDKUser=null;lastAuthFingerprint='';
+  await preflight(true,'google.com');
+  if(!confirmedIdentity)throw Error('server_identity_unconfirmed');
+ }catch(_){
+  if(generation!==transitionGeneration)return;
+  ++authGeneration;checkingAuth=false;accountTransition='failed';invalidateAuth();
+  document.getElementById('account').textContent='Google sign-in not confirmed. Sign out again before choosing an account.';
+ }
 };
 let browserLossPhase='NOT_ARMED',browserRetryClicks=0;
 const workerPath='/api/preview-id-authenticated-worker',workerScope='${STAGE2_PATH}';
@@ -140,9 +178,12 @@ async function loadApp(){
  const loaded=new Promise(resolve=>app.onload=resolve);
  app.srcdoc=html.replace(/<head[^>]*>/i,m=>m+'<base href="https://${host}/"><meta http-equiv="Content-Security-Policy" content="'+policy+'">');
  await bounded(loaded);app.onload=null;
- const script=app.contentDocument.createElement('script');
+  const script=app.contentDocument.createElement('script');
  script.textContent="window._stage2WorkerMessage=(message)=>new Promise(resolve=>{const c=new MessageChannel();c.port1.onmessage=e=>resolve(e.data);navigator.serviceWorker.controller.postMessage(message,[c.port2])});navigator.serviceWorker?.addEventListener('message',e=>{if(e.source===navigator.serviceWorker.controller&&e.data?.type==='stage2-loss-observation')parent.postMessage({type:'stage2-loss-view',phase:e.data.phase},parent.location.origin)});document.addEventListener('click',e=>{if(e.target.closest('[data-testid=identity-retry]'))parent.postMessage({type:'stage2-loss-retry-click'},parent.location.origin)},true)";
- app.contentDocument.head.appendChild(script);
+  app.contentDocument.head.appendChild(script);
+  const chooser=app.contentDocument.createElement('script');chooser.type='module';
+  chooser.textContent="import {GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';window._stage2SignOut=()=>signOut(window._fbAuth);window._stage2ChooseGoogle=()=>{const auth=window._fbAuth;if(!auth||auth.currentUser!==null)throw Error('signout_required');const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});return signInWithPopup(auth,provider).then(result=>result.user)};";
+  app.contentDocument.head.appendChild(chooser);
 }
 loadApp().catch(()=>display({error:'app_unavailable'}));
 document.getElementById('armLoss').onclick=async()=>{
@@ -172,6 +213,12 @@ document.getElementById('armLoss').onclick=async()=>{
  }finally{app.style.visibility='visible'}
 };
 setInterval(()=>{
+ if(accountTransition!=='idle'){
+  if(accountTransition==='signed_out'&&app.contentWindow._fbAuth?.currentUser!==null){
+   accountTransition='failed';document.getElementById('chooseGoogle').disabled=true;invalidateAuth();
+  }
+  return;
+ }
  const sdkUser=app.contentWindow._fbAuth?.currentUser;
  if(sdkUser!==lastSDKUser){lastSDKUser=sdkUser;lastAuthFingerprint='';++authGeneration;checkingAuth=false;invalidateAuth()}
  let fingerprint='';try{fingerprint=JSON.stringify(browserIdentity())}catch(_){}
@@ -191,7 +238,9 @@ export default async function handler(req, res) {
       // srcdoc inherits this policy. The unchanged application uses inline
       // event handlers, so nonce-only would disable the real picker. No user
       // content is interpolated; the stricter child connect-src is additive.
-      res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com; frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; worker-src 'self'");
+      // Firebase popup SDK uses Google's iframe bootstrap and this project's
+      // auth iframe. Permit only those additions in this temporary page.
+      res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com; frame-src 'self' https://cardresell-e0329.firebaseapp.com/__/auth/iframe; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; worker-src 'self'");
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(stage2Html(nonce, host));
     }

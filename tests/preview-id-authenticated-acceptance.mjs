@@ -126,9 +126,10 @@ try {
   check('redirect transport fails closed with sanitized error', await fail(() => stage.stage2KV('GET', 'fixed')));
   redirectFault = false;
   const html = await invoke(route, null, { method: 'GET' });
-  check('protected GET renders normal-signin instructions and real-app frame', html.statusCode === 200
-    && html.payload.includes('/signin?next=') && html.payload.includes('_fbAuth?.currentUser')
-    && html.payload.includes('getIdToken()'));
+  check('protected GET renders gated real Google chooser and actual-app frame', html.statusCode === 200
+    && html.payload.includes('id="chooseGoogle" disabled') && html.payload.includes('_fbAuth?.currentUser')
+    && html.payload.includes("provider.setCustomParameters({prompt:'select_account'})")
+    && html.payload.includes('auth.currentUser!==null') && html.payload.includes('getIdToken()'));
   check('GET never claims/reads Redis or seeds entitlements', commands.length === 0);
   check('page contains no fake identity/token assignment', !/googleUser\s*=|_googleIdToken\s*=/.test(html.payload));
   check('page does not perform loss simulation or replace picker', !/route\.abort|lost-after-commit|_pickScanCandidate\s*=/.test(html.payload));

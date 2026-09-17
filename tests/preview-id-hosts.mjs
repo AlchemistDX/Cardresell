@@ -154,7 +154,7 @@ try{
    check('actual srcdoc base uses request origin with no cross-host iframe',base===origin+'/');
    const preSignout=snapshots(),count=commands.filter(c=>!['get','mget','exists'].includes(c.cmd)).length;
    await page.click('#signout');
-   await page.waitForFunction(()=>document.querySelector('#account').textContent==='Sign out and use dedicated test account');
+   await page.waitForFunction(()=>document.querySelector('#account').textContent.startsWith('Signed out of embedded Firebase'));
    check('actual signout/GET/preflight retain exact control bytes on current origin',
     snapshots()===preSignout&&commands.filter(c=>!['get','mget','exists'].includes(c.cmd)).length===count
     &&await page.locator('#bind').isDisabled());

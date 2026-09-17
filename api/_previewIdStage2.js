@@ -5,7 +5,10 @@ export const STAGE2_BRANCH = 'fix/listing-export-identity';
 export const STAGE2_STABLE_HOST = 'cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app';
 export const STAGE2_PATH = '/api/preview-id-authenticated-acceptance';
 export const STAGE2_CONTROL = 'preview_id_authenticated_acceptance:v1';
-export const STAGE2_END = Date.parse('2026-09-19T00:00:00Z');
+export const STAGE2_PREVIOUS_END = Date.parse('2026-09-19T00:00:00Z');
+export const STAGE2_END = Date.parse('2026-09-22T00:00:00Z');
+// Extension does not rewrite or invalidate existing one-shot control bytes.
+export const stage2KnownExpiry = value => value === STAGE2_END || value === STAGE2_PREVIOUS_END;
 export const STAGE2_RECOVERY_END = Date.parse('2026-09-23T18:00:00Z');
 export const stage2Scoped = () => process.env.VERCEL_ENV === 'preview'
   && (process.env.VERCEL_GIT_COMMIT_REF === STAGE2_BRANCH || !process.env.VERCEL_GIT_COMMIT_REF);
@@ -83,7 +86,7 @@ export function validateStage2(s) {
       || !s.fixtures.every(f => only(f, ['receipt', 'scan']) && id(f.receipt) && id(f.scan))
       || new Set(s.fixtures.map(f => f.receipt)).size !== 4
       || new Set(s.fixtures.map(f => f.scan)).size !== 4
-      || s.expires !== STAGE2_END
+      || !stage2KnownExpiry(s.expires)
       || (s.observations !== undefined && (!Array.isArray(s.observations) || s.observations.length > 3 || !s.observations.every(observationValid)))
       || (s.finalObservation !== undefined && !observationValid(s.finalObservation))
       || (s.state === 'active' && s.phase === -1 && s.step !== 'idle')

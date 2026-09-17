@@ -1,7 +1,7 @@
 // Temporary Preview-only evidence. Normal verified account required by caller.
 // Durable, fixed synthetic browser-response-suppression evidence only.
 import { createHash } from 'node:crypto';
-import { STAGE2_CONTROL, STAGE2_END, STAGE2_RECOVERY_END, Stage2Error,
+import { STAGE2_CONTROL, STAGE2_END, STAGE2_RECOVERY_END, stage2KnownExpiry, Stage2Error,
   stage2KV, stage2Keys, stage2Candidates } from './_previewIdStage2.js';
 import { candidateHash, canonicalPick } from './_idBilling.js';
 export const STAGE2_LOSS_CONTROL = 'preview_id_authenticated_http_loss:v1';
@@ -23,7 +23,7 @@ function record(raw, owner) {
   if (!only(r, ['version','owner','stage','disarmed','clientId','receipt','scan','candidateSet',
       'expires','requestHash','commitCorroborated','retryCorroborated','category'])
       || !client(r.clientId) || !hex(r.receipt) || !hex(r.scan) || !hex(r.candidateSet)
-      || r.expires !== STAGE2_END || (r.requestHash !== null && !hex(r.requestHash))
+      || !stage2KnownExpiry(r.expires) || (r.requestHash !== null && !hex(r.requestHash))
       || !['armed','claimed','commit_observed','retry_observed','unknown'].includes(r.stage)
       || typeof r.commitCorroborated !== 'boolean' || typeof r.retryCorroborated !== 'boolean'
       || !['none','claim_unavailable','acceptance_unavailable','response_invalid','corroboration_unavailable'].includes(r.category))

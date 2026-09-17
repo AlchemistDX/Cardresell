@@ -121,10 +121,11 @@ try {
     let auth={currentUser:null},callback=()=>{};
     window.__localSetSDK=(user,token)=>{auth.currentUser=user?{...user,getIdToken:async()=>token,reload:async()=>{}}:null;callback(auth.currentUser)};
     export const initializeAuth=()=>auth,onAuthStateChanged=(a,cb)=>{callback=cb;cb(auth.currentUser);return ()=>{}};
-    export const signOut=async()=>{auth.currentUser=null;callback(null)},signInWithPopup=async()=>{},
+    export const signOut=async()=>{auth.currentUser=null;callback(null)},signInWithPopup=async()=>{
+     const next=window.__localGoogle;window.__localSetSDK(next.user,next.token);return {user:auth.currentUser}},
      createUserWithEmailAndPassword=async()=>{},signInWithEmailAndPassword=async()=>{},
      sendPasswordResetEmail=async()=>{},sendEmailVerification=async()=>{};
-    export class GoogleAuthProvider{}
+    export class GoogleAuthProvider{setCustomParameters(p){this.parameters=p}}
     export const indexedDBLocalPersistence={},browserLocalPersistence={},browserSessionPersistence={},browserPopupRedirectResolver={};
    `});
   if(u.origin===origin&&[stage.STAGE2_PATH,'/api/pro-status'].includes(u.pathname)){
@@ -146,7 +147,7 @@ try {
   await page.waitForFunction(()=>!!document.querySelector('#app').contentWindow.__localSetSDK);
   const sdk={uid,email,emailVerified:true,isAnonymous:false,providerData:[{providerId:'password'}]};
   const set=async(user,t=validToken)=>page.evaluate(({user,t})=>document.querySelector('#app').contentWindow.__localSetSDK(user,t),{user,t});
-  const rejected=()=>page.waitForFunction(()=>document.querySelector('#account').textContent==='Sign out and use dedicated test account'&&document.querySelector('#bind').disabled);
+  const rejected=()=>page.waitForFunction(()=>/^(Sign out and use dedicated test account|Signed out of embedded Firebase)/.test(document.querySelector('#account').textContent)&&document.querySelector('#bind').disabled);
   await rejected();
   check('signed-out first load never claims normal authentication',await page.locator('#bind').isDisabled()&&preflights===0);
   for(const [name,user,t] of [
@@ -178,7 +179,12 @@ try {
   await page.click('#signout');await rejected();
   check('explicit normal SDK signout leaves controls untouched',await page.evaluate(()=>!document.querySelector('#app').contentWindow._fbAuth.currentUser)
    &&mutating().length===0);
-  await set(sdk);await page.waitForFunction(()=>!document.querySelector('#bind').disabled);
+  await page.evaluate(next=>{document.querySelector('#app').contentWindow.__localGoogle=next},{
+   user:{...sdk,providerData:[{providerId:'google.com'}]},token:token({firebase:{sign_in_provider:'google.com'}})});
+  await page.click('#chooseGoogle');
+  await page.waitForFunction(()=>document.querySelector('#account').textContent.startsWith('Server confirmed'));
+  await page.locator('#attest').check();
+  await page.waitForFunction(()=>!document.querySelector('#bind').disabled);
   await page.click('#bind');await page.waitForFunction(()=>document.querySelector('#output').textContent.includes('"step": "idle"'));
   check('fresh valid sign-in after signout can bind once',!!store.get(stage.STAGE2_CONTROL));
   const consumed=store.get(stage.STAGE2_CONTROL),count=mutating().length;

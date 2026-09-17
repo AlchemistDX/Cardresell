@@ -97,6 +97,9 @@ const EXCLUDED = {
   'preview-id-hosts.mjs':
     'Required temporary exact-host gate: node tests/preview-id-hosts.mjs. ' +
     'Immutable and explicit stable host, strict same-origin guards, readonly real preflight/signout and local browser rendering; no managed calls.',
+  'preview-id-account-switch.mjs':
+    'Required temporary account-switch gate: node tests/preview-id-account-switch.mjs. ' +
+    'Awaited embedded SDK signout, explicit Google chooser, strict new identity, token-race and expiry compatibility; local fixtures only.',
   'preview-id-authenticated-acceptance.mjs':
     'Required temporary Stage2 gate: node tests/preview-id-authenticated-acceptance.mjs. ' +
     'Private Redis executes actual Lua, normal production signature verification uses ' +
