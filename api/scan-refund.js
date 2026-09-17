@@ -1,4 +1,5 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { idBilling, idBillingFailure } from './_idBilling.js';
 
 // POST /api/scan-refund
 // Body: { scan_id, reason?: 'wrong_card' | 'glare' | 'other', note?: string }
@@ -75,6 +76,16 @@ export default async function handler(req, res) {
   // ── 3. Ownership check ──
   if (record.uid !== uid) {
     return res.status(403).json({ error: 'This scan does not belong to your account.', reason_code: 'ownership' });
+  }
+  // New ID records never fall through to legacy read/set restoration. The
+  // journal fences auto-refunds, manual replay and retry claims atomically.
+  if (record.id_receipt) {
+    try {
+      const result = await idBilling('manual_refund', { receipt: record.id_receipt,
+        owner: uid, scan: scan_id, reason: String(reason || 'unspecified').slice(0, 80) });
+      if (!result.ok) return idBillingFailure(res, result);
+      return res.status(200).json(result);
+    } catch (error) { return idBillingFailure(res, error); }
   }
 
   // ── 4. Idempotency: already refunded? ──

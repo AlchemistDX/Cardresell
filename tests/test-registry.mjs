@@ -70,6 +70,20 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'billing-release-scope.mjs':
+    'Required billing release scope gate: node tests/billing-release-scope.mjs. ' +
+    'Pins reviewed billing, Production grounding/auth, and absence of temporary harness code.',
+  'id-confirmation-atomic.mjs':
+    'Required billing release gate: node tests/id-confirmation-atomic.mjs. ' +
+    'Executes exact billing Lua and actual handlers in private local Redis.',
+  'billing-release-browser.mjs':
+    'Required billing release browser gate: node tests/billing-release-browser.mjs. ' +
+    'Real shipped picker and handler with local Redis; all external traffic blocked.',
+  'billing-release-rollback.mjs':
+    'Required rollback compatibility gate: node tests/billing-release-rollback.mjs. ' +
+    'Receipt-aware backend retained with old UI; cached new-client replay remains single-charge.',
+  'loader-stubs.mjs':
+    'ESM loader helper for isolated actual-handler tests; not an independently executable suite.',
   'ebay-live.mjs':
     'Hits api.ebay.com for real and needs EBAY_LIVE=1 plus live credentials. ' +
     'It is the push-gate check, run deliberately by hand, never in the ' +

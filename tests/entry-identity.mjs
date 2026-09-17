@@ -83,7 +83,12 @@ const browser = await _pw.chromium.launch();
    share localStorage, which is what makes the two-tab scenario real rather
    than two independent simulations. */
 async function ctxWith() {
-  return browser.newContext({ viewport: { width: 1100, height: 800 } });
+  const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 } });
+  // This suite verifies local collection code, not third-party integrations.
+  // Block external page traffic even when run outside the gate's network fence.
+  await ctx.route('**/*', route => new URL(route.request().url()).origin === `http://127.0.0.1:${port}`
+    ? route.continue() : route.abort('blockedbyclient'));
+  return ctx;
 }
 async function pageIn(ctx) {
   const page = await ctx.newPage();
@@ -91,6 +96,26 @@ async function pageIn(ctx) {
   await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof window._crNewEntryId === 'function', { timeout: 15000 });
   return page;
+}
+
+async function localScriptSources(page) {
+  const refs = await page.evaluate(() => {
+    const all = Array.from(document.querySelectorAll('script[src]'), s => s.src);
+    return {
+      local: all.filter(src => new URL(src).origin === location.origin),
+      external: all.filter(src => new URL(src).origin !== location.origin),
+    };
+  });
+  T.check('source inspection includes nonempty local bundle references only',
+    refs.local.length > 0 && refs.local.every(src => new URL(src).origin === `http://127.0.0.1:${port}`));
+  console.log('  [scope] external scripts excluded from local source assertions; NOT NETWORK VERIFIED: ' +
+    JSON.stringify(refs.external));
+  const texts = await page.evaluate(async names => Promise.all(names.map(async name => {
+    const r = await fetch(name);
+    if (!r.ok) throw new Error('Local script source unavailable: ' + new URL(name).pathname);
+    return r.text();
+  })), refs.local);
+  return { names: refs.local, texts };
 }
 
 /* ── DEFECT MEASUREMENT ─────────────────────────────────────────────────────
@@ -498,9 +523,7 @@ await T.section('ACCEPTANCE — row actions reach the right entry, legacy and UU
 
   /* No Math.random path may remain in the generator. The owner asked for the
      fallback REMOVED, not narrowed, so its absence is asserted at source. */
-  const noFallback = await page.evaluate(async () => {
-    const names = Array.from(document.querySelectorAll('script[src]')).map(s => s.getAttribute('src'));
-    const texts = await Promise.all(names.map(n => fetch(n).then(r => r.text())));
+  const noFallback = await page.evaluate(({ texts }) => {
     const joined = texts.join('\n');
     const i = joined.indexOf('function _crNewEntryId()');
     // Brace-match the real body rather than slicing a fixed window, which
@@ -528,7 +551,7 @@ await T.section('ACCEPTANCE — row actions reach the right entry, legacy and UU
       hasEidPrefix: /'eid-'|"eid-"/.test(code),
       throwsTagged: /crNoSecureId\s*=\s*true/.test(code),
     };
-  });
+  }, await localScriptSources(page));
   T.check('the generator carries no Math.random fallback and no eid- last resort',
     noFallback.found && !noFallback.usesMathRandom && !noFallback.hasEidPrefix,
     JSON.stringify(noFallback));
@@ -772,9 +795,7 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
   /* Source-level check: no surviving handler interpolates an entry id into an
      onclick string. This is a shape assertion about the bundle, so it catches a
      REINTRODUCTION that no behavioural test would notice. */
-  const src = await page.evaluate(async () => {
-    const names = Array.from(document.querySelectorAll('script[src]')).map(s => s.getAttribute('src'));
-    const texts = await Promise.all(names.map(n => fetch(n).then(r => r.text())));
+  const src = await page.evaluate(({ names, texts }) => {
     const bad = [];
     texts.forEach((t, i) => {
       const re = /onclick=(?:\\?")[^"]*\$\{[A-Za-z_$][\w$]*\.id\}/g;
@@ -782,7 +803,7 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
       if (hits) bad.push({ file: names[i], hits: hits.slice(0, 3), count: hits.length });
     });
     return { files: names.length, bad };
-  });
+  }, await localScriptSources(page));
   T.check('no bundle interpolates an entry id into an onclick handler',
     src.files > 0 && src.bad.length === 0, JSON.stringify(src));
 
@@ -800,9 +821,7 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
      catalogue candidate ids, venue tier ids and packet category ids are NOT
      collection entries and are deliberately out of scope; they are matched by
      their own receiver names and excluded below. */
-  const lookups = await page.evaluate(async () => {
-    const names = Array.from(document.querySelectorAll('script[src]')).map(s => s.getAttribute('src'));
-    const texts = await Promise.all(names.map(n => fetch(n).then(r => r.text())));
+  const lookups = await page.evaluate(({ names, texts }) => {
     // Receivers that are NOT collection entries.
     const EXEMPT = /^(e\.target|ev\.target|panel|t|c|tier|cat|el|node|btn|input|section)$/;
     /* Named exceptions, not a loosened pattern. Each is a lookup over a
@@ -830,7 +849,7 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
       }
     });
     return { files: names.length, count: bad.length, bad: bad.slice(0, 6) };
-  });
+  }, await localScriptSources(page));
   T.check('no entry lookup compares ids with === instead of the central helper',
     lookups.files > 0 && lookups.count === 0, JSON.stringify(lookups));
 
