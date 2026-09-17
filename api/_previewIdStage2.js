@@ -2,6 +2,7 @@
 // No secret configuration is read except internally by the existing KV transport.
 import { randomBytes } from 'node:crypto';
 export const STAGE2_BRANCH = 'fix/listing-export-identity';
+export const STAGE2_STABLE_HOST = 'cardresell-git-fix-listing-exp-1de09c-willsep200-9430s-projects.vercel.app';
 export const STAGE2_PATH = '/api/preview-id-authenticated-acceptance';
 export const STAGE2_CONTROL = 'preview_id_authenticated_acceptance:v1';
 export const STAGE2_END = Date.parse('2026-09-19T00:00:00Z');
@@ -37,8 +38,11 @@ export function stage2Guard(req, path, recovery = false) {
   if (process.env.VERCEL_ENV !== 'preview' || process.env.VERCEL_GIT_COMMIT_REF !== STAGE2_BRANCH)
     throw new Stage2Error('deployment_guard');
   if (Date.now() >= (recovery ? STAGE2_RECOVERY_END : STAGE2_END)) throw new Stage2Error('expired');
-  const host = process.env.VERCEL_URL;
-  if (!host || !/^[a-z0-9-]+\.vercel\.app$/.test(host) || req.headers.host !== host)
+  const immutableHost = process.env.VERCEL_URL;
+  const host = req.headers.host;
+  if (!immutableHost || !/^[a-z0-9-]+\.vercel\.app$/.test(immutableHost)
+      || immutableHost === 'cardresell.vercel.app'
+      || ![immutableHost, STAGE2_STABLE_HOST].includes(host))
     throw new Stage2Error('host_guard');
   if ((req.query && Object.keys(req.query).length) || (req.url || '').includes('?'))
     throw new Stage2Error('query_guard');
@@ -48,6 +52,9 @@ export function stage2Guard(req, path, recovery = false) {
       || (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin')))
     throw new Stage2Error('origin_guard');
   stage2Configuration();
+  // Return only the exact accepted request authority; never render a different
+  // allowed host into this origin's iframe/CSP or use it for POST validation.
+  return host;
 }
 const id = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
 const only = (v, keys) => v && typeof v === 'object' && !Array.isArray(v)

@@ -185,7 +185,7 @@ export default async function handler(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   try {
-    stage2Guard(req, STAGE2_PATH, true);
+    const host = stage2Guard(req, STAGE2_PATH, true);
     if (req.method === 'GET') {
       const nonce = randomBytes(16).toString('hex');
       // srcdoc inherits this policy. The unchanged application uses inline
@@ -193,7 +193,7 @@ export default async function handler(req, res) {
       // content is interpolated; the stricter child connect-src is additive.
       res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com; frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; worker-src 'self'");
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(stage2Html(nonce, process.env.VERCEL_URL));
+      return res.status(200).send(stage2Html(nonce, host));
     }
     if (req.method !== 'POST') throw new Stage2Error('method_guard');
     const body = req.body;
