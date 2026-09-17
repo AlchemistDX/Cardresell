@@ -2,6 +2,7 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
+import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingFailure, claimIdRetry } from './_idBilling.js';
 
 // ── YGOProDeck grounding (extracted helper) ──
 // Mutates cardInfo in place. Returns nothing.
@@ -824,6 +825,9 @@ export default async function handler(req, res) {
   // "not my card" button. We ONLY log successful identify responses so the id
   // is never claimable if the credit was already refunded on the server side.
   const scanId = _shortId();
+  const idContext = { receipt: newIdReceipt(), owner: key, scan: scanId };
+  let idReservation = false;
+  if (isIdentifyMode && !hasKV) return idBillingFailure(res);
 
   // ── Free retry (2026-09-04) ────────────────────────────────────────────────
   // The bulk scanner's button says "Retry (free)" and the client code even
@@ -846,10 +850,15 @@ export default async function handler(req, res) {
   // record, and a second bad result has the "Not my card" refund path.
   const retryOf = typeof (req.body || {}).retry_of === 'string' ? req.body.retry_of.trim() : '';
   let freeRetry = false;
-  if (hasKV && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
+  if (hasKV && isIdentifyMode && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
+    try { freeRetry = await claimIdRetry(idContext, retryOf); }
+    catch (error) { return idBillingFailure(res); }
+  }
+  if (hasKV && !isIdentifyMode && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
     try {
       const prior = await getKVJson(kvUrl, kvToken, `scan:${retryOf}`);
-      if (prior && prior.uid === key && !prior.retry_used) {
+      const priorIsId = prior && ['id_free', 'id_paid_left'].includes(prior.consumed_from);
+      if (prior && prior.uid === key && !prior.retry_used && priorIsId === isIdentifyMode) {
         const refunded = await getKVJson(kvUrl, kvToken, `scan_refund:${retryOf}`);
         if (!refunded) {
           // Burn the entitlement first. If the scan then fails downstream the
@@ -863,7 +872,29 @@ export default async function handler(req, res) {
     } catch (e) { /* non-fatal: fall through and charge normally */ }
   }
 
-  if (hasKV && !freeRetry) {
+  if (hasKV && !freeRetry && isIdentifyMode) {
+    try {
+      const result = await idBilling('debit', { ...idContext,
+        ...await idEntitlement({ uid: googleSub, email: userEmail }) });
+      if (!result.ok) return idBillingFailure(res, result);
+      idReservation = true;
+      consumedFrom = result.bucket;
+      consumedAmount = 1;
+    } catch (error) {
+      // Unknown EVAL outcome: compensate the SAME journal, never a guessed
+      // balance. The cancellation tombstone also fences a delayed debit.
+      try {
+        const compensation = await idBilling('refund', idContext);
+        if (!compensation.ok) throw new Error('compensation_not_confirmed');
+      } catch (_) {
+        console.error('[id-billing] reconciliation required', idContext.receipt);
+        return res.status(503).json({ ok: false, error: 'billing_reconciliation_required',
+          billing_reference: idContext.receipt });
+      }
+      return idBillingFailure(res, error);
+    }
+  }
+  if (hasKV && !freeRetry && !isIdentifyMode) {
     const tier       = await getUserTier(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
     const isPro      = isPaidTier(tier); // any paid tier gets monthly grants
 
@@ -900,43 +931,7 @@ export default async function handler(req, res) {
     //   grade  0 unverified / 1 verified free / 15 Pro / 40 Pro Max / 100 Ultimate
     //   id     0 unverified / 5 verified free / 30 Pro / 100 Pro Max / 300 Ultimate
     const gradeGrant = benefits.gradeGrant;
-    const idGrant    = benefits.idGrant;
-
-    if (isIdentifyMode) {
-      // ID scans: grant-eligible users (paid tiers + verified free) draw from
-      // monthly free bucket first, then fall back to paid ID credits.
-      // Unverified free users go straight to paid (0 free bucket).
-      const stamp      = getMonthStamp();
-      const idFreeUsed = grantEligible ? await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`) : idGrant;
-      const idFreeLeft = grantEligible ? Math.max(0, idGrant - idFreeUsed) : 0;
-
-      if (idFreeLeft > 0) {
-        // Free bucket usage is capped by monthly grant — an over-INCR here is
-        // bounded and reconciled by the refund path; keep the simple flow.
-        await incrKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
-        consumedFrom = 'id_free';
-        consumedAmount = 1;
-      } else {
-        // 2026-08-22 [F6]: atomic DECR guards against concurrent bulk workers
-        // racing read → setKV(cur-1). If the new value is negative, refund and
-        // return 402 — the credits ran out during this batch.
-        const newLeft = await decrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-        if (newLeft === null) {
-          // KV DECR failed — fall back to old read-then-write to avoid hard-blocking users on transient errors.
-          const idPaidFallback = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-          if (idPaidFallback <= 0) {
-            return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
-          }
-          await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, idPaidFallback - 1);
-        } else if (newLeft < 0) {
-          // Over-drawn by a concurrent worker — refund the debit atomically.
-          await incrKV(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-          return res.status(402).json({ error: 'No ID scan credits remaining.', needsPayment: true, mode: 'identify' });
-        }
-        consumedFrom = 'id_paid_left';
-        consumedAmount = 1;
-      }
-    } else {
+    {
       // Graded scans: grant-eligible users (paid tiers + verified free) draw
       // from monthly grant bucket first, then paid_left.
       // Deep Grade costs 2 credits — must come from the SAME bucket (no mixing).
@@ -989,15 +984,13 @@ export default async function handler(req, res) {
   // Refund helper — called on any downstream failure so the user isn't charged for a broken scan.
   async function refundCredits() {
     if (!hasKV || !consumedFrom || !consumedAmount) return;
+    if (isIdentifyMode && idReservation) {
+      const result = await idBilling('refund', idContext);
+      if (!result.ok) throw new Error(result.code);
+      return;
+    }
     try {
-      if (consumedFrom === 'id_free') {
-        const stamp = getMonthStamp();
-        const cur   = await getKVInt(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`);
-        await setKV(kvUrl, kvToken, `scans:${key}:id_free_used_${stamp}`, Math.max(0, cur - consumedAmount));
-      } else if (consumedFrom === 'id_paid_left') {
-        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:id_paid_left`);
-        await setKV(kvUrl, kvToken, `scans:${key}:id_paid_left`, cur + consumedAmount);
-      } else if (consumedFrom === 'paid_left') {
+      if (consumedFrom === 'paid_left') {
         const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:paid_left`);
         await setKV(kvUrl, kvToken, `scans:${key}:paid_left`, cur + consumedAmount);
       } else if (consumedFrom === 'free') {
@@ -1010,6 +1003,7 @@ export default async function handler(req, res) {
 
   const openaiKey    = process.env.OPENAI_API_KEY;
   const ximilarToken = process.env.XIMILAR_API_TOKEN;
+  try {
 
   // Identification and grading have separate providers. Ximilar is the sole
   // identity authority, so identify mode must never require or fall back to
@@ -1215,7 +1209,6 @@ export default async function handler(req, res) {
 
       // Multi-candidate picker path
       if (xim.needsPicker && Array.isArray(xim.candidates) && xim.candidates.length >= 2) {
-        await refundCredits();
         const cleanCandidates = xim.candidates.map(c => ({
           card_name: c.card_name, card_number: c.card_number, set_name: c.set_name,
           set_code: c.set_code || '', hp: c.hp || '', card_type: c.card_type || 'pokemon',
@@ -1224,7 +1217,9 @@ export default async function handler(req, res) {
           confidence_pct: c.confidence_pct || 50,
           grounded_id: c._grounded_id || null,
         }));
+        const confirmation = await offerIdConfirmation({ ...idContext, cardType: cardInfo.card_type }, cleanCandidates, freeRetry);
         return res.status(200).json({
+          ...confirmation,
           success: true, mode: 'identify', needsPicker: true,
           confidence: 'medium', candidates: cleanCandidates,
           image_quality: 'ok', glare_regions: [], retake_hint: '',
@@ -1238,6 +1233,7 @@ export default async function handler(req, res) {
           image_small: cardInfo.image_small || null,
           source: 'ximilar',
           ygo_grounded_by: cardInfo._ygo_grounded_by || null,
+          identified: false, grounded: false, grounded_id: null, printing: null,
         });
       }
 
@@ -1247,6 +1243,7 @@ export default async function handler(req, res) {
         try {
           const record = {
             uid: key, consumed_from: consumedFrom, consumed_amount: consumedAmount,
+            id_receipt: idContext.receipt,
             card_name: cardInfo.card_name, card_number: cardInfo.card_number,
             set_name: cardInfo.set_name, confidence: idConfNorm,
             image_quality: 'ok', created_at: Date.now(), source: 'ximilar',
@@ -1272,6 +1269,11 @@ export default async function handler(req, res) {
         ygo_grounded_by: cardInfo._ygo_grounded_by || null,
       });
     }
+  }
+
+  } catch (error) {
+    try { await refundCredits(); } catch (_) { return idBillingFailure(res); }
+    return idBillingFailure(res, error);
   }
 
   // Grade-mode Ximilar ident is called AFTER GPT succeeds (see below),
@@ -2523,8 +2525,12 @@ Respond ONLY with valid JSON, no explanation:
     // multiple candidates. High-confidence single answers pass straight through.
     if ((idConfNorm === 'low' || idConfNorm === 'medium') && cleanCandidates.length >= 2) {
       // Refund the ID credit — user hasn't gotten a final answer yet.
-      await refundCredits();
+      // Preserve the legacy grade path; only identify may issue ID authority.
+      const confirmation = isIdentifyMode
+        ? await offerIdConfirmation({ ...idContext, cardType: cardInfo.card_type }, cleanCandidates, freeRetry)
+        : (await refundCredits(), {});
       return res.status(200).json({
+        ...confirmation,
         success:      true,
         mode:         'identify',
         needsPicker:  true,
@@ -2607,7 +2613,9 @@ Respond ONLY with valid JSON, no explanation:
   } catch(err) {
     console.error('Scan error:', err);
     // Refund on any unexpected exception
-    try { await refundCredits(); } catch(e) {}
+    try { await refundCredits(); }
+    catch(e) { return idBillingFailure(res); }
+    if (isIdentifyMode && err?.code) return idBillingFailure(res, err);
     return res.status(500).json({ error: 'Scanner temporarily unavailable. Credits refunded. Please try again.' });
   }
 }

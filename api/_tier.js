@@ -63,7 +63,7 @@ export function priceIdToTier(priceId) {
 // or has no record for this user (parity with legacy checkProStatus flow).
 //
 // Returns: 'free' | 'pro' | 'pro_max' | 'ultimate'
-export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email) {
+export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email, { strict = false } = {}) {
   // Fast path — KV
   if (kvUrl && kvToken && googleSub) {
     try {
@@ -71,15 +71,21 @@ export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email) {
         headers: { Authorization: `Bearer ${kvToken}` },
       });
       const d = await r.json();
+      if (strict && (!r.ok || d.error || d.result === undefined)) throw new Error('tier_unavailable');
       if (d.result) {
         const rec = JSON.parse(d.result);
+        // Webhooks persist legitimate non-active Stripe statuses too. They
+        // revoke paid grants, not purchased credits or verified-free access.
+        if (strict && (!rec || !['active', 'cancelled', 'canceled', 'inactive',
+          'past_due', 'unpaid', 'paused', 'incomplete', 'incomplete_expired'].includes(rec.status)
+            || (rec.tier && !TIER_BENEFITS[rec.tier]))) throw new Error('tier_unavailable');
         if (rec.status === 'active') {
           // New records include `tier`. Legacy records don't — default to 'pro'.
           if (rec.tier && TIER_BENEFITS[rec.tier]) return rec.tier;
           return 'pro';
         }
       }
-    } catch (e) { /* fall through */ }
+    } catch (e) { if (strict) throw e; /* fall through */ }
   }
 
   // Fallback — hit Stripe. Look up latest active subscription for this email
@@ -91,8 +97,9 @@ export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email) {
       `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(email)}'&limit=1`,
       { headers: { Authorization: `Bearer ${stripeKey}` } }
     );
-    if (!custR.ok) return 'free';
+    if (!custR.ok) { if (strict) throw new Error('tier_unavailable'); return 'free'; }
     const custD = await custR.json();
+    if (strict && !Array.isArray(custD.data)) throw new Error('tier_unavailable');
     const cust  = custD.data?.[0];
     if (!cust) return 'free';
 
@@ -101,6 +108,7 @@ export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email) {
       { headers: { Authorization: `Bearer ${stripeKey}` } }
     );
     const subD = await subR.json();
+    if (strict && (!subR.ok || !Array.isArray(subD.data))) throw new Error('tier_unavailable');
     const sub  = subD.data?.[0];
     if (!sub) return 'free';
 
@@ -112,6 +120,7 @@ export async function getUserTier(stripeKey, kvUrl, kvToken, googleSub, email) {
     const priceId = sub.items?.data?.[0]?.price?.id;
     return priceIdToTier(priceId) || 'pro'; // any active sub with unknown price → assume Pro
   } catch (e) {
+    if (strict) throw e;
     return 'free';
   }
 }
