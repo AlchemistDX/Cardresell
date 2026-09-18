@@ -61,6 +61,9 @@ import {
 } from './_draftIndex.js';
 
 import { reserveDraftSlot, releaseDraftSlot, DRAFT_CAP, QUOTA } from './_draftQuota.js';
+import { listingV2Enabled, mutateListingWithIndexes, makeListingKv, ListingUsageError } from './_listingUsage.js';
+import { legacyListingWriteGuard } from './_listingEnrollment.js';
+import { listListingIds } from './_listingIndex.js';
 
 import {
   LIFECYCLE_ERR,
@@ -270,6 +273,12 @@ async function detachIndexes(googleSub, draft) {
 export { DRAFT_CAP };
 
 export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {}) {
+  if (listingV2Enabled()) {
+    const out = await mutateListingWithIndexes(kv, googleSub, 'create', { input, generation: opts.generation }, idempotencyKey);
+    return { ...out, state: out.replayed ? IDEMPOTENCY_STATE.REPLAYED : IDEMPOTENCY_STATE.FRESH };
+  }
+  const enrollment = await legacyListingWriteGuard(kv, googleSub);
+  if (enrollment) throw new ListingUsageError(enrollment);
   const scope = SCOPES.DRAFT_CREATE;
 
   // ── An unsupported slot is refused BEFORE anything is recorded ──────────
@@ -673,11 +682,26 @@ export async function readDraft(kv, googleSub, draftId) {
  * either a no-op replay (own claim, already committed) or a conflict. The
  * revision IS the concurrency token here.
  */
-export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, idempotencyKey, rebuildPacket) {
+export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, idempotencyKey, rebuildPacket, rebuildContext) {
+  if (listingV2Enabled()) {
+    try {
+      const out = await mutateListingWithIndexes(kv, googleSub, 'edit',
+        { draftId, patch, expectedRev, rebuildPacket, rebuildContext }, idempotencyKey);
+      return { ok: true, ...out.result, replayed: out.replayed };
+    } catch (e) {
+      if (e instanceof ListingUsageError) throw e;
+      return { ok: false, error: e.message };
+    }
+  }
   const operationId = operationIdFor('draft-update', idempotencyKey);
 
   const cur = await getDraft(kv, googleSub, draftId);
+  // Keep the legacy draft read first. The store independently checks enrollment
+  // again before a write; neither check substitutes for a migration writer drain.
+  const enrollment = await legacyListingWriteGuard(kv, googleSub);
+  if (enrollment) throw new ListingUsageError(enrollment);
   if (!cur.ok) return cur;
+  if (cur.draft.schemaVersion === 2) throw new ListingUsageError('LISTING_DISABLED');
 
   let next;
   try {
@@ -730,6 +754,12 @@ export async function updateDraft(kv, googleSub, draftId, patch, expectedRev, id
  * cleanup, in that order.
  */
 export async function deleteDraftOp(kv, googleSub, draftId, expectedRev, idempotencyKey) {
+  if (listingV2Enabled()) {
+    const out = await mutateListingWithIndexes(kv, googleSub, 'delete', { draftId, expectedRev }, idempotencyKey);
+    return { ok: true, ...out.result, replayed: out.replayed };
+  }
+  const enrollment = await legacyListingWriteGuard(kv, googleSub);
+  if (enrollment) throw new ListingUsageError(enrollment);
   const operationId = operationIdFor('draft-delete', idempotencyKey);
 
   // Delegate the WRITE to the store. This used to be reimplemented here —
@@ -913,6 +943,7 @@ async function finishDelete(kv, googleSub, draftId, expectedRev, operationId, ro
  * `listDraftIds` (failed read ≠ absence, scan omission ≠ absence).
  */
 export async function listDrafts(googleSub, opts = {}) {
+  if (listingV2Enabled()) return listListingIds(opts.kv || makeListingKv(process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN), googleSub);
   // Always the detailed shape here. A caller at the HTTP boundary has to be
   // able to answer 503 rather than "no drafts", and it cannot do that from a
   // bare array.
@@ -1033,7 +1064,7 @@ async function mapLimited(items, limit, fn) {
  * `total` counts ids known to the index; `count` counts rows on this page.
  */
 export async function listDraftSummaries(kv, googleSub, opts = {}) {
-  const listed = await listDraftIds(googleSub, { detail: true });
+  const listed = listingV2Enabled() ? await listListingIds(kv, googleSub) : await listDraftIds(googleSub, { detail: true });
   if (listed.unavailable) {
     return { rows: [], count: 0, total: 0, nextCursor: null, source: null, degraded: true, unavailable: true, retryable: true };
   }

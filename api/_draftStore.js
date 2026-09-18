@@ -1,4 +1,5 @@
 import { readStoredPacket, PACKET_COMPAT, packetInputFingerprint } from './_listingPacket.js';
+import { legacyListingWriteGuard } from './_listingEnrollment.js';
 // api/_draftStore.js
 //
 // C1 — authoritative persistence for listing drafts.
@@ -395,7 +396,10 @@ export function readStoredDraft(stored) {
   if (!Number.isInteger(v) || v < 1) {
     return { ok: false, error: ERR.UNREADABLE, evidence: 'no-schema-version' };
   }
-  if (v > DRAFT_SCHEMA_VERSION) {
+  // V2 listing records are readable, but legacy writers below cannot mutate
+  // them. Builders keep producing v1 unless the explicit v2 service stamps it.
+  const readableListingV2 = v === 2 && d.listingUsage?.v === 2;
+  if (v > DRAFT_SCHEMA_VERSION && !readableListingV2) {
     return {
       ok: false, error: ERR.SCHEMA_TOO_NEW, evidence: `v${v}`,
       // Deliberately still surfaced: the caller may show "this draft was
@@ -929,6 +933,11 @@ export async function getDraft(kv, googleSub, draftId) {
  * harmless; the fence guards the record the seller can actually see.
  */
 export async function putDraft(kv, googleSub, draft, operationId, fenceCtx = null) {
+  const enrollment = await legacyListingWriteGuard(kv, googleSub);
+  if (enrollment) return { ok: false, error: enrollment, retryable: false };
+  if (draft.schemaVersion === 2 || draft.listingUsage !== undefined) {
+    return { ok: false, error: 'LISTING_ATOMIC_WRITE_REQUIRED', retryable: false };
+  }
   const readRev = async () => {
     const cur = await getDraft(kv, googleSub, draft.draftId);
     if (cur.ok) return cur.draft.rev;
@@ -941,6 +950,9 @@ export async function putDraft(kv, googleSub, draft, operationId, fenceCtx = nul
   // conflict" would invite the client to re-read and retry at a higher
   // revision, which is precisely the resurrection we are preventing.
   const pre = await getDraft(kv, googleSub, draft.draftId);
+  if (pre.draft?.schemaVersion === 2 || pre.draft?.listingUsage !== undefined) {
+    return { ok: false, error: 'LISTING_ATOMIC_WRITE_REQUIRED', retryable: false };
+  }
   if (!pre.ok && pre.error === ERR.DELETED && draft.status !== DRAFT_STATUS.DELETED) {
     return { ok: false, error: ERR.DELETED, current: pre.draft, retryable: false };
   }
@@ -1104,6 +1116,8 @@ export async function deleteDraft(kv, googleSub, draftId, expectedRev, operation
 export const DISCARDABLE = [ERR.UNREADABLE, ERR.NOT_FOUND];
 
 export async function discardDraft(kv, googleSub, draftId, operationId) {
+  const enrollment = await legacyListingWriteGuard(kv, googleSub);
+  if (enrollment) return { ok: false, error: enrollment, retryable: false };
   let raw;
   try {
     raw = await kv('get', draftKey(googleSub, draftId));

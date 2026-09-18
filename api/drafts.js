@@ -13,6 +13,7 @@ import { resolvePrintedTotal } from './_setPrintedTotals.js';
 import { buildListingPacket } from './_listingPacket.js';
 import { sellReasons } from './_sellEligibility.js';
 import { IDEMPOTENCY_STATE, validIdempotencyKey } from './_idempotency.js';
+import { listingV2Enabled, mutateListingWithIndexes, readListingUsage, makeListingKv, ListingUsageError } from './_listingUsage.js';
 
 // /api/drafts — listing draft CRUD
 //
@@ -72,16 +73,35 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Reserved account namespace' });
   }
 
-  const kv = makeKv(kvUrl, kvToken);
+  const kv = listingV2Enabled() ? makeListingKv(kvUrl, kvToken) : makeKv(kvUrl, kvToken);
   const draftId = (req.query && req.query.id) ? String(req.query.id) : '';
 
   try {
+    // Explicit normal-auth listing actions, no additional acceptance endpoint.
+    // OFF leaves the legacy dispatcher untouched.
+    if (listingV2Enabled() && req.method === 'POST' && req.query?.action) {
+      const action = req.query.action;
+      if (!['archive', 'restore'].includes(action)) throw new ListingUsageError('LISTING_ACTION_INVALID');
+      const body = readBody(req);
+      const out = await mutateListingWithIndexes(kv, googleSub, action,
+        { draftId, expectedRev: body.expectedRev }, idempotencyKeyOf(req));
+      return res.status(200).json({ ...out.result, replayed: out.replayed });
+    }
     if (req.method === 'GET')    return await handleGet(req, res, kv, googleSub, draftId);
     if (req.method === 'POST')   return await handleCreate(req, res, kv, googleSub);
     if (req.method === 'PATCH')  return await handleUpdate(req, res, kv, googleSub, draftId);
     if (req.method === 'DELETE') return await handleDelete(req, res, kv, googleSub, draftId);
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (e) {
+    if (e instanceof ListingUsageError) {
+      const conflict = ['LISTING_ACTIVE_CAP', 'LISTING_CREATION_CAP', 'LISTING_REVISION_CONFLICT',
+        'LISTING_GENERATION_STALE', 'LISTING_OPERATION_MISMATCH', 'LISTING_DELETED'];
+      const invalid = ['LISTING_INPUT_INVALID', 'LISTING_ACTION_INVALID', 'LISTING_OPERATION_REQUIRED', 'LISTING_OWNER_INVALID'];
+      const status = conflict.includes(e.code) ? 409 : invalid.includes(e.code) ? 400 : 503;
+      return res.status(status).json({ error: 'Listing change unavailable', code: e.code,
+        retryable: status === 503, outcomeUnknown: e.code === 'LISTING_OUTCOME_UNKNOWN',
+        ...(e.usage ? { usage: e.usage } : {}) });
+    }
     const msg = String((e && e.message) || e);
     // A normalization refusal is the CLIENT's error, and it names the field, so
     // the client can fix the one value rather than guessing at the whole body.
@@ -186,7 +206,7 @@ async function handleGet(req, res, kv, googleSub, draftId) {
     const wantIds = String((qs(req, 'ids') || '')) === '1';
 
     if (wantIds) {
-      const listed = await listDrafts(googleSub);
+      const listed = await listDrafts(googleSub, { kv });
       // `listDraftIds` already distinguishes a failed read from an empty index.
       // A failure must not be rendered as "you have no drafts" — that is the one
       // response that makes a seller think their work is gone.
@@ -235,12 +255,16 @@ async function handleGet(req, res, kv, googleSub, draftId) {
     if (page.unavailable) {
       return res.status(503).json({ error: 'Could not load your drafts', retryable: true });
     }
+    // Usage failure must not make existing drafts unreadable.
+    let usage = null;
+    if (listingV2Enabled()) { try { usage = await readListingUsage(kv, googleSub); } catch {} }
     return res.status(200).json({
       rows: page.rows,
       count: page.count,
       total: page.total,
       nextCursor: page.nextCursor,
-      cap: DRAFT_CAP,
+      cap: listingV2Enabled() ? usage?.activeLimit ?? null : DRAFT_CAP,
+      ...(listingV2Enabled() ? { usage } : {}),
       source: page.source,
       degraded: page.degraded,
       focusOffset: page.focusOffset === undefined ? null : page.focusOffset,
@@ -327,6 +351,7 @@ async function handleCreate(req, res, kv, googleSub) {
     repairRequired: !!r.repairRequired,
     index: r.index || null,
     validation: r.validation || null,
+    ...(r.usage ? { usage: r.usage } : {}),
   });
 }
 
@@ -469,10 +494,11 @@ async function handleUpdate(req, res, kv, googleSub, draftId) {
     };
   }
 
-  const out = await updateDraft(kv, googleSub, draftId, patch, expectedRev, key, rebuild);
+  const out = await updateDraft(kv, googleSub, draftId, patch, expectedRev, key, rebuild, body.pricingContext);
   if (out.ok) {
     return res.status(200).json({
       draft: out.draft, replayed: !!out.replayed, validation: out.validation,
+      ...(out.usage ? { usage: out.usage, index: out.index, degraded: out.degraded, repairRequired: out.repairRequired } : {}),
       // Whether a packet was WRITTEN, not whether one was asked for. A replay
       // returns the stored answer without running the rebuild closure, so
       // reporting `true` there would tell the seller their quote was refreshed
@@ -535,6 +561,7 @@ async function handleDelete(req, res, kv, googleSub, draftId) {
       rev: out.draft ? out.draft.rev : null,
       degraded: !!out.degraded,
       repairRequired: !!out.repairRequired,
+      ...(out.usage ? { usage: out.usage, index: out.index, replayed: !!out.replayed } : {}),
       // The lifecycle outcome is REPORTED, not dropped. Two reasons, and the
       // first is the whole rule: a write that did not happen must not leave
       // the response looking identical to one that did. The second is that

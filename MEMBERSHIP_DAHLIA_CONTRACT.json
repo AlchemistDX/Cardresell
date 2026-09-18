@@ -1,0 +1,104 @@
+{
+  "status": "DORMANT_DOCUMENTED_CONTRACT_SYNTHETIC_TESTS_ONLY",
+  "api_version": "2026-08-26.dahlia",
+  "real_stripe_sandbox_verification": "UNRUN",
+  "activation": "No existing route imports, webhook registration, account-default version changes, migration, or real payment operations in this slice.",
+  "transport": {
+    "invoice_request": "GET https://api.stripe.com/v1/invoices/{validated_invoice_id}?expand%5B%5D=amount_paid_off_stripe",
+    "query_authority": "One fixed server-owned query. Additional caller options ignored; identifiers cannot supply paths or queries.",
+    "response": "Canonical response is not normalized. Missing expansion is a hard adapter rejection, never assumed zero.",
+    "webhook": "Exact raw-body signature verification and configured account/mode/API version checks precede canonical invoice retrieval. Event inline settlement data is never authoritative.",
+    "limits": "Existing per-request timeout and complete bounded line pagination preserved. A whole-operation deadline remains a separate integration gate.",
+    "source_urls": [
+      "https://docs.stripe.com/sdks/versioning",
+      "https://docs.stripe.com/upgrades",
+      "https://docs.stripe.com/changelog/dahlia/2026-05-27/invoice-object-amount-paid-off-stripe-property"
+    ]
+  },
+  "invoice_schema": {
+    "parent": "parent.type must be subscription_details; parent.subscription_details.subscription is documented string/expandable subscription ID. A simultaneous nonnull quote_details is rejected.",
+    "settlement": "status=paid; amount_paid_off_stripe must be numeric zero; amount_remaining=0; status_transitions.paid_at must be a positive safe integer. No legacy paid or paid_out_of_band fallback.",
+    "amount_authority": "USD invoice amount_paid, amount_due, total and one line amount must each equal the server-bound catalog monthly amount. Canonical price product/amount/monthly recurring interval also validated.",
+    "purpose": "Only subscription_create and subscription_cycle. Update/proration/trial/free/zero-dollar invoices do not grant under this policy.",
+    "legacy_rejection": "Presence, even null, of old top-level subscription, subscription_details, subscription_proration_date, quote, paid, paid_out_of_band, payment_intent or charge rejects a legacy/mixed envelope.",
+    "source_urls": [
+      "https://docs.stripe.com/api/invoices/object.md?api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/api/invoices/object.md?query=parent&api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/api/invoices/object.md?query=status_transitions&api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/changelog/basil/2025-03-31/add-support-for-multiple-partial-payments-on-invoices",
+      "https://docs.stripe.com/changelog/basil/2025-03-31/adds-new-parent-field-to-invoicing-objects"
+    ]
+  },
+  "line_schema": {
+    "identity": "object=line_item, exact configured livemode, complete list with exactly one line.",
+    "parent": "parent.type=subscription_item_details; nested subscription string must equal invoice parent subscription; subscription_item must be a canonical si_ ID; proration must be false. Nonnull invoice_item_details rejects ambiguity.",
+    "pricing": "pricing.type=price_details; price_details object required; price is documented expandable string ID, product is a string ID. Both match immutable configured price/product and retrieved canonical Price. pricing.unit_amount_decimal must equal the catalog integer amount in the exact-decimal subset below.",
+    "pricing_documentation": "Nested Markdown pricing fetch was unavailable; exact type definitions were read from the public HTML page's embedded Markdoc schema, not inferred from field names. Schema extracted to research/embedded_exact_fields.json in the review evidence.",
+    "quantity": "Both quantity===1 and a string quantity_decimal representing exactly one are required. quantity is documented as truncated integer precision; quantity_decimal is documented nullable decimal string, max 12 places. Missing/null decimal is deliberately unsupported, not repaired from integer quantity.",
+    "exact_decimal_subset": "Accepted one-unit strings: 1 or 1 followed by a decimal point and 1-12 zeros. Unit amount uses the exact catalog integer with optional 1-12 decimal zeros. Leading zeros, plus signs, exponent notation, whitespace, nonzero fractions, nonstrings and >12 decimal places reject. This is a conservative supported subset, not a claim that Stripe accepts no other decimal spellings.",
+    "legacy_rejection": "Presence of top-level type, subscription, subscription_item, invoice_item, proration, proration_details, price or plan rejects legacy/mixed schema.",
+    "source_urls": [
+      "https://docs.stripe.com/api/invoice-line-item/object.md?api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/api/invoice-line-item/object.md?query=parent&api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/api/invoice-line-item/object?query=pricing&api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/changelog/basil/2025-03-31/invoice-pricing-configurations.md"
+    ]
+  },
+  "supported_settlement_subset_and_exclusions": {
+    "supported": "Full catalog-price USD monthly subscription, one unit and non-prorated line, settled on Stripe, with no recorded adjustments.",
+    "mandatory_zero_fields": [
+      "invoice.amount_overpaid",
+      "invoice.amount_shipping",
+      "invoice.starting_balance",
+      "invoice.ending_balance",
+      "invoice.pre_payment_credit_notes_amount",
+      "invoice.post_payment_credit_notes_amount"
+    ],
+    "explicit_empty_or_null_fields": [
+      "invoice.total_taxes",
+      "invoice.total_discount_amounts",
+      "line.taxes",
+      "line.discount_amounts",
+      "line.pretax_credit_amounts"
+    ],
+    "presence": "These nullable arrays must exist and be null or []; undefined/missing/malformed values are unknown and rejected. The mandatory zero fields must be numeric zero, not missing/null/string.",
+    "deliberately_excluded_legitimate_cases": [
+      "Any full or partial out-of-band payment.",
+      "Positive or negative customer balance at invoice start/end, including purchased customer credit used for payment or unrelated carried balances.",
+      "Tax and discount records, including zero-valued records, inclusive taxes and compensating tax/discount changes whose net amount equals catalog price.",
+      "Any pre/post-payment credit note or pretax credit record.",
+      "Overpayments, shipping additions, fractional/multiple quantities, multiple lines, prorations and manual/update invoices.",
+      "Zero-dollar or credit-satisfied trial/renewal invoices.",
+      "Incomplete or unavailable canonical pagination; unavailable settlement expansion."
+    ],
+    "refund_limit": "This is fulfillment validation, not a refund/chargeback policy or reversal handler. It does not introduce payment reversal or revoke historical allowances. Those lifecycle policies remain separate.",
+    "source_urls": [
+      "https://docs.stripe.com/api/invoices/object.md?api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/api/invoice-line-item/object.md?api-version=2026-08-26.dahlia"
+    ]
+  },
+  "historical_period_authority": {
+    "rule": "Use the paid invoice's canonical line.period plus the immutable historical server term. Current subscription status/price/item period cannot overwrite historical authority.",
+    "documented_change": "Subscription top-level current_period_start/end moved to SubscriptionItem. Documented as nonnullable timestamps on items. They are not used to invalidate a delayed historical paid invoice.",
+    "unchanged_idempotency": "Canonical invoice ID and subscription-period identity still feed the approved ledger; different webhook IDs/event order cannot create additional allowance for the same business period.",
+    "source_urls": [
+      "https://docs.stripe.com/api/invoice-line-item/object.md?api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/api/subscription_items/object?api-version=2026-08-26.dahlia",
+      "https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end"
+    ]
+  },
+  "required_local_tests": [
+    "node tests/membership-payments.mjs",
+    "node tests/membership-bindings.mjs",
+    "node tests/membership-stripe.mjs",
+    "node tests/launch-membership-config.mjs",
+    "node tests/test-registry.mjs"
+  ],
+  "remaining_gates": [
+    "Independent source/test review.",
+    "Actual Stripe Sandbox canonical response and webhook fixtures under exact pinned API version; currently UNRUN.",
+    "Supported/excluded settlement policy acceptance before activation; do not imply universal Stripe billing compatibility.",
+    "Future normal-auth/order lifecycle/route activation, whole-operation deadline, production configuration and migration review.",
+    "Owner-approved sole legacy subscriber transfer to Casual at October 7, 2026 next renewal is NOT scheduled; no immediate charge or midperiod grant."
+  ]
+}

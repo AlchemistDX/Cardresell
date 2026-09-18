@@ -70,6 +70,35 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'membership-checkout-stripe.mjs':
+    'Required dormant checkout write/discovery transport gate: node tests/membership-checkout-stripe.mjs. ' +
+    'Synthetic fixed-origin HTTP fixtures only; no live Stripe creation or discovery proof.',
+  'listing-usage.mjs':
+    'Required opt-in listing transaction gate: node tests/listing-usage.mjs. ' +
+    'Private local Redis and synthetic authenticated normal-handler requests; rollout remains disabled.',
+  'membership-photo-policy.mjs':
+    'Required dormant photo admission policy gate: node tests/membership-photo-policy.mjs. ' +
+    'Pure policy only; not authoritative storage accounting or provider upload enforcement.',
+  'membership-checkout.mjs':
+    'Required dormant recoverable checkout controller gate: node tests/membership-checkout.mjs. ' +
+    'Actual private local Redis with synthetic auth/Stripe dependencies; no live route activation.',
+  'membership-stripe.mjs':
+    'Required dormant Stripe transport/signature gate: node tests/membership-stripe.mjs. ' +
+    'Actual crypto/raw-byte streams with synthetic HTTP fixtures; no external requests.',
+  'membership-bindings.mjs':
+    'Required dormant launch-v2 binding store gate: node tests/membership-bindings.mjs. ' +
+    'Runs exact Lua against private local Redis; no external services or credentials.',
+  'membership-payments.mjs':
+    'Required dormant launch-v2 payment adapter gate: node tests/membership-payments.mjs. ' +
+    'Synthetic canonical Stripe objects and trusted order bindings feed actual adapter plus local Redis ledger; ' +
+    'not live payment, signature-provider, normal-auth or route-cutover proof.',
+  'membership-ledger.mjs':
+    'Required dormant launch-v2 ledger gate: node tests/membership-ledger.mjs. ' +
+    'Executes exact new Lua and unchanged ID debit Lua in private Unix-socket Redis; ' +
+    'no handler activation, external service, credentials or migration.',
+  'launch-membership-config.mjs':
+    'Required dormant launch-v2 catalog gate: node tests/launch-membership-config.mjs. ' +
+    'Checks the unactivated versioned plan/pack contract separately from the legacy release runner.',
   'billing-release-scope.mjs':
     'Required billing release scope gate: node tests/billing-release-scope.mjs. ' +
     'Pins reviewed billing, Production grounding/auth, and absence of temporary harness code.',
