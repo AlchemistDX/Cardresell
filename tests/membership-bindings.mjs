@@ -435,9 +435,9 @@ await t.section('Scope and frozen dependencies', async () => {
   t.check('Single write primitive, no expiry/debit/grant commands', (MEMBERSHIP_BINDINGS_SCRIPT.match(/redis\.call\('MSET'/g) || []).length === 1
     && !/redis\.call\('(SET|INCR|DECR|EXPIRE|DEL)'/.test(MEMBERSHIP_BINDINGS_SCRIPT));
   const expected = {
-    '../api/_membershipLedger.js': '96687fa9ec8c8325ebfaac83b559f3eefda001d27e2dd5e2e23a9a8e19968997',
+    '../api/_membershipLedger.js': '0307633fd5078810d28ac20e63cec1996bd8e4630da2008f4545ad3d21b44044',
     '../api/_membershipPayments.js': 'd1a7d809bb437ca5549c2fbc3b0bb559916c20413ffae9551df1063ef5f3e54a',
-    '../api/_launchMembershipConfig.js': '1bcf04a7672424c11814070bf9c71b79d80be360a41f021f200ff976f16ce023',
+    '../api/_launchMembershipConfig.js': '513dcfa7f82a343c304d25bb192368e96076e5ad0677e98bbe5a5e67a799b0a5',
     '../api/_idBilling.js': '8421956233263237dbb941e154b8a8ab315db49bd3ee16c089ccb6d894238a1a',
   };
   for (const [file, digest] of Object.entries(expected)) t.check(`Frozen ${file}`, sha(readFileSync(new URL(file, import.meta.url))) === digest);

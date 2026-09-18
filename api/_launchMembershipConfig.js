@@ -12,7 +12,7 @@ const plan = (monthlyPriceCents, idCredits, gradeCredits, packDiscountPercent,
   });
 
 export const LAUNCH_PLANS = Object.freeze({
-  free: plan(0, 10, 1, 0, 5, 10, 100_000_000),
+  free: plan(0, 5, 1, 0, 5, 10, 100_000_000),
   starter: plan(499, 25, 5, 0, 25, 100, 500_000_000),
   casual: plan(999, 50, 15, 10, 100, 300, 2_000_000_000),
   pro: plan(1999, 250, 40, 15, 500, 1500, 10_000_000_000, true),
@@ -32,13 +32,17 @@ export const LAUNCH_PACKS = Object.freeze({
   grade_50: pack('grade', 50, 2299),
 });
 
+export const LAUNCH_WELCOME_CREDITS = Object.freeze({ idCredits: 10, gradeCredits: 1 });
+
 export const LAUNCH_CREDIT_POLICY = Object.freeze({
   idCost: 1,
   gradeCost: 1,
   deepGradeCost: 2,
-  freeGrant: 'once_per_eligible_account',
+  welcomeGrant: 'once_per_verified_eligible_account',
+  freeGrant: 'once_per_calendar_month_utc',
   paidGrant: 'once_per_successfully_paid_subscription_period',
   consumeOrder: Object.freeze(['included', 'purchased']),
+  includedConsumeOrder: Object.freeze(['monthly', 'welcome']),
   includedRollover: false,
   purchasedExpiry: null,
   planChangeTiming: 'next_renewal',

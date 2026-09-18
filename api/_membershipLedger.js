@@ -4,7 +4,7 @@
 // `paid: true` here is an invariant, NOT proof of payment or an HTTP auth gate.
 import { createHash } from 'node:crypto';
 import {
-  MEMBERSHIP_VERSION, LAUNCH_PLANS, quoteLaunchPack,
+  MEMBERSHIP_VERSION, LAUNCH_PLANS, LAUNCH_WELCOME_CREDITS, quoteLaunchPack,
 } from './_launchMembershipConfig.js';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -248,7 +248,7 @@ export function prepareMembershipGrant(kind, input) {
     const email = input.email.trim().toLowerCase();
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) reject();
     normalized = { version: MEMBERSHIP_VERSION, kind, owner, emailHash: digest(email),
-      idGrant: LAUNCH_PLANS.free.idCredits, gradeGrant: LAUNCH_PLANS.free.gradeCredits };
+      idGrant: LAUNCH_WELCOME_CREDITS.idCredits, gradeGrant: LAUNCH_WELCOME_CREDITS.gradeCredits };
     operation = `welcome:${digest(owner)}`;
     extra = [`signup_bonus:${owner}`, `email_bonus_claimed:${email}`, 'unused:6'];
   } else reject('invalid_kind');

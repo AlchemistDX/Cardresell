@@ -518,7 +518,7 @@ await t.section('dependency failure, price-map guard and dormant scope', async (
     !/\bfetch\s*\(|process\.env|subscriptions\.update|checkout\.sessions\.create/.test(source));
   t.check('adapter never reads metadata as authority', !/\.metadata\b/.test(source));
   t.check('approved ledger file remains hash-pinned', sha(readFileSync(new URL('../api/_membershipLedger.js', import.meta.url)))
-    === '96687fa9ec8c8325ebfaac83b559f3eefda001d27e2dd5e2e23a9a8e19968997');
+    === '0307633fd5078810d28ac20e63cec1996bd8e4630da2008f4545ad3d21b44044');
 });
 
 t.done();

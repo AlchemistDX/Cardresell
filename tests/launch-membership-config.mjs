@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  LAUNCH_PLANS, LAUNCH_PACKS, LAUNCH_CREDIT_POLICY,
+  LAUNCH_PLANS, LAUNCH_PACKS, LAUNCH_CREDIT_POLICY, LAUNCH_WELCOME_CREDITS,
   quoteLaunchPack, DIRECT_SUPPORT_COPY,
 } from '../api/_launchMembershipConfig.js';
 
@@ -11,7 +11,7 @@ const columns = [
   'activeListings', 'newListings', 'photoStorageBytes',
 ];
 const expected = {
-  free: [0, 10, 1, 0, 5, 10, 100000000],
+  free: [0, 5, 1, 0, 5, 10, 100000000],
   starter: [499, 25, 5, 0, 25, 100, 500000000],
   casual: [999, 50, 15, 10, 100, 300, 2000000000],
   pro: [1999, 250, 40, 15, 500, 1500, 10000000000],
@@ -43,7 +43,11 @@ for (const invalid of ['__proto__', 'constructor', 'toString', '', null, 'PRO'])
   assert.throws(() => quoteLaunchPack('id_25', invalid), /unknown_plan/); checks++;
 }
 equal(LAUNCH_CREDIT_POLICY.consumeOrder, ['included', 'purchased']);
-equal(LAUNCH_CREDIT_POLICY.freeGrant, 'once_per_eligible_account');
+equal(LAUNCH_CREDIT_POLICY.freeGrant, 'once_per_calendar_month_utc');
+equal(LAUNCH_CREDIT_POLICY.welcomeGrant, 'once_per_verified_eligible_account');
+equal(LAUNCH_WELCOME_CREDITS, { idCredits: 10, gradeCredits: 1 });
+equal(Object.isFrozen(LAUNCH_WELCOME_CREDITS), true);
+equal(LAUNCH_CREDIT_POLICY.includedConsumeOrder, ['monthly', 'welcome']);
 equal(LAUNCH_CREDIT_POLICY.paidGrant, 'once_per_successfully_paid_subscription_period');
 equal(LAUNCH_CREDIT_POLICY.purchasedExpiry, null);
 equal(LAUNCH_CREDIT_POLICY.includedRollover, false);

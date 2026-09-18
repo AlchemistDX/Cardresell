@@ -19,11 +19,21 @@ storage limits, pack discounts, and credit costs. There are no annual launch
 plans, no monthly export quota, and no customer-facing monthly upload-GB quota.
 Configuration tests cover every tier and all 35 tier/pack price combinations.
 
-Free credits are one-time welcome grants, never reissued after cancellation,
-downgrade or resubscription. Paid included credits replenish once per successfully
+Free has two separate sources: a one-time verified-account bonus of 10 ID and
+1 Grade, plus a recurring UTC-calendar-month allowance of 5 ID and 1 Grade.
+The welcome bonus is never reissued after cancellation, downgrade or
+resubscription. Paid included credits replenish once per successfully
 paid subscription period and do not roll over. Purchased ID and Grade balances
 are distinct, never expire, and are consumed after included credits. Refunds
 restore the correct source balance under the established operation policy.
+Expiring monthly credits are consumed before non-expiring welcome credits,
+and both precede purchased credits. Historical balances remain protected
+standing credit when their origin cannot be established; do not infer provenance.
+
+The September 18 instruction requires synthetic Stripe fixtures for continuing
+application integration, with no further connection attempt or approval checkpoint.
+Do not activate the live catalogue or deploy Production until the complete
+normal-site flow and real test-mode lifecycle cases pass.
 
 Paid plan changes take effect next renewal; cancellation retains benefits through
 paid-through date. Existing active subscriptions require a specific migration
@@ -41,6 +51,9 @@ test gates. Preserve purchased credits and billing history.
 - Archive/delete releases an active slot, never a creation allowance.
 - Edit/export/re-export/restore is not creation; restore still needs active room.
 - Duplication is new creation and must not copy seller photos.
+- Inventory existing active drafts without deleting over-limit work. Begin
+  creation usage at an explicitly labelled prospective rollout baseline; never
+  invent historical monthly creation totals.
 - Paid creation periods follow billing periods; Free periods are UTC months.
 - Preserve existing work above a downgraded limit; only block new additions.
 - Count all retained owned versions and derivatives, excluding shared catalogue.
