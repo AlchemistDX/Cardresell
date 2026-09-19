@@ -1,5 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
-import { idBilling, idBillingFailure } from './_idBilling.js';
+import { idBilling, idBillingFailure, membershipRouteMode, membershipBilling } from './_membershipRouteBilling.js';
+import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
 
 // POST /api/scan-refund
 // Body: { scan_id, reason?: 'wrong_card' | 'glare' | 'other', note?: string }
@@ -58,6 +59,9 @@ export default async function handler(req, res) {
   }
 
   const uid = googleSub || userEmail;
+  let membershipV2;
+  try { membershipV2 = await membershipRouteMode(); }
+  catch { return idBillingFailure(res); }
   const { scan_id, reason, note } = req.body || {};
 
   if (!scan_id || typeof scan_id !== 'string' || scan_id.length < 8 || scan_id.length > 64) {
@@ -76,6 +80,16 @@ export default async function handler(req, res) {
   // ── 3. Ownership check ──
   if (record.uid !== uid) {
     return res.status(403).json({ error: 'This scan does not belong to your account.', reason_code: 'ownership' });
+  }
+  if (record.billing_version || record.membership_receipt || membershipV2) {
+    if (!membershipV2 || record.billing_version !== 'launch-v2' || !record.membership_receipt
+      || !['identify', 'grade'].includes(record.mode)) return idBillingFailure(res);
+    try {
+      const result = await membershipBilling('manual_refund', { receipt: record.membership_receipt,
+        owner: uid, scan: scan_id, mode: record.mode, cost: record.consumed_amount });
+      if (!result.ok) return idBillingFailure(res, result);
+      return res.status(200).json(result);
+    } catch { return idBillingFailure(res); }
   }
   // New ID records never fall through to legacy read/set restoration. The
   // journal fences auto-refunds, manual replay and retry claims atomically.

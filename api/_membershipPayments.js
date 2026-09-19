@@ -152,7 +152,7 @@ export function createMembershipPaymentAdapter({
       currency: quote.currency, amountCents: quote.amountCents, paid: true,
     });
   }
-  async function invoice(invoiceId) {
+  async function invoice(invoiceId, authenticatedOwner) {
     requireThat(id(invoiceId, 'in'), 'invalid_reference');
     await account();
     // Explicit 2026-08-26.dahlia contract; no legacy/mixed-schema fallback.
@@ -184,6 +184,9 @@ export function createMembershipPaymentAdapter({
       && object(line.pricing.price_details), 'line_schema_mismatch');
     const term = copy(await invoke(bindings.getSubscriptionTerm, subscriptionId, line.period.start));
     bound(term);
+    // Recovery is the SAME canonical invoice verifier, not a synthetic webhook.
+    // The caller supplies a normally verified UID; immutable term owns identity.
+    requireThat(authenticatedOwner === undefined || term.owner === authenticatedOwner, 'owner_mismatch');
     requireThat(term.subscriptionId === subscriptionId && term.kind === 'subscription'
       && Object.hasOwn(prices.plans, term.plan) && term.priceId === prices.plans[term.plan].priceId,
     'binding_invalid');
@@ -229,6 +232,10 @@ export function createMembershipPaymentAdapter({
     async checkoutReturn({ sessionId, authenticatedOwner } = {}) {
       requireThat(uid(authenticatedOwner), 'authentication_required');
       return checkout(sessionId, authenticatedOwner);
+    },
+    async invoiceRecovery({ invoiceId, authenticatedOwner } = {}) {
+      requireThat(uid(authenticatedOwner), 'authentication_required');
+      return invoice(invoiceId, authenticatedOwner);
     },
     async webhook({ rawBody, signature } = {}) {
       requireThat((Buffer.isBuffer(rawBody) || rawBody instanceof Uint8Array)

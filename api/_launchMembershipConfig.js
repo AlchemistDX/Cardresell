@@ -1,5 +1,5 @@
-// Versioned launch contract. Not activated until checkout, ledgers, quotas,
-// migration, and Stripe test-mode verification have passed their release gate.
+// Versioned launch contract. Purchase activation requires checkout, ledger,
+// migration and Stripe test-mode verification. Quota/storage rollout is separate.
 // All monetary values are integer USD cents; storage uses decimal bytes.
 export const MEMBERSHIP_VERSION = 'launch-v2';
 
@@ -43,7 +43,8 @@ export const LAUNCH_CREDIT_POLICY = Object.freeze({
   paidGrant: 'once_per_successfully_paid_subscription_period',
   consumeOrder: Object.freeze(['included', 'purchased']),
   includedConsumeOrder: Object.freeze(['monthly', 'welcome']),
-  includedRollover: false,
+  includedRollover: true,
+  includedExpiry: null,
   purchasedExpiry: null,
   planChangeTiming: 'next_renewal',
   cancellationBenefits: 'through_paid_through_date',

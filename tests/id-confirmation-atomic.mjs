@@ -233,7 +233,7 @@ for (const corrupt of ['-1', '1.5', '[5]', 'nonsense']) {
   t.check('missing KV confirmation fails closed', result.statusCode === 503 && h.net() === 0);
   const scan = await h.scan();
   t.check('missing KV scan fails closed', scan.statusCode === 503 && h.net() === 0);
-  process.env.KV_REST_API_URL = 'https://scan-billing.test.invalid';
+  process.env.KV_REST_API_URL = 'https://scan-billing-test.upstash.io';
   h.restore();
 }
 {
@@ -436,6 +436,10 @@ for (const failure of ['http503', 'redis-error', 'malformed-pro']) {
 {
   const h = billingHarness();
   h.faults.before = 'transport';
+  // Allow the new read-only durable-fence preflight, then fail BOTH debit
+  // and refund financial commands. This still exercises unknown compensation,
+  // rather than stopping at a pre-admission read with no financial attempt.
+  h.faults.commands = ['eval'];
   const result = await h.scan();
   t.check('unconfirmed compensation reports reconciliation, never claims refund',
     result.statusCode === 503 && result.payload.error === 'billing_reconciliation_required'

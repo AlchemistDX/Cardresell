@@ -2,10 +2,13 @@
  * selection-debit handler are REAL. Only auth/tier/vision and catalogue/KV
  * boundaries are doubled. Never reads .env or calls a live service. */
 import { register } from 'node:module';
+import { randomBytes } from 'node:crypto';
 import { redisStore, redisRest } from './_idRedis.mjs';
 
 process.env.XIMILAR_API_TOKEN = 'test-placeholder-not-a-credential';
-process.env.KV_REST_API_URL = 'https://scan-billing.test.invalid';
+// Synthetic endpoint only; fetch below is intercepted to private Unix-socket
+// Redis. Match the production transport's exact Upstash hostname contract.
+process.env.KV_REST_API_URL = 'https://scan-billing-test.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-kv-not-a-credential';
 if (!globalThis.__crStubsRegistered) {
   globalThis.__crStubsRegistered = true;
@@ -92,7 +95,9 @@ export function billingHarness({ bucket = 'paid', balance = 5 } = {}) {
     scan: async (stub = ambiguous(), extraBody = {}) => {
       globalThis.__STUB = stub;
       const result = await invoke(scan, { imageBase64: Buffer.from('fake-jpeg').toString('base64'),
-        mimeType: 'image/jpeg', mode: 'identify', ...extraBody });
+        mimeType: 'image/jpeg', mode: 'identify',
+        ...(process.env.MEMBERSHIP_BILLING_V2 === 'on' ? { operation_id: randomBytes(32).toString('hex') } : {}),
+        ...extraBody });
       lastPayload = result.payload;
       return result;
     },

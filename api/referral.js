@@ -7,6 +7,7 @@
 // attackers from claiming referral rewards on someone else's account or grinding fake claims.
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { legacyCreditFetch as fetch, legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 const REFERRAL_REWARD = 5; // ID scan credits awarded to both parties
 
@@ -92,6 +93,7 @@ export default async function handler(req, res) {
 
     // ── claim: new user redeems a referral code ──
     if (action === 'claim') {
+      if (!await legacyRouteAllowed(res)) return;
       if (!refCode) return res.status(400).json({ error: 'refCode required' });
 
       const claimKey = `ref_claimed:${newUserSub}`;

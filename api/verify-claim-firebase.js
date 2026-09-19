@@ -1,4 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { membershipRouteMode, membershipWelcome } from './_membershipRouteBilling.js';
+import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
 
 // /api/verify-claim-firebase — Grant sign-up bonus after user clicked the
 // Firebase email-verification link. Reads the fresh Firebase ID token's
@@ -183,6 +185,18 @@ export default async function handler(req, res) {
       }
       // --------------------------------------------------------------
 
+      try {
+        if (await membershipRouteMode()) {
+          const grant = await membershipWelcome(userSub, email);
+          return res.status(200).json({ ok: true, verified: true, email,
+            bonusGranted: grant.newlyGranted, welcomeRecorded: grant.granted,
+            bonusReason: grant.newlyGranted ? '' : 'already-claimed',
+            billing_version: 'launch-v2' });
+        }
+      } catch {
+        return res.status(200).json({ ok: true, verified: true, email,
+          bonusGranted: false, bonusReason: 'billing-unavailable' });
+      }
       const getInt = async (k) => {
         const v = await kvGet(k);
         return parseInt(v || '0', 10) || 0;

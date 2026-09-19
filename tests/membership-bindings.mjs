@@ -435,10 +435,10 @@ await t.section('Scope and frozen dependencies', async () => {
   t.check('Single write primitive, no expiry/debit/grant commands', (MEMBERSHIP_BINDINGS_SCRIPT.match(/redis\.call\('MSET'/g) || []).length === 1
     && !/redis\.call\('(SET|INCR|DECR|EXPIRE|DEL)'/.test(MEMBERSHIP_BINDINGS_SCRIPT));
   const expected = {
-    '../api/_membershipLedger.js': '0307633fd5078810d28ac20e63cec1996bd8e4630da2008f4545ad3d21b44044',
-    '../api/_membershipPayments.js': 'd1a7d809bb437ca5549c2fbc3b0bb559916c20413ffae9551df1063ef5f3e54a',
-    '../api/_launchMembershipConfig.js': '513dcfa7f82a343c304d25bb192368e96076e5ad0677e98bbe5a5e67a799b0a5',
-    '../api/_idBilling.js': '8421956233263237dbb941e154b8a8ab315db49bd3ee16c089ccb6d894238a1a',
+    '../api/_membershipLedger.js': 'e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb',
+    '../api/_membershipPayments.js': 'a3d820ec5b1738aec378a65163df86c5aadae10a0c853080446631d977d43848',
+    '../api/_launchMembershipConfig.js': 'a5b4cd0ff0c59849b2d7192598f6d0f824f7e1ad0d81b0906df7a34efe80893b',
+    '../api/_idBilling.js': '795235399c1ccef5175c172a3c8166622980f12afee37e714bb7e15a22fa77ad',
   };
   for (const [file, digest] of Object.entries(expected)) t.check(`Frozen ${file}`, sha(readFileSync(new URL(file, import.meta.url))) === digest);
   console.log(`BINDINGS_LUA_SHA256 ${sha(MEMBERSHIP_BINDINGS_SCRIPT)}`);

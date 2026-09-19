@@ -47,23 +47,24 @@ const ac=fs.readFileSync('accuracy.html','utf8');
 JSON.parse(fs.readFileSync('vercel.json','utf8'));
 console.log('ok: vercel.json parses');
 // CR-008
-for (const t of ['$1.99','$7.99','$12.99','$5.99','$22.99']) ok(pr.includes(t), `pricing.html has real SKU price ${t}`);
+// Approved launch-v2 replaces the retired six-pack/annual pricing surface.
+for (const t of ['$2.99','$9.99','$29.99','$49.99','$5.99','$12.99','$22.99']) ok(pr.includes(t), `pricing.html has launch SKU price ${t}`);
 {
   const body = pr.replace(/<!--[\s\S]*?-->/g,'');
-  const a = body.indexOf('class="packs-title"');
-  const b = body.indexOf('class="packs-foot"');
+  const a = body.indexOf('<ul class="packs">');
+  const b = body.indexOf('</ul>', a);
   ok(a>0 && b>a, 'packs block located');
   const packs = body.slice(a,b);
   ok(!/\$4\.99|\$14\.99|\$19\.99/.test(packs), 'packs block has no phantom pack prices');
   ok(!/25 scans|100 scans|40 grades/.test(packs), 'packs block has no phantom pack sizes');
 }
-ok((pr.match(/class="pack[ "]/g)||[]).length===6 || (pr.match(/class="pack(?: pack-pop)?"/g)||[]).length===6, 'pricing.html renders exactly 6 pack cards');
-ok(pr.includes('/?packs=id') && pr.includes('/?packs=grade'), 'pack cards deep-link into the app');
+ok((pr.match(/<li><span>[\d,]+ (?:ID|Grade) credits<\/span>/g)||[]).length===7, 'pricing.html renders exactly 7 launch packs');
+ok(pr.includes('href="/?shop=1"'), 'pricing links to the normal membership shop');
 ok(idx.includes("p.get('packs')") && idx.includes('_pendingPacksFocus'), 'index.html handles ?packs=');
 ok(idx.includes('id="gradeCreditsBuy"') && idx.includes('id="idCreditsBuy"'), 'pack scroll anchors exist');
 // CR-012
-ok(pr.includes('Flip calc + Deal Score + Max Buy'), 'Free tier copy credits Max Buy (matches code)');
-ok(/Max Buy calculator<\/td><td class="yes">/.test(pr), 'compare table marks Max Buy free');
+ok(/<th scope="row">Free<\/th><td>\$0.00<\/td><td>5<\/td><td>1<\/td>/.test(pr), 'Free monthly issue is 5 ID and 1 Grade');
+ok(pr.includes('one-time bonus of 10 ID + 1 Grade, separate from their monthly allowance'), 'welcome bonus remains distinct from recurring credits');
 // CR-014
 ok(!idx.includes('Live eBay sold comps'), 'unconditional "Live eBay sold comps" claim removed');
 ok(idx.includes('when eBay serves them'), 'eBay comps claim is now conditional');
@@ -77,11 +78,11 @@ const routes=vj.routes.map(r=>r.src);
 ok(routes.indexOf('/photo-tips/(.*\\.webp)') < routes.indexOf('/photo-tips/?'), 'webp route still precedes the redirect');
 // CR-013 — annual interval handoff from /pricing into the app
 // 2026-09-01: Ultimate retired. Two paid tiers now.
-ok(/data-upgrade-tier="pro"/.test(pr) && /data-upgrade-tier="pro_max"/.test(pr),
-   'both paid CTAs are tagged for interval rewriting');
+ok(['Starter','Casual','Pro','Business'].every(p => pr.includes(`<th scope="row">${p}</th>`)),
+   'all four new paid plans appear in the monthly comparison');
 ok(!/data-upgrade-tier="ultimate"/.test(pr), 'no Ultimate CTA remains on the pricing page');
-ok(pr.includes("'/?upgrade=' + el.dataset.upgradeTier + (mode === 'annual' ? '&p=annual' : '')"),
-   'pricing toggle rewrites CTA hrefs with the interval');
+ok(!pr.includes('p=annual') && pr.includes('Five monthly plans.'),
+   'new catalogue does not offer unsupported annual checkout');
 ok(idx.includes('_pendingUpgradeInterval') && idx.includes("p.get('p')"),
    'index.html reads and stashes the handed-over interval');
 ok(idx.includes('window._applyPendingUpgradeInterval = function'),
@@ -462,8 +463,8 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 
   // Issue 3 - pricing.html spells all 4 buylists
   const pr2 = fs.readFileSync('pricing.html','utf8');
-  ok(/Buylist quotes \(Card Kingdom, CoolStuffInc, SCG, TCG&nbsp;Bulk\)/.test(pr2),
-     'pricing table names all 4 buylists (was missing TCG Bulk)');
+  ok(!/Buylist quotes|marketplace access|photo storage|active listings/i.test(pr2),
+     'credit catalogue does not infer unrelated feature capabilities');
   ok(!/eBay, COMC, Fanatics Collect &amp; more/.test(idx),
      'homepage feature blurb no longer promises COMC/Fanatics on Free');
   ok(/eBay, TCGplayer, Whatnot &amp; more/.test(idx),
@@ -476,7 +477,7 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   ok(!/tier-ultimate/.test(pr2), 'no tier-ultimate DOM on /pricing');
   ok(!/<div class="plan-card tier-ultimate"/.test(idx), 'no Ultimate card in the upgrade modal');
   ok(/Get Ultimate/.test(idx) === false, 'no "Get Ultimate" CTA left in the app');
-  ok(/"@type": "Offer", "name": "Pro Max \(monthly\)"/.test(pr2), 'Pro Max offer still in JSON-LD');
+  ok(!pr2.includes('Pro Max'), 'new pricing page does not advertise a retired commercial tier');
   ok(!/"@type": "Offer", "name": "Ultimate \(monthly\)"/.test(pr2), 'Ultimate offer removed from JSON-LD');
   const upTiers = idx.match(/\['pro','pro_max'(?:,'ultimate')?\]\.includes\(upgradeParam\)/);
   ok(upTiers && /ultimate/.test(upTiers[0]) &&

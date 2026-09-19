@@ -50,7 +50,8 @@ equal(Object.isFrozen(LAUNCH_WELCOME_CREDITS), true);
 equal(LAUNCH_CREDIT_POLICY.includedConsumeOrder, ['monthly', 'welcome']);
 equal(LAUNCH_CREDIT_POLICY.paidGrant, 'once_per_successfully_paid_subscription_period');
 equal(LAUNCH_CREDIT_POLICY.purchasedExpiry, null);
-equal(LAUNCH_CREDIT_POLICY.includedRollover, false);
+equal(LAUNCH_CREDIT_POLICY.includedRollover, true);
+equal(LAUNCH_CREDIT_POLICY.includedExpiry, null);
 equal(LAUNCH_CREDIT_POLICY.planChangeTiming, 'next_renewal');
 equal([LAUNCH_CREDIT_POLICY.idCost, LAUNCH_CREDIT_POLICY.gradeCost,
   LAUNCH_CREDIT_POLICY.deepGradeCost], [1, 1, 2]);

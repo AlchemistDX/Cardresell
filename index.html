@@ -4029,6 +4029,26 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/core.15fab283.js"></script>
+<style id="membership-shop-styles">
+.membership-shop { width:min(960px,calc(100vw - 32px)); max-height:90dvh; margin:auto; padding:24px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
+.membership-shop::backdrop { background:rgb(0 0 0 / .65); }
+.membership-shop header { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.membership-shop h2 { font-size:1.5rem; margin:0; }
+.membership-shop h3 { font-size:1.125rem; margin:24px 0 12px; }
+.membership-shop p { font-size:.875rem; line-height:1.5; margin:16px 0; }
+.membership-shop button { font:inherit; font-size:.875rem; min-height:44px; padding:8px 16px; border:1px solid var(--border,#555); border-radius:8px; background:var(--surface-2,#252525); color:inherit; cursor:pointer; }
+.membership-shop button:disabled { opacity:.55; cursor:not-allowed; }
+.membership-shop button:focus-visible { outline:2px solid var(--gold,#d4af37); outline-offset:3px; }
+.membership-shop button:not(:disabled):hover { border-color:var(--gold,#d4af37); }
+.membership-table-scroll { overflow-x:auto; }
+.membership-shop table { width:100%; border-collapse:collapse; font-size:.875rem; text-align:left; }
+.membership-shop th,.membership-shop td { padding:12px 8px; border-bottom:1px solid var(--border,#444); }
+.membership-shop thead { color:var(--gold-text,#e8bd61); }
+.membership-packs { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
+.membership-shop section > button { margin:4px 8px 4px 0; }
+@media(max-width:600px) { .membership-shop { padding:16px; } .membership-shop table { min-width:650px; } }
+</style>
+<script defer src="/js/membership-shop.35e69f5d.js"></script>
 <script defer src="/js/ui.a3a7dc83.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.5cf1cd22.js"></script>

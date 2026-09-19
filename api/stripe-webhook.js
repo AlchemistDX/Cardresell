@@ -2,6 +2,7 @@
 // Handles: Pro/Pro Max/Ultimate subscriptions + per-scan payments
 
 import { priceIdToTier } from './_tier.js';
+import { legacyCreditFetch as fetch, legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -33,6 +34,7 @@ export default async function handler(req, res) {
 
   const type = event.type;
   const eventId = event.id;
+  if (!await legacyRouteAllowed(res)) return;
   console.log('Stripe webhook:', type, eventId);
 
   // ── Idempotency guard ──

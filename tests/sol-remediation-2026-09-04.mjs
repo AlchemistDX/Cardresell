@@ -168,9 +168,11 @@ console.log('\n[Sol remediation 2026-09-04]');
   const branchFor = condition => handler.body.body.find(n => n.type === 'IfStatement'
     && scanApi.slice(n.test.start, n.test.end).replace(/\s/g, '') === condition);
   const idBranch = branchFor('hasKV&&!freeRetry&&isIdentifyMode');
-  const gradeBranch = branchFor('hasKV&&!freeRetry&&!isIdentifyMode');
+  const gradeBranch = branchFor('hasKV&&!membershipV2&&!freeRetry&&!isIdentifyMode');
+  const v2GradeBranch = branchFor('hasKV&&membershipV2&&!freeRetry&&!isIdentifyMode');
   check('ID debit has its own KV, free-retry and identify-mode guard', !!idBranch);
   check('grade debit has its own KV, free-retry and non-identify guard', !!gradeBranch);
+  check('versioned grade debit independently guards KV, mode and free retry', !!v2GradeBranch);
   const block = idBranch ? scanApi.slice(scanApi.indexOf('const retryOf ='), idBranch.start) : '';
   check('server reads the prior scan record', /getKVJson\(kvUrl, kvToken, `scan:\$\{retryOf\}`\)/.test(block));
   check('server enforces ownership', /prior\.uid === key/.test(block));
@@ -188,6 +190,9 @@ console.log('\n[Sol remediation 2026-09-04]');
   check('both grade bucket mutations are inside the branch skipped for a free retry',
         !!gradeBranch && /await incrKV\(/.test(scanApi.slice(gradeBranch.consequent.start, gradeBranch.consequent.end))
         && /await decrByKV\(/.test(scanApi.slice(gradeBranch.consequent.start, gradeBranch.consequent.end)));
+  check('versioned grade debit is also inside the branch skipped for a free retry',
+        !!v2GradeBranch && /await membershipBilling\('debit', billingContext\)/.test(
+          scanApi.slice(v2GradeBranch.consequent.start, v2GradeBranch.consequent.end)));
   check('the debit block is no longer unconditional on hasKV alone',
         !/\n  if \(hasKV\) \{\n    const tier\s+= await getUserTier/.test(scanApi));
 

@@ -23,7 +23,12 @@ const insist = (value, code) => { if (!value) throw new MembershipCheckoutStripe
 export function createMembershipCheckoutStripeTransport({
   apiKey, accountId, livemode, apiVersion, bindings, priceMap, couponMap,
   fetchImpl = globalThis.fetch, operationTimeoutMs = MEMBERSHIP_CHECKOUT_WRITE_LIMITS.operationMs,
+  returnOrigin = MEMBERSHIP_CHECKOUT_RETURN_ORIGIN,
 } = {}) {
+  let origin;
+  try { origin = new URL(returnOrigin); } catch { throw new MembershipCheckoutStripeError('write_configuration'); }
+  insist(origin.protocol === 'https:' && origin.origin === returnOrigin
+    && !origin.username && !origin.password && !origin.port, 'write_configuration');
   insist(id(accountId, 'acct') && typeof livemode === 'boolean'
     && typeof apiKey === 'string' && apiKey.length <= 512
     && new RegExp(`^(sk|rk)_${livemode ? 'live' : 'test'}_[A-Za-z0-9]+$`).test(apiKey)
@@ -187,8 +192,8 @@ export function createMembershipCheckoutStripeTransport({
           client_reference_id: saved.intentId, 'line_items[0][price]': saved.priceId,
           'line_items[0][quantity]': '1', 'payment_method_types[0]': 'card',
           'automatic_tax[enabled]': 'false', allow_promotion_codes: 'false',
-          success_url: `${MEMBERSHIP_CHECKOUT_RETURN_ORIGIN}/?membership_return=1&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${MEMBERSHIP_CHECKOUT_RETURN_ORIGIN}/?membership_cancel=1`,
+          success_url: `${returnOrigin}/?membership_return=1&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${returnOrigin}/?membership_cancel=1`,
           'metadata[membership_version]': MEMBERSHIP_VERSION, 'metadata[intent_id]': saved.intentId,
         });
         if (coupon !== null) params.set('discounts[0][coupon]', coupon);

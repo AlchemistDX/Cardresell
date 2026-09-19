@@ -51,113 +51,20 @@ const { finish: _finish, skipAll: _skipAll } = completionGuard('test-scan');
 import handler from '../api/scan.js';
 import { makeSigner } from './_signedToken.mjs';
 import { TIER_BENEFITS } from '../api/_tier.js';
+import { redisStore, redisRest } from './_idRedis.mjs';
 
-// ── Mock KV store ──────────────────────────────────────────────────────────
+// Private Unix-socket Redis; fixture API retained, commands and Lua run for real.
+// No network request reaches the synthetic Upstash hostname.
 class MockKV {
   constructor(initial = {}) {
-    this.store = { ...initial };
+    this.store = redisStore();
+    for (const [key, value] of Object.entries(initial)) this.store.set(key, value);
     this.opLog = [];
   }
   handleRequest(url, options = {}) {
-    const u = new URL(url);
-    // /get/<key>
-    let m = u.pathname.match(/^\/get\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      this.opLog.push(['get', key]);
-      return this._resp({ result: this.store[key] ?? null });
-    }
-    // /set/<key>/<value>
-    m = u.pathname.match(/^\/set\/([^/]+)\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      const val = decodeURIComponent(m[2]);
-      this.opLog.push(['set', key, val]);
-      this.store[key] = val;
-      return this._resp({ result: 'OK' });
-    }
-    // /setex/<key>/<ttl>/<value>
-    // Added 2026-09-10: the REAL verifier caches an email->uid mapping here
-    // (api/_verifyToken.js). While the fixtures sent unsigned tokens the
-    // verifier never got far enough to write it, so MockKV never needed the
-    // verb; with real verification it does, and an unhandled verb threw
-    // inside the verify call and was reported as a 401.
-    m = u.pathname.match(/^\/setex\/([^/]+)\/([^/]+)\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      const ttl = parseInt(decodeURIComponent(m[2]), 10);
-      const val = decodeURIComponent(m[3]);
-      this.opLog.push(['setex', key, String(ttl), val]);
-      this.store[key] = val;
-      this.ttls = this.ttls || {};
-      this.ttls[key] = ttl;
-      return this._resp({ result: 'OK' });
-    }
-    // /incr/<key>
-    m = u.pathname.match(/^\/incr\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      const cur = parseInt(this.store[key] ?? '0') || 0;
-      this.store[key] = String(cur + 1);
-      this.opLog.push(['incr', key]);
-      return this._resp({ result: cur + 1 });
-    }
-    // /decrby/<key>/<n> and /incrby/<key>/<n>
-    // Same story as setex: the endpoint debits credits with DECRBY, and while
-    // every case was refused at the door the mock never saw the verb. An
-    // unhandled verb threw INSIDE the handler's credit path, which the
-    // endpoint absorbed -- so the case looked like a wrong response shape
-    // rather than a broken mock. Recorded here so the next reader does not
-    // re-diagnose it as a product defect.
-    m = u.pathname.match(/^\/(decrby|incrby)\/([^/]+)\/(.+)$/);
-    if (m) {
-      const verb = m[1];
-      const key = decodeURIComponent(m[2]);
-      const by = parseInt(decodeURIComponent(m[3]), 10) || 0;
-      const cur = parseInt(this.store[key] ?? '0') || 0;
-      const next = verb === 'decrby' ? cur - by : cur + by;
-      this.store[key] = String(next);
-      this.opLog.push([verb, key, String(by)]);
-      return this._resp({ result: next });
-    }
-    // /decr/<key>
-    m = u.pathname.match(/^\/decr\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      const cur = parseInt(this.store[key] ?? '0') || 0;
-      this.store[key] = String(cur - 1);
-      this.opLog.push(['decr', key]);
-      return this._resp({ result: cur - 1 });
-    }
-    // /del/<key>
-    m = u.pathname.match(/^\/del\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      const had = this.store[key] !== undefined;
-      delete this.store[key];
-      this.opLog.push(['del', key]);
-      return this._resp({ result: had ? 1 : 0 });
-    }
-    // /expire/<key>/<ttl>
-    m = u.pathname.match(/^\/expire\/([^/]+)\/(.+)$/);
-    if (m) {
-      const key = decodeURIComponent(m[1]);
-      this.ttls = this.ttls || {};
-      this.ttls[key] = parseInt(decodeURIComponent(m[2]), 10);
-      this.opLog.push(['expire', key]);
-      return this._resp({ result: this.store[key] === undefined ? 0 : 1 });
-    }
-    throw new Error('Unhandled KV url: ' + url);
+    return redisRest(url, options, this.opLog);
   }
-  _resp(body) {
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve(body),
-      text: () => Promise.resolve(JSON.stringify(body)),
-    });
-  }
-  getInt(key) { return parseInt(this.store[key] ?? '0') || 0; }
+  getInt(key) { return parseInt(this.store.get(key) ?? '0') || 0; }
 }
 
 // ── Mock res ──────────────────────────────────────────────────────────────
@@ -195,8 +102,9 @@ async function test(name, fn) {
 }
 
 // ── Environment setup ─────────────────────────────────────────────────────
-process.env.KV_REST_API_URL     = 'https://mock-kv.local';
+process.env.KV_REST_API_URL     = 'https://scan-legacy-test.upstash.io';
 process.env.KV_REST_API_TOKEN   = 'mock-token';
+process.env.MEMBERSHIP_BILLING_V2 = 'off'; // This suite asserts legacy behavior.
 process.env.OPENAI_API_KEY      = 'mock-openai';
 process.env.STRIPE_SECRET_KEY   = ''; // avoid Stripe fallback path
 // Identify mode routes to Ximilar as the sole identity authority and returns

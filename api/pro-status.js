@@ -1,4 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { membershipBalances, membershipRouteMode } from './_membershipRouteBilling.js';
+import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
 // /api/pro-status — Check Pro status + scan credits for a Google user
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
@@ -49,6 +51,16 @@ export default async function handler(req, res) {
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
+  try {
+    if (await membershipRouteMode()) {
+      const b = await membershipBalances(userSub);
+      return res.status(200).json({ ...b, status: b.isPro ? 'active' : 'free',
+        email: userEmail, emailVerified, verifiedEmail: userEmail, signInProvider,
+        freeScansLeft: b.freeCredits, idFreeLeft: b.idFreeCredits,
+        paidScansLeft: b.paidCredits, idPaidLeft: b.idPaidCredits,
+        totalScansLeft: b.credits, refCode: '', refRewarded: false });
+    }
+  } catch { return res.status(503).json({ error: 'billing_unavailable' }); }
 
   let isPro = false, proStatus = 'none', userTier = 'free';
 

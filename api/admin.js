@@ -9,6 +9,7 @@
 // KV credentials are read from process.env (KV_REST_API_URL / KV_REST_API_TOKEN) — no hardcoded secrets.
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { legacyCreditFetch as fetch, legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 const OWNER_SUB = '111904685934190351595';
 const KV_URL   = process.env.KV_REST_API_URL   || '';
@@ -55,6 +56,7 @@ export default async function handler(req, res) {
 
     // Restore N paid scan credits to a target user
     if (action === 'restore_scan_credit') {
+      if (!await legacyRouteAllowed(res)) return;
       const target = String(target_uid || '').trim();
       const n = parseInt(amount) || 0;
       if (!target)       return res.status(400).json({ error: 'target_uid required' });

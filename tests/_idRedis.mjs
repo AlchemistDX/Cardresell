@@ -38,7 +38,8 @@ export async function redisRest(input, init = {}, commands = [], faults = {}) {
   if (u.searchParams.get('EX')) args.push('EX', u.searchParams.get('EX'));
   const action = cmd === 'eval' ? args[6] : undefined;
   commands.push({ cmd, key: cmd === 'eval' ? args[3] : args[1], value: args[2], action, args, ex: u.searchParams.get('EX') });
-  if (faults.before && (!faults.action || faults.action === action)) {
+  if (faults.before && (!faults.action || faults.action === action)
+      && (!faults.commands || faults.commands.includes(cmd))) {
     if (faults.before === 'redis') return Response.json({ error: 'ERR injected Redis failure' });
     if (faults.before === 'malformed') return Response.json({ result: 'not-json' });
     if (faults.before === 'missing') return Response.json({});

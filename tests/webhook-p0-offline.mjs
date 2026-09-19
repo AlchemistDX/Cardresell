@@ -4,7 +4,7 @@
 // short-circuits sig verification in that path already for local dev if
 // coded that way; otherwise we stub the crypto by writing a valid HMAC).
 //
-// We stub network fetch to capture what would be written to KV.
+// Private Redis executes real commands/Lua. Only network authorities are fixtures.
 
 import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('webhook-p0-offline');
@@ -13,36 +13,32 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { redisStore, redisRest } from './_idRedis.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-process.env.KV_REST_API_URL   = 'https://kv.test';
+process.env.KV_REST_API_URL   = 'https://webhook-legacy-test.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-token';
+process.env.MEMBERSHIP_BILLING_V2 = 'off'; // These are legacy handler assertions.
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
 process.env.STRIPE_SECRET_KEY = 'sk_test_offline';
 
 const kvWrites = [];
-const kvReads  = new Map();
+let kvStore = redisStore();
+const kvReads = { clear() { kvStore = redisStore(); } };
 
 globalThis.fetch = async (url, opts) => {
   const u = String(url);
-  if (u.startsWith('https://kv.test/set/')) {
-    const decoded = decodeURIComponent(u.replace('https://kv.test/set/', ''));
-    // For NX (idempotency) form: `${key}/${val}/EX/${ttl}/NX` — split off the key.
-    const parts = decoded.split('/');
-    const key = parts[0];
-    const rest = parts.slice(1).join('/');
-    // If the rest starts with EX or NX slash form, val is the piece before /EX or /NX
-    let val = rest;
-    if (rest.includes('/EX/')) val = rest.split('/EX/')[0];
-    kvWrites.push({ key, val });
-    kvReads.set(key, val);
-    return new Response(JSON.stringify({ result: 'OK' }), { status: 200 });
-  }
-  if (u.startsWith('https://kv.test/get/')) {
-    const key = decodeURIComponent(u.replace('https://kv.test/get/', ''));
-    return new Response(JSON.stringify({ result: kvReads.get(key) || null }), { status: 200 });
+  if (new URL(u).origin === process.env.KV_REST_API_URL) {
+    // Capture actual persisted changes, not an invented successful EVAL result.
+    const before = new Map(kvStore.keys().map(key => [key, kvStore.get(key)]));
+    const response = await redisRest(u, opts);
+    for (const key of kvStore.keys()) {
+      const val = kvStore.get(key);
+      if (val !== before.get(key)) kvWrites.push({ key, val });
+    }
+    return response;
   }
   if (u.startsWith('https://api.stripe.com/')) {
     // For webhook signature verification we don't hit Stripe. This branch is for

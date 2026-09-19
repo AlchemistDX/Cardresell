@@ -1,5 +1,5 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
-import { idBilling, idEntitlement, candidateHash, idBillingFailure } from './_idBilling.js';
+import { idBilling, idEntitlement, candidateHash, idBillingFailure } from './_membershipRouteBilling.js';
 
 // Confirmation is not a generic debit API. Only a server-issued pending receipt
 // and one of its exact offered candidates may consume a single ID entitlement.

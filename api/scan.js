@@ -2,7 +2,10 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
-import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingFailure, claimIdRetry } from './_idBilling.js';
+import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingFailure, claimIdRetry,
+  membershipRouteMode, membershipBilling, publishMembershipScan, membershipBalances } from './_membershipRouteBilling.js';
+import { legacyCreditFetch as fetch, membershipRedis } from './_membershipLegacyFence.js';
+import { createMembershipScanIntents, scanIntentDigest } from './_membershipScanIntent.js';
 
 // ── YGOProDeck grounding (extracted helper) ──
 // Mutates cardInfo in place. Returns nothing.
@@ -707,6 +710,9 @@ export default async function handler(req, res) {
   const kvToken = process.env.KV_REST_API_TOKEN;
   const hasKV   = !!(kvUrl && kvToken);
   const key     = googleSub || userEmail;
+  let membershipV2;
+  try { membershipV2 = await membershipRouteMode(); }
+  catch { return idBillingFailure(res); }
 
   // ── 3. Get image + mode (read early so credit logic can branch) ──
   const { imageBase64, mimeType, mode, deepGrade } = req.body || {};
@@ -817,6 +823,44 @@ export default async function handler(req, res) {
     }
   }
 
+  // Bind one authenticated HTTP intent before any debit or provider attempt.
+  // Unknown execution is never reclaimed merely because a caller retries.
+  let scanIntent = null;
+  if (membershipV2) {
+    const intents = createMembershipScanIntents({ execute: membershipRedis });
+    try {
+      scanIntent = await intents.begin({ owner: key, operation: req.body.operation_id,
+        digest: scanIntentDigest(req.body) });
+    } catch (error) {
+      if (error.code === 'invalid_scan_intent') return res.status(400).json({
+        error: 'A stable scan operation token is required.', code: error.code });
+      if (error.code === 'scan_intent_conflict') return res.status(409).json({
+        error: 'This operation token belongs to a different scan request.', code: error.code });
+      return idBillingFailure(res);
+    }
+    if (scanIntent.state === 'complete') return res.status(scanIntent.status).json(scanIntent.body);
+    if (scanIntent.state === 'pending') return res.status(202).json({
+      success: false, code: 'scan_intent_pending', billing_reference: scanIntent.receipt,
+      error: 'This scan is processing or its outcome is being checked. Retry with the same operation token; do not start another scan.' });
+    const originalResponse = res;
+    let responseStatus = 200;
+    // Every downstream JSON return awaits durable completion before delivery.
+    // On uncertain completion, keep the claim; never release provider authority.
+    res = {
+      status(code) { responseStatus = code; return this; },
+      async json(body) {
+        try {
+          const completed = await intents.complete(scanIntent.authority, responseStatus, body);
+          return originalResponse.status(completed.status).json(completed.body);
+        } catch {
+          return originalResponse.status(503).json({
+            success: false, code: 'scan_intent_pending', billing_reference: scanIntent.receipt,
+            error: 'The scan result could not be confirmed. Retry this same operation token.' });
+        }
+      },
+    };
+  }
+
   // ── 2. Check & consume scan credit(s) ──
   // Track what was consumed so we can refund on downstream failure.
   let consumedFrom   = null; // 'id_paid_left' | 'paid_left' | 'free'
@@ -824,10 +868,22 @@ export default async function handler(req, res) {
   // Every scan gets a short opaque id so the user can request a refund from the
   // "not my card" button. We ONLY log successful identify responses so the id
   // is never claimable if the credit was already refunded on the server side.
-  const scanId = _shortId();
-  const idContext = { receipt: newIdReceipt(), owner: key, scan: scanId };
+  const scanId = scanIntent?.scan || _shortId();
+  const idContext = { receipt: scanIntent?.receipt || newIdReceipt(), owner: key, scan: scanId };
+  const billingContext = { ...idContext, mode: isIdentifyMode ? 'identify' : 'grade', cost: isIdentifyMode ? 1 : gradeCost,
+    bulkGrade: isBulkGrade };
   let idReservation = false;
-  if (isIdentifyMode && !hasKV) return idBillingFailure(res);
+  if ((isIdentifyMode || membershipV2) && !hasKV) return idBillingFailure(res);
+  // Bulk entitlement is checked independently of retry admission.
+  if (membershipV2 && isBulkGrade) {
+    try {
+      const balance = await membershipBalances(key);
+      if (balance.capabilities.bulkGrade === null) return res.status(503).json({
+        error: 'Bulk Grade capability is not configured.', code: 'membership_capability_unavailable' });
+      if (balance.capabilities.bulkGrade !== true) return res.status(403).json({
+        error: 'Bulk Grade is not enabled for this account.', code: 'membership_capability_denied' });
+    } catch { return idBillingFailure(res); }
+  }
 
   // ── Free retry (2026-09-04) ────────────────────────────────────────────────
   // The bulk scanner's button says "Retry (free)" and the client code even
@@ -850,11 +906,11 @@ export default async function handler(req, res) {
   // record, and a second bad result has the "Not my card" refund path.
   const retryOf = typeof (req.body || {}).retry_of === 'string' ? req.body.retry_of.trim() : '';
   let freeRetry = false;
-  if (hasKV && isIdentifyMode && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
-    try { freeRetry = await claimIdRetry(idContext, retryOf); }
+  if (hasKV && (isIdentifyMode || membershipV2) && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
+    try { freeRetry = await claimIdRetry(billingContext, retryOf); }
     catch (error) { return idBillingFailure(res); }
   }
-  if (hasKV && !isIdentifyMode && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
+  if (hasKV && !membershipV2 && !isIdentifyMode && retryOf && retryOf.length >= 8 && retryOf.length <= 64) {
     try {
       const prior = await getKVJson(kvUrl, kvToken, `scan:${retryOf}`);
       const priorIsId = prior && ['id_free', 'id_paid_left'].includes(prior.consumed_from);
@@ -894,7 +950,22 @@ export default async function handler(req, res) {
       return idBillingFailure(res, error);
     }
   }
-  if (hasKV && !freeRetry && !isIdentifyMode) {
+  if (hasKV && membershipV2 && !freeRetry && !isIdentifyMode) {
+    try {
+      const result = await membershipBilling('debit', billingContext);
+      if (!result.ok) return idBillingFailure(res, result);
+      consumedFrom = result.bucket; consumedAmount = gradeCost;
+    } catch {
+      try {
+        const result = await membershipBilling('refund', billingContext);
+        if (!result.ok) throw new Error('compensation_unknown');
+      } catch {
+        return res.status(503).json({ error: 'billing_reconciliation_required', billing_reference: billingContext.receipt });
+      }
+      return idBillingFailure(res);
+    }
+  }
+  if (hasKV && !membershipV2 && !freeRetry && !isIdentifyMode) {
     const tier       = await getUserTier(process.env.STRIPE_SECRET_KEY, kvUrl, kvToken, googleSub, userEmail);
     const isPro      = isPaidTier(tier); // any paid tier gets monthly grants
 
@@ -984,6 +1055,11 @@ export default async function handler(req, res) {
   // Refund helper — called on any downstream failure so the user isn't charged for a broken scan.
   async function refundCredits() {
     if (!hasKV || !consumedFrom || !consumedAmount) return;
+    if (membershipV2) {
+      const result = await membershipBilling('refund', billingContext);
+      if (!result.ok) throw new Error('billing_reconciliation_required');
+      return;
+    }
     if (isIdentifyMode && idReservation) {
       const result = await idBilling('refund', idContext);
       if (!result.ok) throw new Error(result.code);
@@ -1238,7 +1314,6 @@ export default async function handler(req, res) {
       }
 
       // Single confident answer — log + return, skip GPT entirely
-      _incrSearchStats(kvUrl, kvToken);
       if (hasKV && consumedFrom) {
         try {
           const record = {
@@ -1248,9 +1323,11 @@ export default async function handler(req, res) {
             set_name: cardInfo.set_name, confidence: idConfNorm,
             image_quality: 'ok', created_at: Date.now(), source: 'ximilar',
           };
-          await setKVWithTTL(kvUrl, kvToken, `scan:${scanId}`, JSON.stringify(record), 3600);
-        } catch(e) { /* non-fatal */ }
+          if (membershipV2) await publishMembershipScan(billingContext, record);
+          else await setKVWithTTL(kvUrl, kvToken, `scan:${scanId}`, JSON.stringify(record), 3600);
+        } catch(e) { if (membershipV2) throw e; /* legacy non-fatal */ }
       }
+      _incrSearchStats(kvUrl, kvToken);
       // Recompute confidence norm in case grounding restored it from 'low' → 'high'
       const finalConfNorm = cardInfo.confidence || idConfNorm;
       return res.status(200).json({
@@ -2398,6 +2475,9 @@ Respond ONLY with valid JSON, no explanation:
       if (edgeImages.length < 4 && isDeepGrade && !confidenceDrivers.includes('limited_edge_visibility')) confidenceDrivers.push('limited_edge_visibility');
       if (confidenceDrivers.length === 0) confidenceDrivers = ['none'];
 
+      if (membershipV2 && consumedFrom) await publishMembershipScan(billingContext, {
+        card_name: cardInfo.card_name || '', consumed_from: consumedFrom,
+      });
       return res.status(200).json({
         success:       true,
         mode:          'grade',
@@ -2416,7 +2496,7 @@ Respond ONLY with valid JSON, no explanation:
            claim that does not exist. */
         analysis_id:   scanId,
         deepGrade:     isDeepGrade,
-        creditsUsed:   gradeCost,
+        creditsUsed:   membershipV2 ? consumedAmount : gradeCost,
         photoCount:    totalPhotos,
         card_name:     cardInfo.card_name     || '',
 

@@ -5,9 +5,11 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { harness } from './_assert.mjs';
 import { redisCommand as redis } from './_idRedis.mjs';
-import { MEMBERSHIP_LEDGER_SCRIPT, prepareMembershipGrant, grantMembership, membershipWelcomeKeys } from '../api/_membershipLedger.js';
+import { MEMBERSHIP_LEDGER_SCRIPT, prepareMembershipGrant, grantMembership, membershipWelcomeKeys,
+  membershipIncludedHistoryKey, membershipGrantHoldKey } from '../api/_membershipLedger.js';
 import { LAUNCH_PLANS, LAUNCH_PACKS, quoteLaunchPack } from '../api/_launchMembershipConfig.js';
 import { ID_BILLING_SCRIPT } from '../api/_idBilling.js';
+import { createMembershipConsumption, membershipEnrollmentKey } from '../api/_membershipConsumption.js';
 
 const t = harness('membership-ledger');
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -216,8 +218,8 @@ await t.section('invoice and paid-period uniqueness, usage and replay', async ()
   const record = await get(pk);
   t.check('Starter allowance matches central config', record.id_grant === 25 && record.grade_grant === 5);
   t.check('invoice allocations never merge into purchased balance', await num(idKey) === 17 && await num(gradeKey) === 4);
-  // Future period-aware debit is NOT implemented. This fixture simulates
-  // already-spent allocation to prove no grant path can reset it.
+  // A persisted-use fixture isolates grant replay from the separately tested
+  // consumption engine; no grant path may reset this historical usage.
   record.id_used = 7; record.grade_used = 2;
   await redis(['SET', pk, JSON.stringify(record)]);
   const spentBytes = await raw(pk);
@@ -287,15 +289,104 @@ await t.section('out-of-order, overlap, expiry and subscription transitions', as
   await reset();
   await redis(['MSET', idKey, 73, gradeKey, 19]);
   await invoke('period', expired);
-  t.check('expired initial invoice creates no active allowance', await raw(activeKey) === null);
+  t.check('expired paid invoice retains latest-period pointer and issued credits',
+    (await get(activeKey)).start === expired.periodStart
+    && (await get(keys('period', expired)[3])).id_grant === 25);
   await invoke('period', current);
-  t.check('newer current paid period becomes active without rollover',
+  t.check('newer paid period becomes current without overwriting historical allocation',
     (await get(activeKey)).start === current.periodStart
     && (await get(keys('period', current)[3])).id_used === 0
     && (await get(keys('period', current)[3])).id_grant === 25);
   t.check('period transition preserves purchased balances', await num(idKey) === 73 && await num(gradeKey) === 19);
   t.check('purchased balances and grant journals have no expiry',
     (await Promise.all((await redis(['KEYS', '*'])).map(key => redis(['TTL', key])))).every(ttl => ttl === -1));
+});
+
+await t.section('nonexpiring history atomic renewal, replay and missing-index refusal', async () => {
+  await reset();
+  const first = period('in_historyFirst', { periodStart: now - 1000, periodEnd: now - 100 });
+  const second = period('in_historySecond', { periodStart: now - 100, periodEnd: now + 100 });
+  await invoke('period', first);
+  const firstKey = keys('period', first)[3], index = membershipIncludedHistoryKey(UID);
+  const firstBytes = await raw(firstKey);
+  const oldMarker = await raw(keys('period', first)[0]);
+  const replies = await Promise.all(Array.from({ length: 12 }, () => invoke('period', second)));
+  t.check('duplicate renewal stores exactly two indexed periods without rewriting first',
+    replies.every(x => x.granted) && (await get(index)).count === 2 && await raw(firstKey) === firstBytes);
+  t.check('older fulfillment result and journal remain exact on replay',
+    (await invoke('period', first)).granted && await raw(keys('period', first)[0]) === oldMarker);
+  await redis(['DEL', index]);
+  const before = await snapshot();
+  // Original completed invoice replay is still readable, but no new issuance
+  // or balance reconstruction is allowed after provenance loss.
+  t.check('completed fulfillment still replays despite missing new history', (await invoke('period', first)).granted);
+  for (const candidate of [period('in_indexSame', { periodStart: now - 100, periodEnd: now + 100 }),
+    period('in_indexNext', { periodStart: now - 1200, periodEnd: now - 1000 })]) {
+    await rejected('new invoice cannot repair missing initialized history', () => invoke('period', candidate), 'ledger_unavailable');
+  }
+  t.check('missing history never overwrites original periods, markers or balances', await snapshot() === before);
+  await reset();
+  let lost = true;
+  await rejected('paid renewal lost response preserves unknown outcome', () => invoke('period', first, async c => {
+    const result = await redis(c); if (lost) { lost = false; throw new Error('synthetic response loss'); } return result;
+  }), 'ledger_unavailable');
+  const committed = await snapshot();
+  t.check('paid renewal replay after response loss has no second history entry or grant',
+    (await invoke('period', first)).granted && (await get(index)).count === 1 && await snapshot() === committed);
+});
+
+await t.section('NONEXPIRING-1 prior Free issuance cannot be erased by first paid grant', async () => {
+  const consume = createMembershipConsumption({ execute: redis });
+  const context = { owner: UID, receipt: 'a'.repeat(64), scan: 'history_control' };
+  const enrollmentKey = membershipEnrollmentKey(UID);
+  const historyKey = membershipIncludedHistoryKey(UID);
+  const oldLua = MEMBERSHIP_LEDGER_SCRIPT.replace(
+    /-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, '').replace(
+    /    -- NONEXPIRING-1:[\s\S]*?    -- End NONEXPIRING-1 authority check\.\n/, '');
+  t.check('negative control exactly matches reviewed failing nonexpiring Lua',
+    sha(oldLua) === 'bcf5e94e2bf56fada0a7dfedfe656e2a88883b1d766df7264eed6b02ee06d269');
+  async function seedFree() {
+    await reset();
+    await redis(['SET', 'membership:launch-v2:legacy_fence', '1']);
+    await redis(['SET', enrollmentKey, JSON.stringify({ version: 'launch-v2',
+      owner: UID, verified: true, plan: 'free', freeThrough: 0 })]);
+    await consume('renew_free', context);
+    const history = await get(historyKey), key = history.periods[0];
+    return { key, bytes: await raw(key) };
+  }
+  const first = period('in_firstPaidAfterFree');
+  let original = await seedFree();
+  await redis(['DEL', historyKey]);
+  await invoke('period', first, command => redis([command[0], oldLua, ...command.slice(2)]));
+  await redis(['SET', enrollmentKey, JSON.stringify({ version: 'launch-v2', owner: UID,
+    verified: true, plan: 'paid', subscription: first.subscriptionId })]);
+  t.check('original reproduced: first paid replaces lost index and hides issued Free5',
+    (await consume('snapshot', context)).monthly === 25
+    && !(await get(historyKey)).periods.includes(original.key) && await raw(original.key) === original.bytes);
+  original = await seedFree();
+  await redis(['DEL', historyKey]);
+  const before = await snapshot();
+  await rejected('fixed first paid grant refuses lost initialized Free history',
+    () => invoke('period', first), 'ledger_unavailable');
+  t.check('refusal preserves every existing byte and creates no invoice, period or paid pointer',
+    await snapshot() === before && await raw(original.key) === original.bytes
+    && await raw(keys('period', first)[0]) === null && await raw(keys('period', first)[3]) === null
+    && await raw(keys('period', first)[4]) === null && await raw(keys('period', first)[5]) === null);
+  original = await seedFree();
+  await invoke('period', first);
+  const enrollment = await get(enrollmentKey);
+  await redis(['SET', enrollmentKey, JSON.stringify({ ...enrollment, plan: 'paid', subscription: first.subscriptionId })]);
+  t.check('intact-history transition retains all Free5 plus paid25, original Free bytes unchanged',
+    (await consume('snapshot', context)).monthly === 30 && (await get(historyKey)).periods.includes(original.key)
+    && await raw(original.key) === original.bytes);
+  await reset();
+  t.check('genuinely new paid owner still initializes paid25', (await invoke('period', first)).id_delta === 25
+    && (await get(historyKey)).count === 1);
+  await reset();
+  await redis(['SET', enrollmentKey, JSON.stringify({ version: 'launch-v2', owner: UID,
+    verified: true, plan: 'free', freeThrough: 0 })]);
+  t.check('unissued Free enrollment can bootstrap first paid period without guessed prior credits',
+    (await invoke('period', first)).id_delta === 25 && (await get(historyKey)).count === 1);
 });
 
 await t.section('concurrent real ID debit plus pack and welcome, no lost writes', async () => {
@@ -365,8 +456,8 @@ await t.section('exact decimal counter writes across representation boundaries',
   const oldLua = MEMBERSHIP_LEDGER_SCRIPT.replace(
     /  if type\(value\)=='number' then[\s\S]*?  table\.insert\(writes,key\); table\.insert\(writes,value\)/,
     '  table.insert(writes,key); table.insert(writes,tostring(value))');
-  t.check('negative control is the exact previously frozen ledger Lua',
-    sha(oldLua) === 'f09fae9b51dcf7fa54ddea07253e929e11371376ba6cab652a2129360f704c05');
+  t.check('current precision negative control restores unchecked tostring only',
+    oldLua.includes('table.insert(writes,tostring(value))') && !oldLua.includes('invalid integer formatting'));
   await reset(); await redis(['SET', idKey, '100000000000000']);
   await invoke('pack', pack(), command => {
     const c = [...command]; c[1] = oldLua; return redis(c);
@@ -457,6 +548,47 @@ await t.section('corruption, overflow, result types and fail-closed storage', as
   const before = await snapshot();
   await rejected('malformed active period fails closed', () => invoke('period', period()), 'ledger_unavailable');
   t.check('corrupt period does not grant or overwrite', await snapshot() === before);
+});
+
+await t.section('late-grant holds block only new exact payment or invoice issuance', async () => {
+  for (const [kind, payload, businessId] of [['pack', pack(), pack().paymentId],
+    ['period', period(), period().invoiceId]]) {
+    await reset();
+    const hold = membershipGrantHoldKey(kind, businessId);
+    await redis(['SET', hold, 'nil']); // even malformed hold is fail-closed
+    const before = await snapshot();
+    await rejected(`${kind}: held grant rejected before mutation`, () => invoke(kind, payload), 'grant_held');
+    t.check(`${kind}: hold blocks all grant marker/balance/period writes`, before === await snapshot());
+    await reset();
+    const original = await invoke(kind, payload);
+    await redis(['SET', hold, '{"review_required":true}']);
+    if (kind === 'pack') await redis(['SET', idKey, '7']); // simulate legitimate later spending
+    const afterHold = await snapshot();
+    t.check(`${kind}: existing journal replays exact result after hold`,
+      JSON.stringify(await invoke(kind, payload)) === JSON.stringify(original));
+    t.check(`${kind}: replay cannot recredit spent balances or erase originals`, afterHold === await snapshot());
+    t.check(`${kind}: hold never expires`, await redis(['TTL', hold]) === -1);
+  }
+  await reset();
+  await redis(['SET', membershipGrantHoldKey('pack', 'pi_held'), 'hold']);
+  t.check('unrelated payment grants normally', (await invoke('pack', pack('pi_other'))).id_delta === 25);
+  await redis(['SET', 'unused:9', 'hold']);
+  t.check('welcome does not consult payment hold placeholder', (await invoke('welcome', welcome())).id_delta === 10);
+  t.check('hold never debits unrelated balance', await num(idKey) === 25);
+  await reset();
+  const payload = pack('pi_race'), hold = membershipGrantHoldKey('pack', 'pi_race');
+  const [outcome] = await Promise.allSettled([invoke('pack', payload), redis(['SET', hold, 'hold'])]);
+  const current = await num(idKey);
+  t.check('grant/hold race has only serialized allowed outcomes',
+    (outcome.status === 'fulfilled' && current === 25)
+    || (outcome.status === 'rejected' && outcome.reason.code === 'grant_held' && current === 0));
+  const captured = await snapshot();
+  if (outcome.status === 'fulfilled') await invoke('pack', payload);
+  else await rejected('hold-first cannot later grant', () => invoke('pack', payload), 'grant_held');
+  t.check('race retry leaves exact bytes unchanged', captured === await snapshot());
+  const stripped = MEMBERSHIP_LEDGER_SCRIPT.replace(/-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, '');
+  t.check('removing only additive hold guard recovers exact approved permanent-credit Lua',
+    sha(stripped) === '950ce766d8b45dd90d84a1009ed8f49e00511b7142ca7594646dec056bb1019a');
 });
 
 t.done();

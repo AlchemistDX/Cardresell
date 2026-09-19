@@ -137,8 +137,11 @@ function fixture({ plan = 'casual', packId = 'id_25' } = {}) {
 }
 
 console.log('Approved ledger Lua SHA256:', sha(MEMBERSHIP_LEDGER_SCRIPT));
-t.check('approved ledger unchanged', sha(MEMBERSHIP_LEDGER_SCRIPT)
-  === 'cf02f3e290a99aa53b99bd2aae085133199130f52d36b46d6be591179530bd4c');
+t.check('additive late-grant hold ledger hash bridge', sha(MEMBERSHIP_LEDGER_SCRIPT)
+  === 'a5ee5dbb5de02dd1724e8ddefa6b11cbfe3429f4bf8cb8963e109e3029a2164a');
+t.check('prior permanent-credit Lua exact after removing only hold guard',
+  sha(MEMBERSHIP_LEDGER_SCRIPT.replace(/-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, ''))
+    === '950ce766d8b45dd90d84a1009ed8f49e00511b7142ca7594646dec056bb1019a');
 
 await t.section('all server-bound pack quotes, never metadata authority', async () => {
   for (const plan of Object.keys(LAUNCH_PLANS)) {
@@ -517,8 +520,37 @@ await t.section('dependency failure, price-map guard and dormant scope', async (
   t.check('adapter has no fetch, environment reads or Stripe mutations',
     !/\bfetch\s*\(|process\.env|subscriptions\.update|checkout\.sessions\.create/.test(source));
   t.check('adapter never reads metadata as authority', !/\.metadata\b/.test(source));
-  t.check('approved ledger file remains hash-pinned', sha(readFileSync(new URL('../api/_membershipLedger.js', import.meta.url)))
-    === '0307633fd5078810d28ac20e63cec1996bd8e4630da2008f4545ad3d21b44044');
+  t.check('additive hold ledger file explicitly hash-pinned', sha(readFileSync(new URL('../api/_membershipLedger.js', import.meta.url)))
+    === 'e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb');
+});
+
+await t.section('authenticated canonical invoice recovery shares signed-webhook verifier', async () => {
+  await reset();
+  const f = fixture();
+  const recovery = (more = {}) => f.adapter.invoiceRecovery({
+    invoiceId: 'in_synthetic', authenticatedOwner: UID, ...more,
+  });
+  const before = await snapshot();
+  await rejects('invoice recovery rejects absent auth', () => recovery({ authenticatedOwner: undefined }), 'authentication_required');
+  await rejects('invoice recovery checks trusted term owner', () => recovery({ authenticatedOwner: 'otherOwner' }), 'owner_mismatch');
+  t.check('auth rejection cannot invoke ledger or change bytes', f.grants.length === 0 && before === await snapshot());
+  const first = await recovery(), committed = await snapshot();
+  t.check('recovery issues canonical invoice once', first.id_delta === 50 && first.grade_delta === 15);
+  const signed = await f.webhook('invoice.paid', 'in_synthetic');
+  t.check('webhook/recovery canonical business-ID replay equal', JSON.stringify(first) === JSON.stringify(signed)
+    && committed === await snapshot());
+  t.check('recovery does not fabricate or verify a signature', f.calls.filter(x => x.name === 'signature').length === 1);
+  await reset();
+  const bad = fixture(); bad.invoices.in_synthetic.status = 'open';
+  await rejects('recovery uses same unpaid rejection', () => bad.adapter.invoiceRecovery({
+    invoiceId: 'in_synthetic', authenticatedOwner: UID }), 'payment_not_settled');
+  t.check('unpaid recovery zero ledger calls', bad.grants.length === 0);
+  const lost = fixture(); lost.throwAfterCommit = true;
+  await rejects('recovery after commit loss returns unavailable', () => lost.adapter.invoiceRecovery({
+    invoiceId: 'in_synthetic', authenticatedOwner: UID }), 'payment_unavailable');
+  const saved = await snapshot();
+  await lost.adapter.invoiceRecovery({ invoiceId: 'in_synthetic', authenticatedOwner: UID });
+  t.check('recovery retry after loss preserves original financial bytes', saved === await snapshot());
 });
 
 t.done();

@@ -1,4 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { membershipRouteMode, membershipWelcome } from './_membershipRouteBilling.js';
+import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
 
 // /api/verify-confirm — Validate a 6-digit code and mark the user's email verified.
 //
@@ -122,6 +124,18 @@ export default async function handler(req, res) {
   //   2. email_bonus_claimed:<email> — same email can't bonus multiple accounts
   let bonusGranted = false;
   let bonusReason  = '';
+  try {
+    if (await membershipRouteMode()) {
+      const grant = await membershipWelcome(userSub, email);
+      return res.status(200).json({ ok: true, verified: true, email,
+        bonusGranted: grant.newlyGranted, welcomeRecorded: grant.granted,
+        bonusReason: grant.newlyGranted ? '' : 'already-claimed',
+        billing_version: 'launch-v2' });
+    }
+  } catch {
+    return res.status(200).json({ ok: true, verified: true, email,
+      bonusGranted: false, bonusReason: 'billing-unavailable' });
+  }
   try {
     const userBonusKey  = `signup_bonus:${userSub}`;
     const emailBonusKey = `email_bonus_claimed:${email}`;

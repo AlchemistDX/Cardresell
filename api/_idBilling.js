@@ -2,6 +2,7 @@
 // receipt, bound to owner / scan / offered candidates / expiry / identify mode.
 import { randomBytes, createHash } from 'node:crypto';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
+import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
 
 export const CONFIRM_TTL_SECONDS = 900;
 const RETENTION_SECONDS = 86400;

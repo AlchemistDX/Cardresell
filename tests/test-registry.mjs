@@ -70,6 +70,33 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'membership-reversal-stripe.mjs':
+    'Required canonical reversal-provenance gate: node tests/membership-reversal-stripe.mjs; synthetic HTTP only, not real Stripe acceptance.',
+  'membership-paid-enrollment.mjs':
+    'Required paid enrollment bridge: node tests/membership-paid-enrollment.mjs; preserves provenance and requires prior cutover.',
+  'membership-customer.mjs':
+    'Required test-only customer ownership gate: node tests/membership-customer.mjs; private Redis and synthetic HTTP.',
+  'membership-lifecycle.mjs':
+    'Required lifecycle/renewal/hold gate: node tests/membership-lifecycle.mjs; private Redis and synthetic signed Stripe events.',
+  'membership-lifecycle-stripe.mjs':
+    'Required schedule/cancellation transport gate: node tests/membership-lifecycle-stripe.mjs; synthetic HTTP and private Redis.',
+  'membership-account-routes.mjs':
+    'Required authenticated account adapter gate: node tests/membership-account-routes.mjs; synthetic identity and lifecycle dependencies.',
+  'membership-fulfillment.mjs':
+    'Required shared webhook/return exactly-once gate: node tests/membership-fulfillment.mjs; real HMAC and private Redis with synthetic canonical Stripe.',
+  'membership-purchase-routes.mjs':
+    'Required launch catalogue and normal purchase HTTP gate: node tests/membership-purchase-routes.mjs. Synthetic dependencies, not live Stripe acceptance.',
+  'membership-shop-identity.mjs':
+    'Required normal shop identity gate: node tests/membership-shop-identity.mjs. Synthetic account-switch and checkout-response races.',
+  'membership-scan-intent.mjs':
+    'Required HTTP scan-intent gate: node tests/membership-scan-intent.mjs. ' +
+    'Private Redis concurrency and response-loss tests; normal-route/client integration remains a separate requirement.',
+  'membership-routes.mjs':
+    'Required normal credit-route integration gate: node tests/membership-routes.mjs. ' +
+    'Synthetic authenticated handler requests and private Redis; no custom sign-in interface or real-provider acceptance.',
+  'membership-consumption.mjs':
+    'Required versioned credit-consumption gate: node tests/membership-consumption.mjs. ' +
+    'Private local Redis covers period/source accounting and durable writer fences; not managed or real-account acceptance.',
   'membership-checkout-stripe.mjs':
     'Required dormant checkout write/discovery transport gate: node tests/membership-checkout-stripe.mjs. ' +
     'Synthetic fixed-origin HTTP fixtures only; no live Stripe creation or discovery proof.',

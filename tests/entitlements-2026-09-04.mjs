@@ -130,7 +130,7 @@ function grabFn(src, name) {
   const ast = parse(SCAN, { ecmaVersion: 'latest', sourceType: 'module' });
   const handler = ast.body.find(n => n.type === 'ExportDefaultDeclaration').declaration;
   const gradeBranch = handler.body.body.find(n => n.type === 'IfStatement'
-    && SCAN.slice(n.test.start, n.test.end).replace(/\s/g, '') === 'hasKV&&!freeRetry&&!isIdentifyMode');
+    && SCAN.slice(n.test.start, n.test.end).replace(/\s/g, '') === 'hasKV&&!membershipV2&&!freeRetry&&!isIdentifyMode');
   const gradeBody = gradeBranch ? stripComments(SCAN.slice(gradeBranch.consequent.start, gradeBranch.consequent.end)) : '';
   const localGate = gradeBody.search(/if\s*\(\s*isBulkGrade\s*&&/);
   const freeDebit = gradeBody.search(/await\s+incrKV\(/);
@@ -138,6 +138,19 @@ function grabFn(src, name) {
   ok('bulk entitlement and debit are inside the guarded grade-only branch', !!gradeBranch && localGate >= 0);
   ok('bulk entitlement rejection precedes the actual free-grade mutation', localGate >= 0 && freeDebit > localGate);
   ok('bulk entitlement rejection precedes the actual paid-grade mutation', localGate >= 0 && paidDebit > localGate);
+  // The versioned engine is a distinct branch, not evidence that the legacy
+  // grade checks may be omitted. Assert both paths and authorization ordering.
+  const v2Grade = handler.body.body.find(n => n.type === 'IfStatement'
+    && SCAN.slice(n.test.start, n.test.end).replace(/\s/g, '') === 'hasKV&&membershipV2&&!freeRetry&&!isIdentifyMode');
+  const v2Gate = handler.body.body.find(n => n.type === 'IfStatement'
+    && SCAN.slice(n.test.start, n.test.end).replace(/\s/g, '') === 'membershipV2&&isBulkGrade');
+  const retryAt = SCAN.indexOf('await claimIdRetry(billingContext, retryOf)');
+  ok('versioned grade debit is in its own guarded branch', !!v2Grade
+    && /await membershipBilling\('debit', billingContext\)/.test(SCAN.slice(v2Grade.consequent.start, v2Grade.consequent.end)));
+  ok('versioned bulk authorization precedes both retry and grade debit', !!v2Gate && !!v2Grade
+    && retryAt > v2Gate.end && v2Grade.start > v2Gate.end
+    && /membershipBalances\(key\)/.test(SCAN.slice(v2Gate.consequent.start, v2Gate.consequent.end))
+    && /return res\.status\(403\)/.test(SCAN.slice(v2Gate.consequent.start, v2Gate.consequent.end)));
   // And it must sit inside the authenticated KV branch, after tier resolution.
   const tierAt = nc.search(/const tier\s*=\s*await getUserTier/);
   ok('the gate runs after the server resolves the real tier',

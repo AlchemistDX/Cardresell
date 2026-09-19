@@ -14,12 +14,24 @@ import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
 //   called by any client; webhook grants credits directly via KV, not this endpoint.
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { membershipBalances, membershipRouteMode } from './_membershipRouteBilling.js';
+import { legacyCreditFetch as fetch, legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  try {
+    if (await membershipRouteMode()) {
+      if (req.method !== 'GET') return res.status(503).json({ error: 'membership_payment_cutover_pending' });
+      let user;
+      try { user = await verifyTokenFlexible((req.headers.authorization || '').replace('Bearer ', '').trim()); }
+      catch { return res.status(401).json({ error: 'Sign in to view credits.' }); }
+      if (!user.uid) return res.status(401).json({ error: 'Sign in to view credits.' });
+      return res.status(200).json(await membershipBalances(user.uid));
+    }
+  } catch { return res.status(503).json({ error: 'billing_unavailable' }); }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const kvUrl     = process.env.KV_REST_API_URL;
@@ -99,6 +111,7 @@ export default async function handler(req, res) {
     // key is ALWAYS the verified uid — body values are ignored for identity
     const key   = userSub;
     const email = userEmail;
+    if (!await legacyRouteAllowed(res)) return;
 
     // Helper: enforce that a Stripe session was issued to this exact user
     function sessionBelongsToUser(session) {

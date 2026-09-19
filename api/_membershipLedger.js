@@ -1,5 +1,5 @@
-// DORMANT launch-v2 fulfillment primitives. No imports from live handlers,
-// credentials, fetch, migration or automatic activation. The caller must supply
+// Launch-v2 fulfillment primitives, activation controlled by server callers.
+// No credentials, fetch, migration or automatic activation. The caller must supply
 // an authenticated, Stripe-verified server envelope and a Redis command adapter.
 // `paid: true` here is an invariant, NOT proof of payment or an HTTP auth gate.
 import { createHash } from 'node:crypto';
@@ -15,6 +15,16 @@ export function membershipWelcomeKeys(owner) {
   if (!validOwner(owner)) reject();
   const base = `${prefix}welcome_balance:${digest(owner)}`;
   return Object.freeze({ id: `${base}:id`, grade: `${base}:grade` });
+}
+export function membershipIncludedHistoryKey(owner) {
+  if (!validOwner(owner)) reject();
+  return `${prefix}included_history:${digest(owner)}`;
+}
+// Same immutable business identity as the existing grant journal. A hold is
+// intentionally permanent and fail-closed; it never changes issued balances.
+export function membershipGrantHoldKey(kind, businessId) {
+  if (!['pack', 'period'].includes(kind) || !stripeId(businessId, kind === 'pack' ? 'pi' : 'in')) reject();
+  return `${prefix}grant_hold:${kind === 'pack' ? 'payment' : 'invoice'}:${digest(businessId)}`;
 }
 const own = (object, key) => Object.hasOwn(object, key);
 const validOwner = value => typeof value === 'string' && value.length > 0
@@ -112,6 +122,13 @@ if old then
     or result.owner~=p.owner or result.kind~=p.kind then error('invalid result') end
   return old.result_json
 end
+-- LATE_GRANT_HOLD: replay above remains exact even after a refund/dispute.
+-- Any hold bytes, including malformed state, block NEW issuance atomically.
+-- No balance erasure, event timestamp ordering, or implicit hold release.
+if (p.kind=='pack' or p.kind=='period') and redis.call('EXISTS',KEYS[9])==1 then
+  return fail('grant_held')
+end
+-- END_LATE_GRANT_HOLD
 local now=tonumber(redis.call('TIME')[1])
 local result={ok=true,owner=p.owner,kind=p.kind,version=p.version}
 if p.kind=='pack' or p.kind=='welcome' then
@@ -142,6 +159,43 @@ elseif p.kind=='period' then
   end
   local period=read(KEYS[4])
   local active=read(KEYS[5])
+  -- Durable provenance index, not a balance reset or an inferred import.
+  -- Existing allocations without the index require an explicit migration.
+  local history=read(KEYS[7])
+  if not history then
+    -- NONEXPIRING-1: Free issuance has no paid subscription/pointer yet.
+    -- Its durable enrollment watermark is also initialization authority.
+    local enrollment=read(KEYS[8])
+    if enrollment then
+      if enrollment.owner~=p.owner
+        or (enrollment.freeThrough~=nil and not integer(enrollment.freeThrough))
+        or (enrollment.plan=='free' and enrollment.freeThrough==nil) then error('invalid enrollment authority') end
+      if enrollment.freeThrough~=nil and enrollment.freeThrough>0 then error('missing included history') end
+    end
+    -- End NONEXPIRING-1 authority check.
+    if subscription or active or period then error('missing included history') end
+    history={version=p.version,owner=p.owner,policy='nonexpiring-v1',count=0,periods={}}
+  end
+  if history.owner~=p.owner or history.policy~='nonexpiring-v1'
+    or not integer(history.count) or history.count>1200 or type(history.periods)~='table'
+    or #history.periods~=history.count then error('invalid included history') end
+  local seen={}; local found=false; local entries=0
+  for i,key in pairs(history.periods) do
+    entries=entries+1
+    if type(i)~='number' or i<1 or i>history.count or i~=math.floor(i)
+      or type(key)~='string' or seen[key]
+      or (not string.match(key,'^membership:launch%-v2:period:[a-f0-9]+$')
+        and not string.match(key,'^membership:launch%-v2:free_period:[a-f0-9]+:%d+$')) then error('invalid included history') end
+    seen[key]=true; if key==KEYS[4] then found=true end
+    local lot=read(key)
+    if not lot or lot.owner~=p.owner or not integer(lot.start) or not integer(lot.finish)
+      or lot.finish<=lot.start or not integer(lot.id_grant) or not integer(lot.grade_grant)
+      or not integer(lot.id_used) or not integer(lot.grade_used)
+      or lot.id_used>lot.id_grant or lot.grade_used>lot.grade_grant then error('invalid included allocation') end
+    if lot.subscription==p.subscription and key~=KEYS[4]
+      and p.start<lot.finish and p.finish>lot.start then return fail('period_overlap') end
+  end
+  if entries~=history.count or (period and not found) or (not period and found) then error('invalid included history') end
   if active and (active.owner~=p.owner or active.subscription~=p.subscription) then
     return fail('subscription_conflict')
   end
@@ -177,16 +231,21 @@ elseif p.kind=='period' then
       plan=p.plan,start=p.start,finish=p.finish,period_binding=p.periodBinding,
       id_grant=p.idGrant,grade_grant=p.gradeGrant,id_used=0,grade_used=0}
     write(KEYS[4],encode(period))
+    if history.count>=1200 then error('included history capacity') end
+    history.count=history.count+1; table.insert(history.periods,KEYS[4])
+    write(KEYS[7],encode(history))
     result.granted=true
   end
   result.id_delta=result.granted and p.idGrant or 0
   result.grade_delta=result.granted and p.gradeGrant or 0
   result.period_start=p.start; result.period_end=p.finish
   result.active=(not active or p.start>=active.start) and now<p.finish
-  if result.active and not active then
+  -- This is a latest-period pointer, not permission to expire unused credits.
+  -- period finish still describes paid-through benefits independently.
+  if not active then
     write(KEYS[5],encode({version=p.version,owner=p.owner,subscription=p.subscription,
       plan=p.plan,start=p.start,finish=p.finish,period_binding=p.periodBinding}))
-  elseif result.active and p.start>active.start then
+  elseif p.start>active.start then
     write(KEYS[5],encode({version=p.version,owner=p.owner,subscription=p.subscription,
       plan=p.plan,start=p.start,finish=p.finish,period_binding=p.periodBinding}))
   end
@@ -255,9 +314,11 @@ export function prepareMembershipGrant(kind, input) {
   const p = { ...normalized, binding: digest(JSON.stringify(normalized)) };
   const balanceKeys = kind === 'welcome' ? membershipWelcomeKeys(owner)
     : { id: `scans:${owner}:id_paid_left`, grade: `scans:${owner}:paid_left` };
-  return { command: ['EVAL', MEMBERSHIP_LEDGER_SCRIPT, 6,
+  return { command: ['EVAL', MEMBERSHIP_LEDGER_SCRIPT, 9,
     `${prefix}${operation}`, balanceKeys.id, balanceKeys.grade,
-    ...extra, JSON.stringify(p)], binding: p.binding, kind, owner };
+    ...extra, membershipIncludedHistoryKey(owner), `${prefix}consumer:${digest(owner)}`,
+    kind === 'welcome' ? 'unused:9' : membershipGrantHoldKey(kind, kind === 'pack' ? input.paymentId : input.invoiceId),
+    JSON.stringify(p)], binding: p.binding, kind, owner };
 }
 
 export async function grantMembership(execute, kind, verifiedEnvelope) {
@@ -273,7 +334,7 @@ export async function grantMembership(execute, kind, verifiedEnvelope) {
         || result.version !== MEMBERSHIP_VERSION || typeof result.granted !== 'boolean'
         || !safeInt(result.id_delta) || !safeInt(result.grade_delta))) throw new Error('invalid ledger response');
     if (!result.ok && !['operation_conflict', 'subscription_conflict', 'period_conflict',
-      'period_overlap', 'period_not_started', 'invalid_kind'].includes(result.code)) throw new Error('invalid ledger response');
+      'period_overlap', 'period_not_started', 'invalid_kind', 'grant_held'].includes(result.code)) throw new Error('invalid ledger response');
   } catch (cause) { throw new MembershipLedgerError('ledger_unavailable', cause); }
   if (!result.ok) throw new MembershipLedgerError(result.code);
   return result;
