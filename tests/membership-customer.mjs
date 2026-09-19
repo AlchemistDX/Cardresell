@@ -52,5 +52,37 @@ const mismatched = createMembershipCustomerStripe({ apiKey: 'sk_test_other', acc
 await reject(() => mismatched.createCustomer({ operationId: 'e'.repeat(64) }));
 check(mismatchedPosts === 0);
 await reject(() => mismatched.retrieveAccount());
+let portalPosts = 0, portalBody;
+let overrides = {};
+const portalTransport = createMembershipCustomerStripe({
+  apiKey: 'sk_test_synthetic', accountId, portalConfiguration: 'bpc_safe',
+  returnOrigin: 'https://cardresell-preview.example',
+  fetchImpl: async (url, options) => {
+    if (url.endsWith('/account')) return Response.json({ object: 'account', id: accountId });
+    if (url.includes('/customers/')) return Response.json({ object: 'customer', id: 'cus_owned', livemode: false });
+    if (url.includes('/configurations/')) return Response.json({
+      object: 'billing_portal.configuration', id: 'bpc_safe', active: true, livemode: false,
+      features: { subscription_update: { enabled: false },
+        subscription_cancel: { enabled: true, mode: 'at_period_end' },
+        payment_method_update: { enabled: true }, invoice_history: { enabled: true }, ...overrides },
+    });
+    portalPosts++;
+    portalBody = new URLSearchParams(options.body);
+    return Response.json({ object: 'billing_portal.session', customer: portalBody.get('customer'),
+      configuration: 'bpc_safe', livemode: false, return_url: portalBody.get('return_url'),
+      url: 'https://billing.stripe.com/p/session/synthetic' });
+  },
+});
+const portalInput = { customerId: 'cus_owned', operationId: 'b'.repeat(64) };
+check((await portalTransport.createPortal(portalInput)).url.startsWith('https://billing.stripe.com/'));
+check(portalBody.get('customer') === 'cus_owned');
+check(portalBody.get('return_url') === 'https://cardresell-preview.example/?shop=1');
+overrides = { subscription_cancel: { enabled: true, mode: 'immediately' } };
+await reject(() => portalTransport.createPortal(portalInput));
+check(portalPosts === 1);
+overrides = { subscription_update: { enabled: true } };
+await reject(() => portalTransport.createPortal(portalInput));
+check(portalPosts === 1);
+await reject(() => portalTransport.createPortal({ ...portalInput, customerId: 'cus_other' }));
 console.log(`membership-customer: ${passed} passed, 0 failed`);
 process.exit(0);

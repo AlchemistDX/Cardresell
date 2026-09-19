@@ -5,7 +5,7 @@ const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v)
   && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 export function createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment,
-  commands, balances }) {
+  commands, balances, portal, scheduleChanges = true }) {
   async function owner(req) {
     const token = req.headers?.authorization?.match(/^Bearer (.+)$/)?.[1];
     if (!token) fail('authentication_required');
@@ -42,9 +42,19 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
             : { status: customer ? 'customer_pending' : 'not_associated' };
           let credits = null;
           try { credits = await balances(uid); } catch {}
-          return res.status(200).json({ state: publicState(state), credits, creditsAvailable: credits !== null, creditsExpire: false });
+          return res.status(200).json({ state: publicState(state), credits, creditsAvailable: credits !== null, creditsExpire: false,
+            management: { portal: typeof portal === 'function' && customer?.state === 'bound', scheduleChanges } });
         }
         const body = req.body;
+        if (exact(body, ['action', 'operationId']) && body.action === 'portal'
+          && /^[a-f0-9]{64}$/.test(body.operationId) && typeof portal === 'function') {
+          const customer = await customers.get(uid);
+          if (customer?.state !== 'bound') fail('customer_association_required');
+          const session = await portal({ customerId: customer.customerId, operationId: body.operationId });
+          const current = await customers.get(uid);
+          if (current?.state !== 'bound' || current.customerId !== customer.customerId) fail('customer_conflict');
+          return res.status(200).json({ url: session.url });
+        }
         if (exact(body, ['action']) && body.action === 'associate') {
           const customer = await customers.ensure(uid);
           if (customer?.state !== 'bound') return res.status(202).json({ status: 'customer_pending' });
@@ -54,6 +64,9 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
         if (!exact(body, body?.action === 'change' ? ['action', 'operationId', 'plan'] : ['action', 'operationId'])
           || !['change', 'cancel', 'refresh'].includes(body.action) || !/^[a-f0-9]{64}$/.test(body.operationId)) {
           return res.status(400).json({ error: 'invalid_request' });
+        }
+        if (!scheduleChanges && ['change', 'cancel'].includes(body.action)) {
+          return res.status(409).json({ error: 'use_customer_portal' });
         }
         const state = await lifecycle.get({ owner: uid });
         if (!state.subscriptionId) fail('subscription_missing');

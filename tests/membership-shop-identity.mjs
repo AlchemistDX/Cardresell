@@ -127,7 +127,7 @@ await t.section('account controls preserve identity and durable command', async 
       calls.push(JSON.parse(options.body));
       return { ok: true, status: 202, json: async () => ({ status: 'pending' }) };
     }
-    return { ok: true, status: 200, json: async () => ({ creditsAvailable: true,
+    return { ok: true, status: 200, json: async () => ({ management: { scheduleChanges: true }, creditsAvailable: true,
       credits: { included: { id: 50, grade: 15 }, welcome: { id: 10, grade: 1 },
         purchased: { id: 100, grade: 25 } },
       state: { subscriptionId: 'sub_fixture', snapshot: { status: 'active', periodEnd: 2000000000 } } }) };
@@ -155,7 +155,7 @@ await t.section('confirmed command from a lost response must not permanently loc
       return { ok: true, status: 200, json: async () => ({ status: 'confirmed' }) };
     }
     // Current publicState carries only the safe operation ID, never private claim authority.
-    return { ok: true, status: 200, json: async () => ({ creditsAvailable: false,
+    return { ok: true, status: 200, json: async () => ({ management: { scheduleChanges: true }, creditsAvailable: false,
       state: { subscriptionId: 'sub_fixture', snapshot: { status: 'active', plan: 'pro',
         periodStart: 2000000000, periodEnd: 2002592000 },
         command: { operationId: 'f'.repeat(64), kind: 'plan_change', plan: 'pro', phase: 'confirmed', effectiveAt: 2000000000 } } }) };

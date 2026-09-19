@@ -118,7 +118,7 @@ await t.section('All catalog selections derive exact fixed creation parameters',
       const post = f.calls.find(c => c.init.method === 'POST');
       t.check(`${plan}/${packId}: stable server idempotency/no pricing override`, post.init.headers['Idempotency-Key'] === order.stripeIdempotencyKey
         && p.get('allow_promotion_codes') === 'false' && p.get('automatic_tax[enabled]') === 'false'
-        && p.get('payment_method_types[0]') === 'card' && ![...p.keys()].some(k => k.includes('price_data')));
+        && ![...p.keys()].some(k => k.startsWith('payment_method_types') || k.includes('price_data')));
     }
   }
   for (const plan of Object.keys(LAUNCH_PLANS).filter(p => p !== 'free')) {

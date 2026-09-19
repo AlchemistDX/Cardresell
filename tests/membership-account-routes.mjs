@@ -70,4 +70,28 @@ const shared = createMembershipFulfillment({ accountId: 'acct_test', livemode: f
   lifecycle: { webhook: async input => { assert.equal(input.rawBody.toString(), 'body'); delegated++; return { status: 'fulfilled' }; } } });
 await shared.webhook({ rawBody: Buffer.from('body'), signature: 'signature' });
 check(verified === 1 && delegated === 1);
+let portalInput, associatedCustomer = 'cus_owned';
+const launch = createMembershipAccountRoutes({
+  authenticate: async () => ({ uid: 'owner', verified: true }),
+  customers: { get: async uid => { assert.equal(uid, 'owner'); return associatedCustomer
+    ? { state: 'bound', customerId: associatedCustomer } : null; } },
+  lifecycle, balances: async () => ({}), commands: { executeCommand: () => { throw Error('must not run'); } },
+  fulfillment: {}, scheduleChanges: false,
+  portal: async input => { portalInput = input; return { url: 'https://billing.stripe.com/p/session/synthetic' }; },
+});
+async function launchCall(body, method = 'POST') {
+  const res = { setHeader() {}, status(code) { this.code = code; return this; },
+    json(value) { this.body = value; return this; } };
+  await launch.account({ method, body, headers: { authorization: 'Bearer good' } }, res);
+  return res;
+}
+const portalCommand = { action: 'portal', operationId: 'f'.repeat(64) };
+check((await launchCall(portalCommand)).code === 200);
+check(portalInput.customerId === 'cus_owned' && portalInput.operationId === portalCommand.operationId);
+check((await launchCall({ ...portalCommand, customerId: 'cus_attacker' })).code === 400);
+check((await launchCall({ action: 'change', operationId: 'a'.repeat(64), plan: 'pro' })).code === 409);
+check((await launchCall({ action: 'cancel', operationId: 'b'.repeat(64) })).code === 409);
+check((await launchCall(undefined, 'GET')).body.management.scheduleChanges === false);
+associatedCustomer = null;
+check((await launchCall(portalCommand)).code === 503);
 console.log(`membership-account-routes: ${passed} passed, 0 failed`);

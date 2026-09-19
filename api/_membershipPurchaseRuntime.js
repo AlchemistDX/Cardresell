@@ -61,7 +61,8 @@ export function membershipPurchaseRuntime() {
   const writer = createMembershipCheckoutStripeTransport({ ...base, bindings, priceMap, couponMap, returnOrigin });
   const allowed = JSON.parse(process.env.MEMBERSHIP_TEST_NEW_CUSTOMER_OWNERS || '[]');
   if (!Array.isArray(allowed) || allowed.some(x => typeof x !== 'string' || !x)) throw new Error('test_owners_invalid');
-  const customerStripe = createMembershipCustomerStripe({ apiKey, accountId, reader });
+  const customerStripe = createMembershipCustomerStripe({ apiKey, accountId, reader, returnOrigin,
+    portalConfiguration: process.env.MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION });
   const customers = createMembershipCustomers({ execute: membershipRedis, stripe: customerStripe,
     accountId, livemode: false, allowCreate: async owner => allowed.includes(owner) });
   const commands = createMembershipLifecycleStripe({ execute: membershipRedis, reader, apiKey, accountId, priceMap });
@@ -104,5 +105,5 @@ export function membershipPurchaseRuntime() {
     authenticate, resolveContext, stripe: { ...reader, ...writer }, accountId, livemode: false });
   return { ...createMembershipPurchaseRoutes({ authenticate, resolveContext, controller }),
     ...createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment, commands,
-      balances: membershipBalances }) };
+      balances: membershipBalances, portal: customerStripe.createPortal, scheduleChanges: false }) };
 }

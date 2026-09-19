@@ -190,7 +190,7 @@ export function createMembershipCheckoutStripeTransport({
         const params = new URLSearchParams({
           mode: pack ? 'payment' : 'subscription', customer: saved.customerId,
           client_reference_id: saved.intentId, 'line_items[0][price]': saved.priceId,
-          'line_items[0][quantity]': '1', 'payment_method_types[0]': 'card',
+          'line_items[0][quantity]': '1',
           'automatic_tax[enabled]': 'false', allow_promotion_codes: 'false',
           success_url: `${returnOrigin}/?membership_return=1&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${returnOrigin}/?membership_cancel=1`,
