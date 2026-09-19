@@ -11,7 +11,19 @@ local alias=redis.call('GET',KEYS[2])
 if alias and alias~=ARGV[3] then return -1 end
 redis.call('MSET',KEYS[1],ARGV[2],KEYS[2],ARGV[3])
 return 1`;
-export function createMembershipCustomers({ execute, stripe, accountId, livemode, allowCreate, now = Date.now }) {
+const IMPORT = `
+if redis.call('GET',KEYS[1])~='1' then return 0 end
+local owner=redis.call('GET',KEYS[2])
+local alias=redis.call('GET',KEYS[3])
+local audit=redis.call('GET',KEYS[4])
+if owner or alias or audit then
+ if owner==ARGV[1] and alias==ARGV[2] and audit==ARGV[3] then return 2 end
+ return 0
+end
+redis.call('MSET',KEYS[2],ARGV[1],KEYS[3],ARGV[2],KEYS[4],ARGV[3])
+return 1`;
+export function createMembershipCustomers({ execute, stripe, accountId, livemode, allowCreate,
+  authorizeExisting, now = Date.now }) {
   if (!id(accountId, 'acct') || livemode !== false || typeof execute !== 'function'
     || typeof allowCreate !== 'function') fail('customer_configuration');
   const prefix = `membership:launch-v2:customers:${hash(accountId + ':test')}:`;
@@ -53,6 +65,29 @@ export function createMembershipCustomers({ execute, stripe, accountId, livemode
   }
   return Object.freeze({
     get,
+    // Server-only, single-owner migration entry point. The injected authority
+    // must resolve audited UID/customer evidence, never a browser payload/email.
+    // Does not create a Stripe customer or overwrite an existing association.
+    async bindAuditedExisting(owner) {
+      key(owner);
+      if (typeof authorizeExisting !== 'function') fail('existing_binding_not_authorized');
+      const audit = structuredClone(await authorizeExisting(owner));
+      if (!audit || Object.keys(audit).length !== 6 || audit.owner !== owner
+        || audit.accountId !== accountId || audit.livemode !== false
+        || !id(audit.customerId, 'cus') || !/^[a-f0-9]{64}$/.test(audit.evidenceId)
+        || !Number.isSafeInteger(audit.approvedAt) || audit.approvedAt < 0
+        || audit.approvedAt > now()) fail('existing_binding_not_authorized');
+      await canonical(audit.customerId);
+      const next = { version: 1, owner, accountId, livemode: false, state: 'bound',
+        operationId: hash(JSON.stringify([owner, accountId, audit.customerId, audit.evidenceId])),
+        createdAt: audit.approvedAt, customerId: audit.customerId };
+      const journal = JSON.stringify({ ...audit, kind: 'audited_existing_customer' });
+      const result = await execute(['EVAL', IMPORT, 4, 'membership:launch-v2:legacy_fence',
+        key(owner), prefix + 'alias:' + audit.customerId, key(owner) + ':import',
+        JSON.stringify(next), owner, journal]);
+      if (![1, 2].includes(result)) fail('customer_conflict');
+      return next;
+    },
     async ensure(owner) {
       const existing = await get(owner);
       if (existing) return existing;

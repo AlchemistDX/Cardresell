@@ -2,6 +2,8 @@
 
 Checkpoint: September 19, 2026. This is a blocked release record, not launch approval.
 
+This earlier checkpoint is superseded for current counts and access findings by `MEMBERSHIP_PREVIEW_READINESS.md`. Historical results below remain unchanged.
+
 ## Local implementation
 
 Base commit: `d2c5412cb33faec17e27b7172205857adc38bffc`.

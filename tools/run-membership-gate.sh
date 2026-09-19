@@ -5,7 +5,7 @@ OUT="${1:?Pass an evidence directory outside the repository}"
 mkdir -p "$OUT"
 status=0
 printf 'suite\texit\n' > "$OUT/results.tsv"
-for suite in membership-customer membership-lifecycle membership-lifecycle-stripe membership-reversal-stripe \
+for suite in membership-environment membership-bootstrap membership-customer membership-lifecycle membership-lifecycle-stripe membership-reversal-stripe \
   membership-account-routes membership-fulfillment membership-paid-enrollment \
   membership-consumption membership-ledger membership-payments membership-bindings \
   membership-stripe membership-checkout membership-checkout-stripe \

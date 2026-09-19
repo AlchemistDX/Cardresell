@@ -1,7 +1,7 @@
 import { MEMBERSHIP_STRIPE_API_VERSION } from './_membershipStripe.js';
 const fail = () => { throw Object.assign(new Error('customer_transport_unavailable'), { code: 'customer_transport_unavailable' }); };
 export function createMembershipCustomerStripe({ apiKey, accountId, reader, portalConfiguration, returnOrigin, fetchImpl = globalThis.fetch }) {
-  if (!/^sk_test_[A-Za-z0-9]+$/.test(apiKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) fail();
+  if (!/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(apiKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) fail();
   async function request(path, body, operationId) {
     if (path !== 'account') await request('account');
     const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 5000);

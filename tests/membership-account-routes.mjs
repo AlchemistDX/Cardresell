@@ -9,7 +9,7 @@ const check = value => { assert.ok(value); passed++; };
 let state = { subscriptionId: 'sub_test', claim: null,
   snapshot: { status: 'active', periodEnd: 2000000000 }, command: null };
 let refreshed = 0, reconciled = 0, executed = 0, associated = 0, rawSeen;
-let bound = true, failWebhook = false, confirm = true;
+let bound = true, failWebhook = false, confirm = true, auditReady = true, ensureCalls = 0;
 const lifecycle = {
   get: async () => structuredClone(state),
   associate: async () => { associated++; },
@@ -20,7 +20,8 @@ const lifecycle = {
 };
 const routes = createMembershipAccountRoutes({
   authenticate: async token => { if (token !== 'good') throw Object.assign(Error(), { code: 'authentication_required' }); return { uid: 'owner', verified: true }; },
-  customers: { get: async () => bound ? { state: 'bound' } : null, ensure: async () => ({ state: 'bound', customerId: 'cus_test' }) },
+  bootstrap: async () => { if (!auditReady) throw Error('bootstrap_audit_required'); },
+  customers: { get: async () => bound ? { state: 'bound' } : null, ensure: async () => { ensureCalls++; return { state: 'bound', customerId: 'cus_test' }; } },
   lifecycle, balances: async () => ({ included: { id: 50, grade: 15 } }),
   commands: { executeCommand: async () => { executed++; } },
   fulfillment: {
@@ -51,6 +52,10 @@ check((await invoke('checkoutReturn', { sessionId: 'cs_test' })).body.status ===
 check((await invoke('checkoutReturn', { sessionId: 'cs_test', owner: 'attacker' })).code === 400);
 bound = false; check((await invoke('account', undefined, 'GET')).body.state.status === 'not_associated');
 await invoke('account', { action: 'associate' }); check(associated === 1);
+auditReady = false;
+check((await invoke('account', { action: 'associate' })).code === 503);
+check(ensureCalls === 1 && associated === 1);
+auditReady = true;
 async function webhook() {
   const req = Readable.from([Buffer.from('{"synthetic":true}')]);
   req.method = 'POST'; req.headers = { 'content-type': 'application/json', 'stripe-signature': 'exact-signature' };

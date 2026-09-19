@@ -70,6 +70,10 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'membership-environment.mjs':
+    'Required scoped configuration gate: node tests/membership-environment.mjs; pure synthetic values, no I/O.',
+  'membership-bootstrap.mjs':
+    'Required audited bootstrap gate: node tests/membership-bootstrap.mjs; isolated process-owned Redis only.',
   'membership-reversal-stripe.mjs':
     'Required canonical reversal-provenance gate: node tests/membership-reversal-stripe.mjs; synthetic HTTP only, not real Stripe acceptance.',
   'membership-paid-enrollment.mjs':

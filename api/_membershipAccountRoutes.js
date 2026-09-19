@@ -5,7 +5,7 @@ const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v)
   && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 export function createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment,
-  commands, balances, portal, scheduleChanges = true }) {
+  commands, balances, portal, bootstrap, scheduleChanges = true }) {
   async function owner(req) {
     const token = req.headers?.authorization?.match(/^Bearer (.+)$/)?.[1];
     if (!token) fail('authentication_required');
@@ -56,6 +56,9 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
           return res.status(200).json({ url: session.url });
         }
         if (exact(body, ['action']) && body.action === 'associate') {
+          // Complete audited enrollment before claiming any external customer
+          // creation. A missing audit must not leave a new Stripe customer.
+          if (typeof bootstrap === 'function') await bootstrap(uid);
           const customer = await customers.ensure(uid);
           if (customer?.state !== 'bound') return res.status(202).json({ status: 'customer_pending' });
           await lifecycle.associate({ owner: uid, customerId: customer.customerId });

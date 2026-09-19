@@ -28,8 +28,25 @@ await uncertain.bindTrusted({ owner: 'ownerLost', customerId: 'cus_recovered', o
 check((await uncertain.ensure('ownerLost')).customerId === 'cus_recovered');
 const denied = createMembershipCustomers({ execute, stripe, accountId, livemode: false, allowCreate: async () => false });
 await reject(() => denied.ensure('ownerDenied'));
+await reject(() => denied.bindAuditedExisting('ownerLegacy'));
+const authorized = createMembershipCustomers({ execute, stripe, accountId, livemode: false,
+  allowCreate: async () => false, authorizeExisting: async owner => owner === 'ownerLegacy'
+    ? { owner, accountId, livemode: false, customerId: 'cus_legacy', evidenceId: 'c'.repeat(64), approvedAt: 1 }
+    : null });
+await reject(() => authorized.bindAuditedExisting('ownerLegacy'));
+await execute(['SET', 'membership:launch-v2:legacy_fence', '1']);
+const imports = await Promise.all(Array.from({ length: 5 }, () => authorized.bindAuditedExisting('ownerLegacy')));
+check(imports.every(x => x.customerId === 'cus_legacy'));
+check(posts === 2);
+check((await authorized.get('ownerLegacy')).customerId === 'cus_legacy');
+await reject(() => authorized.bindAuditedExisting('ownerOther'));
+const conflicting = createMembershipCustomers({ execute, stripe, accountId, livemode: false,
+  allowCreate: async () => false, authorizeExisting: async owner => ({
+    owner, accountId, livemode: false, customerId: 'cus_legacy', evidenceId: 'd'.repeat(64), approvedAt: 1 }) });
+await reject(() => conflicting.bindAuditedExisting('ownerOther'));
+check(await conflicting.get('ownerOther') === null);
 let captured;
-const transport = createMembershipCustomerStripe({ apiKey: 'sk_test_synthetic', accountId, reader: stripe,
+const transport = createMembershipCustomerStripe({ apiKey: 'rk_test_synthetic', accountId, reader: stripe,
   fetchImpl: async (url, options) => { captured = { url, options };
     return new Response(JSON.stringify(url.endsWith('/account') ? { object: 'account', id: accountId }
       : { object: 'customer', id: 'cus_transport', livemode: false }),

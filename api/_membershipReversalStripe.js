@@ -39,7 +39,7 @@ export function createMembershipReversalStripe({
   apiKey, accountId, livemode = false, bindings, customers,
   fetchImpl = globalThis.fetch, operationTimeoutMs = 10000,
 } = {}) {
-  insist(livemode === false && typeof apiKey === 'string' && /^sk_test_[A-Za-z0-9]{8,500}$/.test(apiKey)
+  insist(livemode === false && typeof apiKey === 'string' && /^(?:sk|rk)_test_[A-Za-z0-9]{8,500}$/.test(apiKey)
     && id(accountId, 'acct') && typeof fetchImpl === 'function'
     && typeof bindings?.inspectIntent === 'function' && typeof customers?.get === 'function'
     && Number.isSafeInteger(operationTimeoutMs) && operationTimeoutMs >= 100 && operationTimeoutMs <= 30000,

@@ -12,7 +12,7 @@ const CAS = `if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end
 redis.call('SET',KEYS[1],ARGV[2]); return 1`;
 export function createMembershipLifecycleStripe({ execute, reader, apiKey, accountId, priceMap,
   fetchImpl = globalThis.fetch, timeoutMs = 5000 }) {
-  insist(/^sk_test_[A-Za-z0-9]+$/.test(apiKey) && /^acct_[A-Za-z0-9]+$/.test(accountId));
+  insist(/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(apiKey) && /^acct_[A-Za-z0-9]+$/.test(accountId));
   const prices = structuredClone(priceMap);
   const plans = Object.keys(LAUNCH_PLANS).filter(x => x !== 'free');
   insist(plans.every(p => /^price_[A-Za-z0-9_]+$/.test(prices.plans[p]?.priceId)));

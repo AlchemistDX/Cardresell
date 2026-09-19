@@ -20,6 +20,8 @@ import { grantMembership } from './_membershipLedger.js';
 import { membershipBalances } from './_membershipRouteBilling.js';
 import { reconcilePaidEnrollment } from './_membershipPaidEnrollment.js';
 import { createMembershipReversalStripe } from './_membershipReversalStripe.js';
+import { createMembershipBootstrap } from './_membershipBootstrap.js';
+import { membershipEnvironment } from './_membershipEnvironment.js';
 
 export function purchaseContextKey(accountId, owner) {
   return 'membership:launch-v2:purchase_context:' +
@@ -46,6 +48,9 @@ export function createPurchaseContextResolver({ execute, accountId, now = Date.n
 export function membershipPurchaseRuntime() {
   if (process.env.MEMBERSHIP_PURCHASE_TEST_MODE !== 'enabled'
     || process.env.VERCEL_ENV === 'production') throw new Error('purchase_disabled');
+  // Preview-only, restricted credentials and complete server-owned mappings.
+  // The live branch of this validator is preparation, not runtime activation.
+  membershipEnvironment(process.env, 'test');
   const apiKey = process.env.MEMBERSHIP_STRIPE_TEST_KEY;
   const accountId = process.env.MEMBERSHIP_STRIPE_TEST_ACCOUNT;
   const priceMap = JSON.parse(process.env.MEMBERSHIP_STRIPE_TEST_PRICES || 'null');
@@ -65,6 +70,7 @@ export function membershipPurchaseRuntime() {
     portalConfiguration: process.env.MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION });
   const customers = createMembershipCustomers({ execute: membershipRedis, stripe: customerStripe,
     accountId, livemode: false, allowCreate: async owner => allowed.includes(owner) });
+  const bootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId });
   const commands = createMembershipLifecycleStripe({ execute: membershipRedis, reader, apiKey, accountId, priceMap });
   const reversals = createMembershipReversalStripe({ apiKey, accountId, bindings, customers });
   const stripe = { ...reader, ...commands, ...reversals };
@@ -105,5 +111,5 @@ export function membershipPurchaseRuntime() {
     authenticate, resolveContext, stripe: { ...reader, ...writer }, accountId, livemode: false });
   return { ...createMembershipPurchaseRoutes({ authenticate, resolveContext, controller }),
     ...createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment, commands,
-      balances: membershipBalances, portal: customerStripe.createPortal, scheduleChanges: false }) };
+      balances: membershipBalances, portal: customerStripe.createPortal, bootstrap, scheduleChanges: false }) };
 }
