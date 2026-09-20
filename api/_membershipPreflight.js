@@ -18,7 +18,11 @@ export async function membershipPreflight(env, fetchImpl = fetch) {
       method: 'GET', redirect: 'error', signal: AbortSignal.timeout(5000),
       headers: { Authorization: 'Bearer ' + key, 'Stripe-Version': MEMBERSHIP_STRIPE_API_VERSION },
     });
-    if (r.status !== 200 || r.redirected) throw Error('unavailable');
+    if (r.status !== 200 || r.redirected) {
+      checks.push({ name: 'stripe_read_' + path.split(/[/?]/)[0],
+        status: 'FAIL', httpStatus: r.status });
+      throw Error('unavailable');
+    }
     const text = await r.text();
     if (text.length > 1000000) throw Error('unavailable');
     return JSON.parse(text);
