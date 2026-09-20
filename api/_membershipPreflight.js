@@ -7,7 +7,7 @@ export async function membershipPreflight(env, fetchImpl = fetch) {
   const checks = [];
   const check = (name, passed) => checks.push({ name, status: passed ? 'PASS' : 'FAIL' });
   if (env.VERCEL_ENV !== 'preview'
-    || env.VERCEL_GIT_COMMIT_REF !== 'feature/launch-membership-v2') {
+    || (env.VERCEL_GIT_COMMIT_REF || env.MEMBERSHIP_PREFLIGHT_BRANCH) !== 'feature/launch-membership-v2') {
     return { status: 'DISABLED', checks: [] };
   }
   const key = env.MEMBERSHIP_STRIPE_TEST_KEY;
