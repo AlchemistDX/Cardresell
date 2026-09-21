@@ -4,10 +4,18 @@ import * as legacy from './_idBilling.js';
 import { createMembershipConsumption, MembershipConsumptionError } from './_membershipConsumption.js';
 import { membershipRedis, membershipRouteMode } from './_membershipLegacyFence.js';
 import { grantMembership } from './_membershipLedger.js';
+import { createMembershipFreeIssuance } from './_membershipFreeIssuance.js';
 export { newIdReceipt, candidateHash, idBillingFailure } from './_idBilling.js';
 export { membershipRouteMode } from './_membershipLegacyFence.js';
 
-export const membershipBilling = createMembershipConsumption({ execute: membershipRedis });
+const consumeMembership = createMembershipConsumption({ execute: membershipRedis });
+export const issueMembershipFree = createMembershipFreeIssuance({ execute: membershipRedis });
+export async function membershipBilling(action, input) {
+  if (['snapshot', 'renew_free'].includes(action)) {
+    await issueMembershipFree(input?.owner);
+  }
+  return consumeMembership(action, input);
+}
 export async function idEntitlement(user) {
   return await membershipRouteMode() ? {} : legacy.idEntitlement(user);
 }

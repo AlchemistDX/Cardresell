@@ -44,6 +44,14 @@ export function createMembershipBootstrap({ execute, accountId, livemode = false
       || typeof audit.bulkGrade !== 'boolean') fail();
     const record = { version: 'launch-v2', owner, verified: true, plan: 'free',
       freeThrough: audit.freeThrough, capabilities: { bulkGrade: audit.bulkGrade } };
+    if (audit.freeThrough === 0) {
+      const clock = await execute(['TIME']);
+      const seconds = Number(clock?.[0]);
+      if (!Number.isSafeInteger(seconds) || seconds <= 0) fail();
+      const at = new Date(seconds * 1000);
+      // New audited enrollment starts now, not at an invented historical date.
+      record.freeEligibleFrom = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1) / 1000;
+    }
     const journal = JSON.stringify({ version: 1, owner, accountId, livemode: false,
       auditDigest: hash(raw), evidenceId: audit.evidenceId });
     const result = await execute(['EVAL', SCRIPT, 4, 'membership:launch-v2:legacy_fence',

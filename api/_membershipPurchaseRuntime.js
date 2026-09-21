@@ -17,11 +17,12 @@ import { createMembershipPaymentAdapter } from './_membershipPayments.js';
 import { createMembershipFulfillment } from './_membershipFulfillment.js';
 import { createMembershipAccountRoutes } from './_membershipAccountRoutes.js';
 import { grantMembership } from './_membershipLedger.js';
-import { membershipBalances } from './_membershipRouteBilling.js';
+import { membershipBalances, issueMembershipFree } from './_membershipRouteBilling.js';
 import { reconcilePaidEnrollment } from './_membershipPaidEnrollment.js';
 import { createMembershipReversalStripe } from './_membershipReversalStripe.js';
 import { createMembershipBootstrap } from './_membershipBootstrap.js';
 import { membershipEnvironment } from './_membershipEnvironment.js';
+import { createMembershipEnrollmentProvisioner } from './_membershipEnrollmentProvisioner.js';
 
 export function purchaseContextKey(accountId, owner) {
   return 'membership:launch-v2:purchase_context:' +
@@ -70,12 +71,21 @@ export function membershipPurchaseRuntime() {
     portalConfiguration: process.env.MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION });
   const customers = createMembershipCustomers({ execute: membershipRedis, stripe: customerStripe,
     accountId, livemode: false, allowCreate: async owner => allowed.includes(owner) });
-  const bootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId });
+  const provisionEnrollment = createMembershipEnrollmentProvisioner({
+    execute: membershipRedis, accountId, environment: process.env.VERCEL_ENV, allowedOwners: allowed,
+  });
+  const auditedBootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId });
+  const bootstrap = async owner => {
+    await provisionEnrollment(owner);
+    await auditedBootstrap(owner);
+    await issueMembershipFree(owner);
+  };
   const commands = createMembershipLifecycleStripe({ execute: membershipRedis, reader, apiKey, accountId, priceMap });
   const reversals = createMembershipReversalStripe({ apiKey, accountId, bindings, customers });
   const stripe = { ...reader, ...commands, ...reversals };
   const payments = createMembershipPaymentAdapter({ stripe, bindings, accountId, livemode: false, priceMap,
     fulfill: async (kind, envelope) => {
+      if (kind === 'period') await issueMembershipFree(envelope.owner);
       const result = await grantMembership(membershipRedis, kind, envelope);
       if (kind === 'period') await reconcilePaidEnrollment(membershipRedis, envelope.owner, envelope.subscriptionId);
       return result;
