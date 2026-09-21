@@ -1,4 +1,6 @@
 import { membershipPreflight } from './_membershipPreflight.js';
+import { membershipRedis } from './_membershipLegacyFence.js';
+import { membershipWriterReadiness } from './_membershipWriterReadiness.js';
 let pending;
 let expires = 0;
 export default async function handler(req, res) {
@@ -16,6 +18,8 @@ export default async function handler(req, res) {
     expires = Date.now() + 60000;
     pending = membershipPreflight(process.env);
   }
-  const result = await pending;
+  const result = { ...await pending, writerReadiness: await membershipWriterReadiness({
+    execute: membershipRedis, billingEnabled: process.env.MEMBERSHIP_BILLING_V2,
+  }) };
   return res.status(result.status === 'PASS' ? 200 : 503).json(result);
 }
