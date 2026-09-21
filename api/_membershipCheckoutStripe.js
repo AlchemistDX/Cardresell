@@ -174,7 +174,7 @@ export function createMembershipCheckoutStripeTransport({
         'price_mismatch');
         const coupon = pack ? coupons[saved.planAtCheckout] : null;
         if (coupon !== null) {
-          const actual = await request(`coupons/${encodeURIComponent(coupon)}`);
+          const actual = await request(`coupons/${encodeURIComponent(coupon)}`, '?expand[]=applies_to');
           const percent = LAUNCH_PLANS[saved.planAtCheckout].packDiscountPercent;
           // Require an explicit product restriction containing precisely launch
           // pack products. Never apply a customer-provided promotion code.

@@ -61,7 +61,7 @@ export async function membershipPreflight(env, fetchImpl = fetch) {
     const candidates = [];
     let cursor = '';
     for (let page = 0; page < 10; page++) {
-      const list = await get('coupons?limit=100' + (cursor ? '&starting_after=' + encodeURIComponent(cursor) : ''));
+      const list = await get('coupons?limit=100&expand[]=data.applies_to' + (cursor ? '&starting_after=' + encodeURIComponent(cursor) : ''));
       if (list.object !== 'list' || !Array.isArray(list.data) || typeof list.has_more !== 'boolean') throw Error('unavailable');
       candidates.push(...list.data);
       if (!list.has_more) break;

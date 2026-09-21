@@ -34,7 +34,11 @@ const fetcher = async (url, options) => {
   requests++;
   assert.equal(options.method, 'GET');
   assert.equal(options.redirect, 'error');
-  return new Response(JSON.stringify(objects[url.split('/v1/')[1]]), { status: 200 });
+  const parsed = new URL(url);
+  if (parsed.pathname === '/v1/coupons') {
+    assert.deepEqual(parsed.searchParams.getAll('expand[]'), ['data.applies_to']);
+  }
+  return new Response(JSON.stringify(objects[url.split('/v1/')[1].replace('&expand[]=data.applies_to', '')]), { status: 200 });
 };
 let passed = 0;
 async function test(name, fn) { await fn(); passed++; console.log('PASS ' + name); }

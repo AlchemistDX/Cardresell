@@ -59,6 +59,10 @@ function fixture(extra = {}) {
       }
     }
     if (u.pathname.startsWith('/v1/coupons/')) {
+      // Stripe omits this includable field unless explicitly requested.
+      if (JSON.stringify(u.searchParams.getAll('expand[]')) !== JSON.stringify(['applies_to'])) {
+        throw Error('coupon_product_expansion_required');
+      }
       const id = u.pathname.split('/').at(-1), plan = Object.keys(coupons).find(p => coupons[p] === id);
       return json({ object: 'coupon', id, livemode: false, valid: true, duration: 'once',
         percent_off: LAUNCH_PLANS[plan].packDiscountPercent, amount_off: null, currency: null,
@@ -150,7 +154,7 @@ await t.section('Configuration, durable order and canonical preconditions fail b
     ['GET /v1/customers/cus_synthetic', { object: 'customer', id: 'cus_synthetic', deleted: true }, 'customer_mismatch'],
     ['GET /v1/customers/cus_synthetic', { object: 'customer', id: 'cus_synthetic', livemode: true }, 'customer_mismatch'],
     ['GET /v1/prices/price_packs_id_25', { object: 'price', id: 'price_packs_id_25', livemode: false, active: false }, 'price_mismatch'],
-    ['GET /v1/coupons/synthetic10', { object: 'coupon', id: 'synthetic10', percent_off: 25 }, 'coupon_mismatch'],
+    ['GET /v1/coupons/synthetic10?expand[]=applies_to', { object: 'coupon', id: 'synthetic10', percent_off: 25 }, 'coupon_mismatch'],
   ];
   for (const [route, value, code] of routes) {
     const g = fixture(); g.overrides.set(route, value);
@@ -163,7 +167,7 @@ await t.section('Configuration, durable order and canonical preconditions fail b
   for (const change of [{ valid: false }, { livemode: true }, { percent_off: 15 }, { amount_off: 1 },
     { currency: 'usd' }, { duration: 'forever' }, { applies_to: null },
     { applies_to: { products: [prices.packs.id_25.productId] } }]) {
-    const g = fixture(); g.overrides.set('GET /v1/coupons/synthetic10', { ...coupon, ...change });
+    const g = fixture(); g.overrides.set('GET /v1/coupons/synthetic10?expand[]=applies_to', { ...coupon, ...change });
     await rejects('Invalid configured coupon cannot be silently skipped', () => g.client().createCheckout(order), 'coupon_mismatch');
     t.check('Coupon mismatch performs zero POST', g.postCount() === 0);
   }
