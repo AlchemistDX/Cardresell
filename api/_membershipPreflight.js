@@ -68,13 +68,26 @@ export async function membershipPreflight(env, fetchImpl = fetch) {
       if (page === 9 || !list.data.length) throw Error('unavailable');
       cursor = list.data.at(-1).id;
     }
-    const couponMap = { free: null, starter: null };
+    const couponMap = { free: null, starter: null }, couponDiagnostics = {};
     for (const [plan, percent] of [['casual', 10], ['pro', 15], ['business', 25]]) {
       const matches = candidates.filter(c => c.object === 'coupon' && c.livemode === false && c.valid === true
         && c.percent_off === percent && c.amount_off === null && c.currency === null && c.duration === 'once'
         && Array.isArray(c.applies_to?.products)
         && JSON.stringify([...c.applies_to.products].sort()) === JSON.stringify(products));
       check(plan + '_unique_pack_coupon', matches.length === 1);
+      couponDiagnostics[plan] = {
+        exactMatches: matches.length,
+        candidates: candidates.filter(c => c.percent_off === percent).map(c => ({
+          id: c.id, objectMatches: c.object === 'coupon', testMode: c.livemode === false,
+          valid: c.valid === true, amountOffNull: c.amount_off === null,
+          currencyNull: c.currency === null, once: c.duration === 'once',
+          productRestrictionPresent: Array.isArray(c.applies_to?.products),
+          productCount: Array.isArray(c.applies_to?.products) ? c.applies_to.products.length : null,
+          missingPackProducts: products.filter(p => !c.applies_to?.products?.includes(p)),
+          extraProductCount: Array.isArray(c.applies_to?.products)
+            ? c.applies_to.products.filter(p => !products.includes(p)).length : null,
+        })),
+      };
       if (matches.length === 1) couponMap[plan] = matches[0].id;
     }
     const portalId = env.MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION;
@@ -86,7 +99,7 @@ export async function membershipPreflight(env, fetchImpl = fetch) {
       && f?.subscription_cancel?.enabled === true && f.subscription_cancel.mode === 'at_period_end'
       && f?.subscription_update?.enabled === false);
     check('webhook_secret_present', /^whsec_[A-Za-z0-9]+$/.test(env.MEMBERSHIP_STRIPE_TEST_WEBHOOK_SECRET));
-    return { status: checks.every(c => c.status === 'PASS') ? 'PASS' : 'FAIL', checks,
+    return { status: checks.every(c => c.status === 'PASS') ? 'PASS' : 'FAIL', checks, couponDiagnostics,
       // Coupon identifiers are public catalogue configuration, not secrets.
       ...(Object.keys(couponMap).length === 5 ? { couponMap } : {}) };
   } catch {
