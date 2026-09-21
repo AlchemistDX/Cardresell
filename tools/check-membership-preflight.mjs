@@ -28,6 +28,7 @@ objects['billing_portal/configurations/bpc_test'] = { object: 'billing_portal.co
 const env = { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2',
   MEMBERSHIP_STRIPE_TEST_KEY: 'rk_test_synthetic', MEMBERSHIP_STRIPE_TEST_ACCOUNT: 'acct_test',
   MEMBERSHIP_STRIPE_TEST_PRICES: JSON.stringify(map), MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION: 'bpc_test',
+  MEMBERSHIP_STRIPE_TEST_COUPONS: JSON.stringify({ free: null, starter: null, casual: 'coupon_10', pro: 'coupon_15', business: 'coupon_25' }),
   MEMBERSHIP_STRIPE_TEST_WEBHOOK_SECRET: 'whsec_synthetic' };
 let requests = 0;
 const fetcher = async (url, options) => {
@@ -69,5 +70,11 @@ await test('transport errors do not reveal credentials', async () => {
   const r = await membershipPreflight(env, async () => { throw Error(env.MEMBERSHIP_STRIPE_TEST_KEY); });
   assert.equal(r.status, 'FAIL');
   assert.equal(JSON.stringify(r).includes(env.MEMBERSHIP_STRIPE_TEST_KEY), false);
+});
+await test('missing configured coupons cannot pass deployment preflight', async () => {
+  assert.equal((await membershipPreflight({ ...env, MEMBERSHIP_STRIPE_TEST_COUPONS: undefined }, fetcher)).status, 'FAIL');
+});
+await test('stale configured coupons cannot pass deployment preflight', async () => {
+  assert.equal((await membershipPreflight({ ...env, MEMBERSHIP_STRIPE_TEST_COUPONS: '{}' }, fetcher)).status, 'FAIL');
 });
 console.log(`${passed} passed, 0 failed`);

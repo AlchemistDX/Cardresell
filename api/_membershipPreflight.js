@@ -90,6 +90,13 @@ export async function membershipPreflight(env, fetchImpl = fetch) {
       };
       if (matches.length === 1) couponMap[plan] = matches[0].id;
     }
+    // Discovery alone is not proof the deployment will use these coupons.
+    // A missing setting is allowed for initial discovery, but reported separately.
+    let configuredCoupons;
+    try { configuredCoupons = JSON.parse(env.MEMBERSHIP_STRIPE_TEST_COUPONS); } catch {}
+    check('configured_coupon_mapping', !!configuredCoupons
+      && Object.keys(configuredCoupons).length === 5 && Object.keys(couponMap).length === 5
+      && Object.keys(couponMap).every(plan => configuredCoupons[plan] === couponMap[plan]));
     const portalId = env.MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION;
     if (!/^bpc_[A-Za-z0-9_]+$/.test(portalId)) throw Error('unavailable');
     const portal = await get('billing_portal/configurations/' + portalId), f = portal.features;
