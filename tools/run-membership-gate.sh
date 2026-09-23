@@ -20,4 +20,14 @@ do
   tail -2 "$OUT/$suite.log"
   if [ "$result" -ne 0 ]; then status=1; fi
 done
+for check in authentication enrollment-flow enrollment-provisioner free-issuance preflight writer-readiness
+do
+  name="membership-$check"
+  (cd "$ROOT" && node "tools/check-$name.mjs") > "$OUT/$name.log" 2>&1
+  result=$?
+  printf '%s\t%s\n' "$name" "$result" >> "$OUT/results.tsv"
+  printf '%s: exit %s\n' "$name" "$result"
+  tail -2 "$OUT/$name.log"
+  if [ "$result" -ne 0 ]; then status=1; fi
+done
 exit "$status"

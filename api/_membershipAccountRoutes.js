@@ -11,7 +11,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
     if (!token) fail('authentication_required');
     const user = await authenticate(token);
     if (!user?.uid || user.verified !== true) fail('authentication_required');
-    return user.uid;
+    return user;
   }
   const error = (res, e) => res.status(e.code === 'authentication_required' ? 401 : 503).json({
     error: e.code === 'authentication_required' ? e.code : 'membership_pending',
@@ -35,7 +35,8 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
       res.setHeader('Cache-Control', 'private, no-store');
       if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'method_not_allowed' });
       try {
-        const uid = await owner(req);
+        const identity = await owner(req);
+        const uid = identity.uid;
         if (req.method === 'GET') {
           const customer = await customers.get(uid);
           const state = customer?.state === 'bound' ? await lifecycle.get({ owner: uid })
@@ -58,7 +59,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
         if (exact(body, ['action']) && body.action === 'associate') {
           // Complete audited enrollment before claiming any external customer
           // creation. A missing audit must not leave a new Stripe customer.
-          if (typeof bootstrap === 'function') await bootstrap(uid);
+          if (typeof bootstrap === 'function') await bootstrap(uid, identity);
           const customer = await customers.ensure(uid);
           if (customer?.state !== 'bound') return res.status(202).json({ status: 'customer_pending' });
           await lifecycle.associate({ owner: uid, customerId: customer.customerId });
@@ -95,7 +96,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
       res.setHeader('Cache-Control', 'private, no-store');
       if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
       try {
-        const uid = await owner(req);
+        const { uid } = await owner(req);
         if (!exact(req.body, ['sessionId']) || !/^cs_[A-Za-z0-9_]+$/.test(req.body.sessionId)) {
           return res.status(400).json({ error: 'invalid_request' });
         }

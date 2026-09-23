@@ -1,7 +1,7 @@
 // Test-mode-only composition until real normal-site acceptance passes.
 // No fallback to legacy secrets, prices, email search or client tier claims.
 import { createHash } from 'node:crypto';
-import { verifyTokenFlexible } from './_verifyToken.js';
+import { createMembershipAuthenticator } from './_membershipAuthentication.js';
 import { membershipRedis } from './_membershipLegacyFence.js';
 import { createMembershipBindingStore } from './_membershipBindings.js';
 import { createMembershipCheckoutController } from './_membershipCheckout.js';
@@ -23,6 +23,7 @@ import { createMembershipReversalStripe } from './_membershipReversalStripe.js';
 import { createMembershipBootstrap } from './_membershipBootstrap.js';
 import { membershipEnvironment } from './_membershipEnvironment.js';
 import { createMembershipEnrollmentProvisioner } from './_membershipEnrollmentProvisioner.js';
+import { createMembershipEnrollmentFlow } from './_membershipEnrollmentFlow.js';
 
 export function purchaseContextKey(accountId, owner) {
   return 'membership:launch-v2:purchase_context:' +
@@ -75,11 +76,8 @@ export function membershipPurchaseRuntime() {
     execute: membershipRedis, accountId, environment: process.env.VERCEL_ENV, allowedOwners: allowed,
   });
   const auditedBootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId });
-  const bootstrap = async owner => {
-    await provisionEnrollment(owner);
-    await auditedBootstrap(owner);
-    await issueMembershipFree(owner);
-  };
+  const bootstrap = createMembershipEnrollmentFlow({ execute: membershipRedis,
+    provision: provisionEnrollment, bootstrap: auditedBootstrap, issueFree: issueMembershipFree });
   const commands = createMembershipLifecycleStripe({ execute: membershipRedis, reader, apiKey, accountId, priceMap });
   const reversals = createMembershipReversalStripe({ apiKey, accountId, bindings, customers });
   const stripe = { ...reader, ...commands, ...reversals };
@@ -93,13 +91,7 @@ export function membershipPurchaseRuntime() {
   const lifecycle = createMembershipLifecycle({ execute: membershipRedis, customers, bindings, stripe,
     payments, priceMap, accountId, livemode: false });
   const fulfillment = createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode: false });
-  const authenticate = async token => {
-    try {
-      const user = await verifyTokenFlexible(token);
-      if (!user?.uid) throw new Error();
-      return { uid: user.uid, verified: true };
-    } catch { throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' }); }
-  };
+  const authenticate = createMembershipAuthenticator();
   const resolveContext = async owner => {
     const customer = await customers.get(owner);
     if (customer?.state !== 'bound') throw new Error('customer_association_required');
