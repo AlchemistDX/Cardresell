@@ -2,8 +2,10 @@
 // Never use the legacy email-to-UID fallback for financial operations.
 import { verifyFirebaseToken } from './_verifyToken.js';
 
-export function createMembershipAuthenticator({ verify = verifyFirebaseToken, now = Date.now } = {}) {
+export function createMembershipAuthenticator({ verify = verifyFirebaseToken, now = Date.now,
+  onReject = reason => console.warn('MEMBERSHIP_AUTH_REJECTED', reason) } = {}) {
   return async token => {
+    let reason = 'malformed_token';
     try {
       if (typeof token !== 'string' || token.length > 16384) throw new Error();
       const parts = token.split('.');
@@ -13,14 +15,33 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
       const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
       const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
       const seconds = Math.floor(now() / 1000);
+      reason = 'invalid_claims';
       if (header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid
         || !Number.isSafeInteger(claims.exp) || claims.exp <= seconds
         || !Number.isSafeInteger(claims.iat) || claims.iat < 0 || claims.iat > seconds + 300
         || typeof claims.sub !== 'string' || !claims.sub.trim() || claims.sub.length > 128) throw new Error();
-      const user = await verify(token);
-      if (user?.uid !== claims.sub || user.emailVerified !== true) throw new Error();
+      reason = 'firebase_verification_failed';
+      let user;
+      try { user = await verify(token); }
+      catch (error) {
+        // Fixed categories only. Never log the token, claims, owner or raw error.
+        const known = {
+          'Wrong audience': 'wrong_project', 'Wrong issuer': 'wrong_issuer',
+          'Unknown key ID': 'unknown_signing_key', 'Invalid signature': 'invalid_signature',
+          'Failed to fetch Google public keys': 'public_keys_unavailable',
+          'crypto is not defined': 'crypto_runtime_unavailable',
+          'Token expired': 'expired_token', 'Token issued in the future': 'future_token',
+        };
+        reason = Object.hasOwn(known, error?.message) ? known[error.message] : reason;
+        throw new Error();
+      }
+      reason = 'subject_mismatch';
+      if (user?.uid !== claims.sub) throw new Error();
+      reason = 'email_not_verified';
+      if (user.emailVerified !== true) throw new Error();
       return { uid: user.uid, verified: true, email: user.email };
     } catch {
+      try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
       throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' });
     }
   };

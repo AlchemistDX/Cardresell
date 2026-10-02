@@ -148,7 +148,10 @@ export async function membershipPurchaseRuntime() {
   const normalAuthenticate = createMembershipAuthenticator();
   const authenticate = async token => {
     const identity = await normalAuthenticate(token);
-    if (livemode && !publicLaunch && !allowed.includes(identity.uid)) throw Object.assign(Error('authentication_required'), { code: 'authentication_required' });
+    if (livemode && !publicLaunch && !allowed.includes(identity.uid)) {
+      console.warn('MEMBERSHIP_AUTH_REJECTED', 'owner_not_allowed');
+      throw Object.assign(Error('authentication_required'), { code: 'authentication_required' });
+    }
     return identity;
   };
   const resolveContext = async owner => {

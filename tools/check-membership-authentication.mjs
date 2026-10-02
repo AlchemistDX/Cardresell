@@ -76,4 +76,17 @@ await test('runtime wires strict auth without flexible email mapping', async () 
   assert.doesNotMatch(source, /verifyTokenFlexible/);
   assert.equal(requests.length, 1);
 });
+await test('rejection diagnostics contain fixed categories only, never raw token or errors', async () => {
+  const events = [];
+  const secret = 'private diagnostic sentinel';
+  const auth = createMembershipAuthenticator({ verify: async () => { throw new Error(secret); },
+    onReject: reason => events.push(reason) });
+  await assert.rejects(() => auth(token()), { code: 'authentication_required' });
+  assert.deepEqual(events, ['firebase_verification_failed']);
+  assert.ok(!JSON.stringify(events).includes(secret));
+});
+await test('diagnostic callback failure cannot grant admission', async () => {
+  const auth = createMembershipAuthenticator({ onReject: () => { throw Error('unavailable'); } });
+  await assert.rejects(() => auth('not-a-token'), { code: 'authentication_required' });
+});
 console.log(`${passed} passed, 0 failed`);
