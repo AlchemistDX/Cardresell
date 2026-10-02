@@ -49,6 +49,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
     open: () => window.openMembershipShop(),
     buttons: () => walk(body).filter(e => e.tag === 'button' && /ID credits/.test(e.textContent || '')),
     controls: () => walk(body).filter(e => e.tag === 'button'),
+    links: () => walk(body).filter(e => e.tag === 'a'),
     message: () => walk(body).filter(e => e.tag === 'p').map(e => e.textContent).join(' '),
   };
 }
@@ -166,5 +167,34 @@ await t.section('confirmed command from a lost response must not permanently loc
   await cancel.onclick();
   t.check('retained confirmed change does not permanently block next cancellation',
     calls.some(x => x.action === 'cancel'));
+});
+await t.section('normal signed-out shop entry reaches existing sign-in', async () => {
+  const h = setup({ initial: null });
+  await h.window.openShop();
+  t.check('header shop entry reaches membership packs', h.buttons().length === 2);
+  t.check('signed-out shop does not claim global purchasing is disabled',
+    /Sign in to verify/.test(h.message()) && !/Purchases are not enabled/.test(h.message()));
+  t.check('sign-in preserves the same-origin membership return path',
+    h.links().some(a => a.href === '/signin?next=%2F%3Fshop%3D1'));
+  t.check('signed-out packs remain disabled', h.buttons().every(b => b.disabled));
+});
+await t.section('association automatically refreshes normal account flow', async () => {
+  let associated = false, gets = 0;
+  const h = setup({ onAccount: async options => {
+    if (options.method === 'POST') {
+      associated = true;
+      return { ok: true, status: 200, json: async () => ({ status: 'associated' }) };
+    }
+    gets++;
+    return { ok: true, status: 200, json: async () => ({
+      state: { status: associated ? 'associated' : 'not_associated' },
+      management: { portal: associated }, creditsAvailable: false,
+    }) };
+  } });
+  await h.open();
+  await h.controls().find(b => /Set up test billing/.test(b.textContent)).onclick();
+  t.check('successful association refetches without another owner click', associated && gets === 2);
+  t.check('refresh replaces association control with portal', !h.controls().some(b => /Set up test billing/.test(b.textContent))
+    && h.controls().some(b => /Manage billing in Stripe/.test(b.textContent)));
 });
 t.done();
