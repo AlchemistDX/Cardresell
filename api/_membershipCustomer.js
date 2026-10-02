@@ -1,5 +1,5 @@
 // Server-only immutable owner/customer association. Unknown POST outcomes never
-// restart creation. No email lookup, metadata ownership inference, or live mode.
+// restart creation. No email lookup or metadata ownership inference.
 import { createHash, randomBytes } from 'node:crypto';
 const hash = x => createHash('sha256').update(x).digest('hex');
 const uid = x => typeof x === 'string' && x.length > 0 && x.length <= 128 && !/[\u0000-\u0020\u007f]/.test(x);
@@ -24,14 +24,14 @@ redis.call('MSET',KEYS[2],ARGV[1],KEYS[3],ARGV[2],KEYS[4],ARGV[3])
 return 1`;
 export function createMembershipCustomers({ execute, stripe, accountId, livemode, allowCreate,
   authorizeExisting, now = Date.now }) {
-  if (!id(accountId, 'acct') || livemode !== false || typeof execute !== 'function'
+  if (!id(accountId, 'acct') || typeof livemode !== 'boolean' || typeof execute !== 'function'
     || typeof allowCreate !== 'function') fail('customer_configuration');
-  const prefix = `membership:launch-v2:customers:${hash(accountId + ':test')}:`;
+  const prefix = `membership:launch-v2:customers:${hash(accountId + (livemode ? ':live' : ':test'))}:`;
   const key = owner => { if (!uid(owner)) fail('invalid_owner'); return prefix + hash(owner); };
   function record(raw, owner) {
     if (!raw) return null;
     let r; try { r = JSON.parse(raw); } catch { fail('customer_corrupt'); }
-    if (r.version !== 1 || r.owner !== owner || r.accountId !== accountId || r.livemode !== false
+    if (r.version !== 1 || r.owner !== owner || r.accountId !== accountId || r.livemode !== livemode
       || !['claimed', 'bound'].includes(r.state) || !/^[a-f0-9]{64}$/.test(r.operationId)
       || !Number.isSafeInteger(r.createdAt) || (r.state === 'bound' && !id(r.customerId, 'cus'))) fail('customer_corrupt');
     return r;
@@ -40,7 +40,7 @@ export function createMembershipCustomers({ execute, stripe, accountId, livemode
     const account = await stripe.retrieveAccount();
     if (account?.id !== accountId || account.object !== 'account') fail('account_mismatch');
     const c = await stripe.retrieveCustomer(customerId);
-    if (c?.id !== customerId || c.object !== 'customer' || c.livemode !== false || c.deleted) fail('customer_mismatch');
+    if (c?.id !== customerId || c.object !== 'customer' || c.livemode !== livemode || c.deleted) fail('customer_mismatch');
     return c;
   }
   async function get(owner) {
@@ -73,12 +73,12 @@ export function createMembershipCustomers({ execute, stripe, accountId, livemode
       if (typeof authorizeExisting !== 'function') fail('existing_binding_not_authorized');
       const audit = structuredClone(await authorizeExisting(owner));
       if (!audit || Object.keys(audit).length !== 6 || audit.owner !== owner
-        || audit.accountId !== accountId || audit.livemode !== false
+        || audit.accountId !== accountId || audit.livemode !== livemode
         || !id(audit.customerId, 'cus') || !/^[a-f0-9]{64}$/.test(audit.evidenceId)
         || !Number.isSafeInteger(audit.approvedAt) || audit.approvedAt < 0
         || audit.approvedAt > now()) fail('existing_binding_not_authorized');
       await canonical(audit.customerId);
-      const next = { version: 1, owner, accountId, livemode: false, state: 'bound',
+      const next = { version: 1, owner, accountId, livemode, state: 'bound',
         operationId: hash(JSON.stringify([owner, accountId, audit.customerId, audit.evidenceId])),
         createdAt: audit.approvedAt, customerId: audit.customerId };
       const journal = JSON.stringify({ ...audit, kind: 'audited_existing_customer' });
@@ -92,7 +92,7 @@ export function createMembershipCustomers({ execute, stripe, accountId, livemode
       const existing = await get(owner);
       if (existing) return existing;
       if (await allowCreate(owner) !== true) fail('customer_creation_not_authorized');
-      const claim = { version: 1, owner, accountId, livemode: false, state: 'claimed',
+      const claim = { version: 1, owner, accountId, livemode, state: 'claimed',
         operationId: randomBytes(32).toString('hex'), createdAt: now() };
       const raw = JSON.stringify(claim);
       const won = await execute(['SET', key(owner), raw, 'NX']);

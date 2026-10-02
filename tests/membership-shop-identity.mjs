@@ -192,9 +192,9 @@ await t.section('association automatically refreshes normal account flow', async
     }) };
   } });
   await h.open();
-  await h.controls().find(b => /Set up test billing/.test(b.textContent)).onclick();
+  await h.controls().find(b => /Set up your billing account/.test(b.textContent)).onclick();
   t.check('successful association refetches without another owner click', associated && gets === 2);
-  t.check('refresh replaces association control with portal', !h.controls().some(b => /Set up test billing/.test(b.textContent))
+  t.check('refresh replaces association control with portal', !h.controls().some(b => /Set up your billing account/.test(b.textContent))
     && h.controls().some(b => /Manage billing in Stripe/.test(b.textContent)));
 });
 t.done();

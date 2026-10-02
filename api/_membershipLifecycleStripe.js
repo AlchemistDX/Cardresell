@@ -1,4 +1,4 @@
-// Fixed-account TEST transport and durable, one-attempt-per-step mutations.
+// Fixed-account, explicit-mode transport and one-attempt-per-step mutations.
 // A timeout never means Stripe did nothing. Claims have no TTL and are not reset.
 import { createHash } from 'node:crypto';
 import { MEMBERSHIP_STRIPE_API_VERSION } from './_membershipStripe.js';
@@ -11,8 +11,9 @@ const insist = (ok, code = 'lifecycle_transport_unavailable') => {
 const CAS = `if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end
 redis.call('SET',KEYS[1],ARGV[2]); return 1`;
 export function createMembershipLifecycleStripe({ execute, reader, apiKey, accountId, priceMap,
-  fetchImpl = globalThis.fetch, timeoutMs = 5000, legacySubscription = null }) {
-  insist(/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(apiKey) && /^acct_[A-Za-z0-9]+$/.test(accountId));
+  fetchImpl = globalThis.fetch, timeoutMs = 5000, legacySubscription = null, livemode = false }) {
+  insist(typeof livemode === 'boolean' && new RegExp(`^(?:sk|rk)_${livemode ? 'live' : 'test'}_[A-Za-z0-9]+$`).test(apiKey)
+    && /^acct_[A-Za-z0-9]+$/.test(accountId));
   const prices = structuredClone(priceMap);
   const legacy = legacySubscription && structuredClone(legacySubscription);
   if (legacy) {
@@ -34,7 +35,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
     const mapping = plan === 'legacy' ? legacy : prices.plans[plan];
     insist(mapping, 'unknown_price');
     const price = await reader.retrievePrice(mapping.priceId);
-    insist(price?.object === 'price' && price.id === mapping.priceId && price.livemode === false
+    insist(price?.object === 'price' && price.id === mapping.priceId && price.livemode === livemode
       && ref(price.product) === mapping.productId && price.currency === 'usd'
       && price.type === 'recurring'
       && price.unit_amount === (plan === 'legacy' ? 999 : LAUNCH_PLANS[plan].monthlyPriceCents)
@@ -68,7 +69,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
       } finally { stream.cancel().catch(() => {}); }
       const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       if (path === 'account') insist(value?.object === 'account' && value.id === accountId, 'account_mismatch');
-      else insist(value && value.livemode === false);
+      else insist(value && value.livemode === livemode);
       return value;
     };
     try {
@@ -87,7 +88,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
     insist(account?.id === accountId, 'account_mismatch');
     const s = await reader.retrieveSubscription(subscriptionId);
     const item = s?.items?.data?.[0];
-    insist(s?.object === 'subscription' && s.id === subscriptionId && s.livemode === false
+    insist(s?.object === 'subscription' && s.id === subscriptionId && s.livemode === livemode
       && /^cus_[A-Za-z0-9_]+$/.test(ref(s.customer)) && s.items?.has_more === false
       && s.items.data.length === 1 && item.quantity === 1
       && Number.isSafeInteger(item.current_period_start) && Number.isSafeInteger(item.current_period_end)
@@ -134,12 +135,13 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
         }
       }
     }
-    return { subscriptionId, customerId: ref(s.customer), accountId, livemode: false, status: s.status,
+    return { subscriptionId, customerId: ref(s.customer), accountId, livemode, status: s.status,
       plan, periodStart: item.current_period_start, periodEnd: item.current_period_end,
       cancelAtPeriodEnd: s.cancel_at_period_end, scheduledChange };
   }
   async function step(command, stage, operation) {
-    const key = 'membership:launch-v2:stripe-command:' + digest([accountId, command.owner, command.operationId, stage]);
+    const key = `membership:launch-v2:stripe-command${livemode ? '-live' : ''}:`
+      + digest([accountId, command.owner, command.operationId, stage]);
     const input = digest(command), initial = JSON.stringify({ input, state: 'claimed' });
     const prior = await execute(['GET', key]);
     if (prior !== null) {

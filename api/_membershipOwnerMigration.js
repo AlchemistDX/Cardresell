@@ -1,4 +1,4 @@
-// One audited owner/subscription, TEST MODE ONLY. This is not a general import
+// One audited owner/subscription in an explicit mode. This is not a general import
 // engine and never fabricates a Checkout session or changes historical balances.
 import { createHash } from 'node:crypto';
 import { createMembershipPaymentAdapter } from './_membershipPayments.js';
@@ -14,8 +14,8 @@ if #KEYS==3 and redis.call('GET',KEYS[3])~=ARGV[3] then return 0 end
 redis.call('SET',KEYS[2],ARGV[2]); return 1`;
 export function createMembershipOwnerMigration({ execute, accountId, livemode, authorization,
   customers, stripe, priceMap, fulfill, now = () => Math.floor(Date.now() / 1000) }) {
-  insist(livemode === false && /^acct_[A-Za-z0-9]+$/.test(accountId)
-    && typeof execute === 'function' && typeof fulfill === 'function', 'migration_test_only');
+  insist(typeof livemode === 'boolean' && /^acct_[A-Za-z0-9]+$/.test(accountId)
+    && typeof execute === 'function' && typeof fulfill === 'function', 'migration_configuration');
   const a = structuredClone(authorization);
   const fields = ['owner', 'customerId', 'subscriptionId', 'priceId', 'productId',
     'periodStart', 'periodEnd', 'evidenceId', 'approvedAt'];
@@ -29,13 +29,13 @@ export function createMembershipOwnerMigration({ execute, accountId, livemode, a
     && a.periodStart > 0 && a.periodEnd > a.periodStart
     && a.approvedAt > 0 && a.approvedAt <= now(), 'invalid_legacy_authority');
   const prices = structuredClone(priceMap);
-  const prefix = 'membership:launch-v2:owner-migration:' + hash(accountId + ':test:' + a.subscriptionId);
-  const authority = JSON.stringify({ accountId, livemode: false, authorization: a, targetPlan: 'casual' });
+  const prefix = 'membership:launch-v2:owner-migration:' + hash(accountId + (livemode ? ':live:' : ':test:') + a.subscriptionId);
+  const authority = JSON.stringify({ accountId, livemode, authorization: a, targetPlan: 'casual' });
   const operationId = hash(authority);
   const command = { owner: a.owner, subscriptionId: a.subscriptionId, operationId,
     kind: 'plan_change', plan: 'casual', effectiveAt: a.periodEnd, phase: 'requested',
     idempotencyKey: 'membership-owner-migration-' + operationId };
-  const preservedPeriod = s => s?.accountId === accountId && s.livemode === false
+  const preservedPeriod = s => s?.accountId === accountId && s.livemode === livemode
     && s.subscriptionId === a.subscriptionId && s.customerId === a.customerId
     && s.status === 'active' && s.plan === 'legacy' && s.cancelAtPeriodEnd === false
     && s.periodStart === a.periodStart && s.periodEnd === a.periodEnd;
@@ -45,7 +45,7 @@ export function createMembershipOwnerMigration({ execute, accountId, livemode, a
     insist(owner === a.owner, 'owner_mismatch');
     const bound = await customers.get(owner);
     insist(bound?.state === 'bound' && bound.owner === owner && bound.customerId === a.customerId
-      && bound.accountId === accountId && bound.livemode === false, 'customer_mismatch');
+      && bound.accountId === accountId && bound.livemode === livemode, 'customer_mismatch');
   }
   async function read() {
     const raw = await execute(['GET', prefix]);
@@ -71,7 +71,7 @@ export function createMembershipOwnerMigration({ execute, accountId, livemode, a
     insist(a.periodEnd > now(), 'legacy_boundary_passed');
     if (!record.data) {
       const snapshot = await stripe.retrieveLegacySubscriptionSnapshot(a.subscriptionId);
-      insist(snapshot?.accountId === accountId && snapshot.livemode === false
+      insist(snapshot?.accountId === accountId && snapshot.livemode === livemode
         && snapshot.subscriptionId === a.subscriptionId && snapshot.customerId === a.customerId
         && snapshot.priceId === a.priceId && snapshot.productId === a.productId
         && snapshot.periodStart === a.periodStart && snapshot.periodEnd === a.periodEnd
@@ -98,7 +98,7 @@ export function createMembershipOwnerMigration({ execute, accountId, livemode, a
   const termKey = start => prefix + ':term:' + start;
   function term(start, end) {
     return { version: 'launch-v2', kind: 'subscription', owner: a.owner, customerId: a.customerId,
-      accountId, livemode: false, subscriptionId: a.subscriptionId, plan: 'casual',
+      accountId, livemode, subscriptionId: a.subscriptionId, plan: 'casual',
       currency: 'usd', amountCents: 999, ...prices.plans.casual,
       effectiveFrom: start, effectiveUntil: end };
   }
@@ -116,7 +116,7 @@ export function createMembershipOwnerMigration({ execute, accountId, livemode, a
       && JSON.stringify(value) === JSON.stringify(term(start, value.effectiveUntil)), 'migration_corrupt');
     return value;
   }
-  const adapter = (provisional, effect) => createMembershipPaymentAdapter({ accountId, livemode: false,
+  const adapter = (provisional, effect) => createMembershipPaymentAdapter({ accountId, livemode,
     priceMap: prices, stripe, fulfill: effect, bindings: {
       getCheckoutOrder: async () => { insist(false, 'migration_invoice_only'); },
       getSubscriptionTerm: (subscriptionId, start) => getTerm(subscriptionId, start, provisional),

@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "vercel-build": "node tools/inspect-production-membership.mjs"
+  }
+}

@@ -5,16 +5,16 @@ import { LAUNCH_PLANS, quoteLaunchPack } from './_launchMembershipConfig.js';
 const ref = v => typeof v === 'string' ? v : v?.id;
 const requireThat = (v, code) => { if (!v) throw Object.assign(new Error(code), { code }); };
 export function createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode }) {
-  requireThat(livemode === false, 'test_only');
+  requireThat(typeof livemode === 'boolean', 'mode_required');
   async function checkout(sessionId, owner) {
     requireThat(/^cs_[A-Za-z0-9_]+$/.test(sessionId), 'invalid_session');
     const account = await stripe.retrieveAccount();
     requireThat(account?.id === accountId, 'account_mismatch');
     const session = await stripe.retrieveCheckoutSession(sessionId);
     requireThat(session?.object === 'checkout.session' && session.id === sessionId
-      && session.livemode === false && /^[a-f0-9]{64}$/.test(session.client_reference_id), 'session_mismatch');
+      && session.livemode === livemode && /^[a-f0-9]{64}$/.test(session.client_reference_id), 'session_mismatch');
     const order = await bindings.getIntent(session.client_reference_id);
-    requireThat(order && order.accountId === accountId && order.livemode === false
+    requireThat(order && order.accountId === accountId && order.livemode === livemode
       && (owner === undefined || order.owner === owner), 'owner_mismatch');
     requireThat(ref(session.customer) === order.customerId
       && session.mode === (order.kind === 'pack' ? 'payment' : 'subscription'), 'session_mismatch');
@@ -30,7 +30,7 @@ export function createMembershipFulfillment({ stripe, bindings, payments, lifecy
       && line.quantity === 1 && line.currency === 'usd' && line.amount_subtotal === base
       && line.amount_total === order.amountCents && ref(line.price) === order.priceId, 'line_mismatch');
     const price = await stripe.retrievePrice(order.priceId);
-    requireThat(price?.object === 'price' && price.id === order.priceId && price.livemode === false
+    requireThat(price?.object === 'price' && price.id === order.priceId && price.livemode === livemode
       && ref(price.product) === order.productId && price.currency === 'usd' && price.unit_amount === base
       && (order.kind === 'pack' ? price.type === 'one_time' && price.recurring == null
         : price.type === 'recurring' && price.recurring?.interval === 'month'
@@ -62,7 +62,7 @@ export function createMembershipFulfillment({ stripe, bindings, payments, lifecy
     async webhook({ rawBody, signature }) {
       const event = await stripe.verifyWebhook(rawBody, signature);
       requireThat(event?.object === 'event' && /^evt_[A-Za-z0-9_]+$/.test(event.id)
-        && event.livemode === false && (event.account == null || event.account === accountId), 'invalid_event');
+        && event.livemode === livemode && (event.account == null || event.account === accountId), 'invalid_event');
       if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) {
         requireThat(event.data?.object?.object === 'checkout.session', 'invalid_event');
         return checkout(event.data.object.id);

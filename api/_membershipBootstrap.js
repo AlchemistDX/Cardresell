@@ -27,7 +27,7 @@ if current then return 0 end
 redis.call('MSET',KEYS[3],ARGV[2],KEYS[4],ARGV[3])
 return 1`;
 export function createMembershipBootstrap({ execute, accountId, livemode = false }) {
-  if (typeof execute !== 'function' || !/^acct_[A-Za-z0-9]+$/.test(accountId) || livemode !== false) fail();
+  if (typeof execute !== 'function' || !/^acct_[A-Za-z0-9]+$/.test(accountId) || typeof livemode !== 'boolean') fail();
   return async function bootstrap(owner) {
     const auditKey = membershipBootstrapAuditKey(owner);
     const raw = await execute(['GET', auditKey]);
@@ -38,7 +38,7 @@ export function createMembershipBootstrap({ execute, accountId, livemode = false
     if (!audit || Object.keys(audit).length !== fields.length
       || !fields.every(k => Object.hasOwn(audit, k))
       || audit.version !== 1 || audit.owner !== owner || audit.accountId !== accountId
-      || audit.livemode !== false || !/^[a-f0-9]{64}$/.test(audit.evidenceId)
+      || audit.livemode !== livemode || !/^[a-f0-9]{64}$/.test(audit.evidenceId)
       || audit.legacyWritersDrained !== true || audit.verified !== true
       || !Number.isSafeInteger(audit.freeThrough) || audit.freeThrough < 0
       || typeof audit.bulkGrade !== 'boolean') fail();
@@ -52,7 +52,7 @@ export function createMembershipBootstrap({ execute, accountId, livemode = false
       // New audited enrollment starts now, not at an invented historical date.
       record.freeEligibleFrom = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1) / 1000;
     }
-    const journal = JSON.stringify({ version: 1, owner, accountId, livemode: false,
+    const journal = JSON.stringify({ version: 1, owner, accountId, livemode,
       auditDigest: hash(raw), evidenceId: audit.evidenceId });
     const result = await execute(['EVAL', SCRIPT, 4, 'membership:launch-v2:legacy_fence',
       auditKey, membershipEnrollmentKey(owner), auditKey + ':committed',

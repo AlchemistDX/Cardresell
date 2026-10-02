@@ -9,8 +9,13 @@ export function membershipEnvironment(env, mode = 'test') {
   if (env.VERCEL_ENV !== (live ? 'production' : 'preview')) fail();
   if (live && env.MEMBERSHIP_PURCHASE_TEST_MODE === 'enabled') fail();
   if (!live && env.MEMBERSHIP_PURCHASE_TEST_MODE !== 'enabled') fail();
-  const apiKey = env[prefix + 'KEY'], webhookSecret = env[prefix + 'WEBHOOK_SECRET'];
-  if (typeof apiKey !== 'string' || !new RegExp(`^rk_${mode}_[A-Za-z0-9]{8,500}$`).test(apiKey)
+  // Reusing the existing server credential is an explicit operator choice,
+  // never an automatic fallback from missing or broken restricted credentials.
+  const reuse = live && env.MEMBERSHIP_LIVE_CREDENTIAL_SOURCE === 'existing';
+  if (reuse && env[prefix + 'KEY']) fail();
+  const apiKey = reuse ? env.STRIPE_SECRET_KEY : env[prefix + 'KEY'];
+  const webhookSecret = env[prefix + 'WEBHOOK_SECRET'];
+  if (typeof apiKey !== 'string' || !new RegExp(`^${reuse ? '(?:sk|rk)' : 'rk'}_${mode}_[A-Za-z0-9]{8,500}$`).test(apiKey)
     || typeof webhookSecret !== 'string' || !/^whsec_[A-Za-z0-9]{8,500}$/.test(webhookSecret)) fail();
   const accountId = env[prefix + 'ACCOUNT'], returnOrigin = env[prefix + 'RETURN_ORIGIN'];
   const portalConfiguration = env[prefix + 'PORTAL_CONFIGURATION'];

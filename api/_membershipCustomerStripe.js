@@ -1,7 +1,8 @@
 import { MEMBERSHIP_STRIPE_API_VERSION } from './_membershipStripe.js';
 const fail = () => { throw Object.assign(new Error('customer_transport_unavailable'), { code: 'customer_transport_unavailable' }); };
-export function createMembershipCustomerStripe({ apiKey, accountId, reader, portalConfiguration, returnOrigin, fetchImpl = globalThis.fetch }) {
-  if (!/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(apiKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) fail();
+export function createMembershipCustomerStripe({ apiKey, accountId, reader, portalConfiguration, returnOrigin, livemode = false, fetchImpl = globalThis.fetch }) {
+  if (typeof livemode !== 'boolean' || !new RegExp(`^(?:sk|rk)_${livemode ? 'live' : 'test'}_[A-Za-z0-9]+$`).test(apiKey)
+    || !/^acct_[A-Za-z0-9]+$/.test(accountId)) fail();
   async function request(path, body, operationId) {
     if (path !== 'account') await request('account');
     const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 5000);
@@ -34,7 +35,7 @@ export function createMembershipCustomerStripe({ apiKey, accountId, reader, port
       if (path.startsWith('billing_portal/configurations/')) {
         const f = value?.features;
         if (value?.id !== portalConfiguration || value.object !== 'billing_portal.configuration'
-          || value.livemode !== false || value.active !== true
+          || value.livemode !== livemode || value.active !== true
           || f?.subscription_update?.enabled !== false
           || f?.subscription_cancel?.enabled !== true || f.subscription_cancel.mode !== 'at_period_end'
           || f?.payment_method_update?.enabled !== true || f?.invoice_history?.enabled !== true) fail();
@@ -45,11 +46,11 @@ export function createMembershipCustomerStripe({ apiKey, accountId, reader, port
         try { destination = new URL(value.url); } catch { fail(); }
         if (value.object !== 'billing_portal.session' || value.customer !== body.customer
           || value.configuration !== portalConfiguration || value.return_url !== body.return_url
-          || value.livemode !== false || destination.origin !== 'https://billing.stripe.com'
+          || value.livemode !== livemode || destination.origin !== 'https://billing.stripe.com'
           || destination.username || destination.password) fail();
         return value;
       }
-      if (value?.object !== 'customer' || value.livemode !== false || value.deleted
+      if (value?.object !== 'customer' || value.livemode !== livemode || value.deleted
         || !/^cus_[A-Za-z0-9_]+$/.test(value.id)) fail();
       return value;
     } catch { fail(); } finally { clearTimeout(timer); }
@@ -71,7 +72,7 @@ export function createMembershipCustomerStripe({ apiKey, accountId, reader, port
       try { origin = new URL(returnOrigin); } catch { fail(); }
       if (origin.protocol !== 'https:' || origin.origin !== returnOrigin
         || origin.username || origin.password || origin.port
-        || ['https://www.cardresell.org', 'https://cardresell.org'].includes(returnOrigin)) fail();
+        || ['https://www.cardresell.org', 'https://cardresell.org'].includes(returnOrigin) !== livemode) fail();
       const customer = await request('customers/' + customerId);
       if (customer.id !== customerId) fail();
       await request('billing_portal/configurations/' + portalConfiguration);

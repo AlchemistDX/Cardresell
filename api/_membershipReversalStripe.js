@@ -1,4 +1,4 @@
-// Read-only TEST-account canonical reversal provenance. No credentials/config
+// Read-only, explicit-mode canonical reversal provenance. No credentials/config
 // lookup, route activation, metadata/email identity, grant, release or clawback.
 // Caller must already verify original webhook bytes; event fields are locators.
 // Docs (actual Sandbox shape validation remains UNRUN):
@@ -39,7 +39,8 @@ export function createMembershipReversalStripe({
   apiKey, accountId, livemode = false, bindings, customers,
   fetchImpl = globalThis.fetch, operationTimeoutMs = 10000,
 } = {}) {
-  insist(livemode === false && typeof apiKey === 'string' && /^(?:sk|rk)_test_[A-Za-z0-9]{8,500}$/.test(apiKey)
+  insist(typeof livemode === 'boolean' && typeof apiKey === 'string'
+    && new RegExp(`^(?:sk|rk)_${livemode ? 'live' : 'test'}_[A-Za-z0-9]{8,500}$`).test(apiKey)
     && id(accountId, 'acct') && typeof fetchImpl === 'function'
     && typeof bindings?.inspectIntent === 'function' && typeof customers?.get === 'function'
     && Number.isSafeInteger(operationTimeoutMs) && operationTimeoutMs >= 100 && operationTimeoutMs <= 30000,
@@ -90,8 +91,8 @@ export function createMembershipReversalStripe({
     }
     function canonical(value, objectType, expectedId, requireMode = true) {
       insist(object(value) && value.object === objectType && value.id === expectedId
-        && !value.deleted && (requireMode ? value.livemode === false
-          : (!Object.hasOwn(value, 'livemode') || value.livemode === false)), 'reversal_canonical_mismatch');
+        && !value.deleted && (requireMode ? value.livemode === livemode
+          : (!Object.hasOwn(value, 'livemode') || value.livemode === livemode)), 'reversal_canonical_mismatch');
       return value;
     }
     async function completeList(path, query, itemType, itemPrefix) {
@@ -185,7 +186,7 @@ export function createMembershipReversalStripe({
       const order = origin?.order;
       insist(origin?.state === 'canonical_bound' && origin.sessionId === session.id && object(order)
         && order.version === MEMBERSHIP_VERSION && order.intentId === session.client_reference_id
-        && order.accountId === accountId && order.livemode === false && uid(order.owner)
+        && order.accountId === accountId && order.livemode === livemode && uid(order.owner)
         && order.customerId === customerId, 'reversal_origin_unbound');
       if (invoiceId === null) {
         insist(order.kind === 'pack' && session.mode === 'payment' && session.subscription === null
@@ -202,8 +203,8 @@ export function createMembershipReversalStripe({
       const association = await customers.get(order.owner); active();
       insist(association?.state === 'bound' && association.owner === order.owner
         && association.customerId === customerId && association.accountId === accountId
-        && association.livemode === false, 'reversal_owner_mismatch');
-      return { accountId, livemode: false, objectType: type, objectId, customerId, paymentId, invoiceId,
+        && association.livemode === livemode, 'reversal_owner_mismatch');
+      return { accountId, livemode, objectType: type, objectId, customerId, paymentId, invoiceId,
         invoiceLookupComplete: true, reason };
     }
     try {

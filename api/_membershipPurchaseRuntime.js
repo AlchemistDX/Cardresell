@@ -1,4 +1,4 @@
-// Test-mode-only composition until real normal-site acceptance passes.
+// Explicitly activated, environment-isolated composition.
 // No fallback to legacy secrets, prices, email search or client tier claims.
 import { createHash } from 'node:crypto';
 import { createMembershipAuthenticator } from './_membershipAuthentication.js';
@@ -25,17 +25,19 @@ import { membershipEnvironment } from './_membershipEnvironment.js';
 import { createMembershipEnrollmentProvisioner } from './_membershipEnrollmentProvisioner.js';
 import { createMembershipEnrollmentFlow } from './_membershipEnrollmentFlow.js';
 
-export function purchaseContextKey(accountId, owner) {
+export function purchaseContextKey(accountId, owner, livemode = false) {
+  if (typeof livemode !== 'boolean') throw new Error('context_unavailable');
   return 'membership:launch-v2:purchase_context:' +
-    createHash('sha256').update(JSON.stringify([accountId, false, owner])).digest('hex');
+    createHash('sha256').update(JSON.stringify([accountId, livemode, owner])).digest('hex');
 }
-export function createPurchaseContextResolver({ execute, accountId, now = Date.now }) {
+export function createPurchaseContextResolver({ execute, accountId, livemode = false, now = Date.now }) {
+  if (typeof livemode !== 'boolean') throw new Error('context_unavailable');
   return async owner => {
-    const raw = await execute(['GET', purchaseContextKey(accountId, owner)]);
+    const raw = await execute(['GET', purchaseContextKey(accountId, owner, livemode)]);
     let record;
     try { record = JSON.parse(raw); } catch { throw new Error('context_unavailable'); }
     if (!record || record.version !== 'launch-v2' || record.owner !== owner
-      || record.accountId !== accountId || record.livemode !== false || record.ready !== true
+      || record.accountId !== accountId || record.livemode !== livemode || record.ready !== true
       || !/^cus_[A-Za-z0-9_]+$/.test(record.customerId)
       || !Object.hasOwn(LAUNCH_PLANS, record.plan)
       || !Number.isSafeInteger(record.validUntil) || record.validUntil <= now()
@@ -48,40 +50,32 @@ export function createPurchaseContextResolver({ execute, accountId, now = Date.n
   };
 }
 export function membershipPurchaseRuntime() {
-  if (process.env.MEMBERSHIP_PURCHASE_TEST_MODE !== 'enabled'
-    || process.env.VERCEL_ENV === 'production') throw new Error('purchase_disabled');
-  // Preview-only, restricted credentials and complete server-owned mappings.
-  // The live branch of this validator is preparation, not runtime activation.
-  membershipEnvironment(process.env, 'test');
-  const apiKey = process.env.MEMBERSHIP_STRIPE_TEST_KEY;
-  const accountId = process.env.MEMBERSHIP_STRIPE_TEST_ACCOUNT;
-  const priceMap = JSON.parse(process.env.MEMBERSHIP_STRIPE_TEST_PRICES || 'null');
-  const couponMap = JSON.parse(process.env.MEMBERSHIP_STRIPE_TEST_COUPONS || 'null');
-  const webhookSecret = process.env.MEMBERSHIP_STRIPE_TEST_WEBHOOK_SECRET;
-  const base = { apiKey, accountId, livemode: false, apiVersion: MEMBERSHIP_STRIPE_API_VERSION };
-  const bindings = createMembershipBindingStore({ execute: membershipRedis, accountId, livemode: false, priceMap });
-  const reader = createMembershipStripeTransport({ ...base, webhookSecret });
-  const returnOrigin = process.env.MEMBERSHIP_STRIPE_TEST_RETURN_ORIGIN;
-  if (!returnOrigin || ['https://www.cardresell.org', 'https://cardresell.org'].includes(returnOrigin)) {
-    throw new Error('test_preview_origin_required');
+  const livemode = process.env.VERCEL_ENV === 'production';
+  if (process.env[livemode ? 'MEMBERSHIP_PURCHASE_LIVE_MODE' : 'MEMBERSHIP_PURCHASE_TEST_MODE'] !== 'enabled') {
+    throw new Error('purchase_disabled');
   }
+  const { apiKey, accountId, priceMap, couponMap, webhookSecret, returnOrigin, portalConfiguration } =
+    membershipEnvironment(process.env, livemode ? 'live' : 'test');
+  const base = { apiKey, accountId, livemode, apiVersion: MEMBERSHIP_STRIPE_API_VERSION };
+  const bindings = createMembershipBindingStore({ execute: membershipRedis, accountId, livemode, priceMap });
+  const reader = createMembershipStripeTransport({ ...base, webhookSecret });
   const writer = createMembershipCheckoutStripeTransport({ ...base, bindings, priceMap, couponMap, returnOrigin });
-  const allowed = JSON.parse(process.env.MEMBERSHIP_TEST_NEW_CUSTOMER_OWNERS || '[]');
+  const allowed = JSON.parse(process.env[livemode ? 'MEMBERSHIP_LIVE_OWNERS' : 'MEMBERSHIP_TEST_NEW_CUSTOMER_OWNERS'] || '[]');
   if (!Array.isArray(allowed) || allowed.some(x => typeof x !== 'string' || !x)) throw new Error('test_owners_invalid');
-  const customerStripe = createMembershipCustomerStripe({ apiKey, accountId, reader, returnOrigin,
-    portalConfiguration: process.env.MEMBERSHIP_STRIPE_TEST_PORTAL_CONFIGURATION });
+  if (livemode && allowed.length !== 1) throw new Error('owner_pilot_required');
+  const customerStripe = createMembershipCustomerStripe({ apiKey, accountId, reader, returnOrigin, livemode, portalConfiguration });
   const customers = createMembershipCustomers({ execute: membershipRedis, stripe: customerStripe,
-    accountId, livemode: false, allowCreate: async owner => allowed.includes(owner) });
+    accountId, livemode, allowCreate: async owner => allowed.includes(owner) });
   const provisionEnrollment = createMembershipEnrollmentProvisioner({
-    execute: membershipRedis, accountId, environment: process.env.VERCEL_ENV, allowedOwners: allowed,
+    execute: membershipRedis, accountId, environment: process.env.VERCEL_ENV, allowedOwners: allowed, livemode,
   });
-  const auditedBootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId });
+  const auditedBootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId, livemode });
   const bootstrap = createMembershipEnrollmentFlow({ execute: membershipRedis,
     provision: provisionEnrollment, bootstrap: auditedBootstrap, issueFree: issueMembershipFree });
-  const commands = createMembershipLifecycleStripe({ execute: membershipRedis, reader, apiKey, accountId, priceMap });
-  const reversals = createMembershipReversalStripe({ apiKey, accountId, bindings, customers });
+  const commands = createMembershipLifecycleStripe({ execute: membershipRedis, reader, apiKey, accountId, priceMap, livemode });
+  const reversals = createMembershipReversalStripe({ apiKey, accountId, bindings, customers, livemode });
   const stripe = { ...reader, ...commands, ...reversals };
-  const payments = createMembershipPaymentAdapter({ stripe, bindings, accountId, livemode: false, priceMap,
+  const payments = createMembershipPaymentAdapter({ stripe, bindings, accountId, livemode, priceMap,
     fulfill: async (kind, envelope) => {
       if (kind === 'period') await issueMembershipFree(envelope.owner);
       const result = await grantMembership(membershipRedis, kind, envelope);
@@ -89,9 +83,14 @@ export function membershipPurchaseRuntime() {
       return result;
     } });
   const lifecycle = createMembershipLifecycle({ execute: membershipRedis, customers, bindings, stripe,
-    payments, priceMap, accountId, livemode: false });
-  const fulfillment = createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode: false });
-  const authenticate = createMembershipAuthenticator();
+    payments, priceMap, accountId, livemode });
+  const fulfillment = createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode });
+  const normalAuthenticate = createMembershipAuthenticator();
+  const authenticate = async token => {
+    const identity = await normalAuthenticate(token);
+    if (livemode && !allowed.includes(identity.uid)) throw Object.assign(Error('authentication_required'), { code: 'authentication_required' });
+    return identity;
+  };
   const resolveContext = async owner => {
     const customer = await customers.get(owner);
     if (customer?.state !== 'bound') throw new Error('customer_association_required');
@@ -110,7 +109,7 @@ export function membershipPurchaseRuntime() {
       newSubscriptionAllowed: !state.subscriptionId && allowed.includes(owner) };
   };
   const controller = createMembershipCheckoutController({ execute: membershipRedis, bindings,
-    authenticate, resolveContext, stripe: { ...reader, ...writer }, accountId, livemode: false });
+    authenticate, resolveContext, stripe: { ...reader, ...writer }, accountId, livemode });
   return { ...createMembershipPurchaseRoutes({ authenticate, resolveContext, controller }),
     ...createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment, commands,
       balances: membershipBalances, portal: customerStripe.createPortal, bootstrap, scheduleChanges: false }) };

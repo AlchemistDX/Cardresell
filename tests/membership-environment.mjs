@@ -27,4 +27,14 @@ for (const mode of ['test', 'live']) {
   ]) { assert.throws(()=>membershipEnvironment({...env,...change},mode)); n++; }
 }
 assert.throws(()=>membershipEnvironment({...make('live'),MEMBERSHIP_PURCHASE_TEST_MODE:'enabled'},'live')); n++;
+const existing = { ...make('live'), MEMBERSHIP_LIVE_CREDENTIAL_SOURCE: 'existing',
+  STRIPE_SECRET_KEY: 'sk_live_syntheticOnly' };
+delete existing.MEMBERSHIP_STRIPE_LIVE_KEY;
+assert.equal(membershipEnvironment(existing, 'live').apiKey, existing.STRIPE_SECRET_KEY); n++;
+for (const change of [
+  { STRIPE_SECRET_KEY: 'sk_test_syntheticOnly' },
+  { MEMBERSHIP_LIVE_CREDENTIAL_SOURCE: undefined },
+  { MEMBERSHIP_STRIPE_LIVE_KEY: 'rk_live_syntheticOnly' },
+  { VERCEL_ENV: 'preview' },
+]) { assert.throws(() => membershipEnvironment({ ...existing, ...change }, 'live')); n++; }
 console.log(`membership-environment: ${n} passed, 0 failed`);

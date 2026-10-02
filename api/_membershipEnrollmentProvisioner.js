@@ -1,4 +1,4 @@
-// Preview-only provisioning called AFTER normal server authentication.
+// Explicit-environment provisioning called AFTER normal server authentication.
 // It does not set the global writer fence, associate Stripe customers, grant
 // credits, overwrite enrollment or import legacy subscriptions.
 import { createHash } from 'node:crypto';
@@ -19,8 +19,8 @@ for i=2,#KEYS do
 end
 redis.call('SET',KEYS[2],p.audit)
 return 1`;
-export function createMembershipEnrollmentProvisioner({ execute, accountId, environment, allowedOwners }) {
-  if (environment !== 'preview' || !/^acct_[A-Za-z0-9]+$/.test(accountId)
+export function createMembershipEnrollmentProvisioner({ execute, accountId, environment, allowedOwners, livemode = false }) {
+  if (typeof livemode !== 'boolean' || environment !== (livemode ? 'production' : 'preview') || !/^acct_[A-Za-z0-9]+$/.test(accountId)
     || typeof execute !== 'function' || !Array.isArray(allowedOwners)) fail();
   const allowed = new Set(allowedOwners);
   return async owner => {
@@ -40,9 +40,9 @@ export function createMembershipEnrollmentProvisioner({ execute, accountId, envi
       const clock = await execute(['TIME']);
       const now = Number(clock?.[0]);
       if (!Number.isSafeInteger(now) || now <= 0) fail();
-      const audit = { version: 1, owner, accountId, livemode: false,
+      const audit = { version: 1, owner, accountId, livemode,
         evidenceId: hash(JSON.stringify({ owner, accountId, expected, observedAt: now,
-          policy: 'preview-new-enrollment-v1' })),
+          policy: livemode ? 'live-new-enrollment-v1' : 'preview-new-enrollment-v1' })),
         legacyWritersDrained: true, verified: true, freeThrough: 0, bulkGrade: false };
       // Global fence is an independent prerequisite, not asserted by this
       // request. Historical standing balances and welcome markers are CAS

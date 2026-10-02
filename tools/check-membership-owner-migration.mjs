@@ -13,7 +13,7 @@ const list = data => ({ object: 'list', data, has_more: false });
 const copy = x => structuredClone(x);
 let passed = 0;
 async function test(name, fn) { await fn(); passed++; console.log('PASS ' + name); }
-async function fixture() {
+async function fixture(livemode = false) {
   await redis(['FLUSHDB']); // this process's private Unix socket only
   const a = { owner: 'owner', customerId: 'cus_owner', subscriptionId: 'sub_legacy',
     priceId: 'price_legacy', productId: 'prod_legacy', periodStart: NOW - 10000, periodEnd: NOW - 100,
@@ -25,20 +25,21 @@ async function fixture() {
       const mapping = { priceId: `price_${name}`, productId: `prod_${name}` };
       priceMap[group][name] = mapping;
       prices[mapping.priceId] = { object: 'price', id: mapping.priceId, product: mapping.productId,
-        livemode: false, currency: 'usd', unit_amount: group === 'plans' ? config.monthlyPriceCents : config.basePriceCents,
+        livemode, currency: 'usd', unit_amount: group === 'plans' ? config.monthlyPriceCents : config.basePriceCents,
         type: group === 'plans' ? 'recurring' : 'one_time',
         recurring: group === 'plans' ? { interval: 'month', interval_count: 1 } : null };
     }
   }
   prices[a.priceId] = { ...copy(prices.price_casual), id: a.priceId, product: a.productId };
   const f = { now: NOW - 200, posts: [], schedules: {}, bills: {}, lines: {}, loseGrant: false, loseUpdate: false,
-    customer: { owner: a.owner, customerId: a.customerId, accountId, livemode: false, state: 'bound' },
-    subscription: { object: 'subscription', id: a.subscriptionId, customer: a.customerId, livemode: false,
+    customer: { owner: a.owner, customerId: a.customerId, accountId, livemode, state: 'bound' },
+    subscription: { object: 'subscription', id: a.subscriptionId, customer: a.customerId, livemode,
       status: 'active', cancel_at_period_end: false, schedule: null, discounts: [], default_tax_rates: [],
       items: list([{ id: 'si_owner', price: a.priceId, quantity: 1,
         current_period_start: a.periodStart, current_period_end: a.periodEnd }]) } };
-  const verifier = createMembershipStripeTransport({ apiKey: 'rk_test_syntheticnotacredential',
-    accountId, livemode: false, webhookSecret: secret, apiVersion: MEMBERSHIP_STRIPE_API_VERSION,
+  const apiKey = `rk_${livemode ? 'live' : 'test'}_syntheticnotacredential`;
+  const verifier = createMembershipStripeTransport({ apiKey,
+    accountId, livemode, webhookSecret: secret, apiVersion: MEMBERSHIP_STRIPE_API_VERSION,
     nowSeconds: () => NOW, fetchImpl: async () => { throw Error('network forbidden'); } });
   const reader = {
     retrieveAccount: async () => ({ object: 'account', id: accountId }),
@@ -52,7 +53,7 @@ async function fixture() {
     verifyWebhook: verifier.verifyWebhook,
   };
   const transport = createMembershipLifecycleStripe({ execute: redis, reader, accountId, priceMap,
-    apiKey: 'rk_test_syntheticnotacredential',
+    apiKey, livemode,
     legacySubscription: Object.fromEntries(['owner', 'customerId', 'subscriptionId', 'priceId', 'productId',
       'periodStart', 'periodEnd'].map(key => [key, a[key]])),
     fetchImpl: async (url, init) => {
@@ -65,7 +66,7 @@ async function fixture() {
           assert.deepEqual(p, { from_subscription: a.subscriptionId });
           f.subscription.schedule = 'sub_sched_owner';
           f.schedules.sub_sched_owner = { object: 'subscription_schedule', id: 'sub_sched_owner',
-            customer: a.customerId, subscription: a.subscriptionId, livemode: false, end_behavior: 'release', phases: [] };
+            customer: a.customerId, subscription: a.subscriptionId, livemode, end_behavior: 'release', phases: [] };
           if (f.loseCreate) { f.loseCreate = false; throw Error('synthetic create response loss'); }
         } else {
           assert.equal(path, '/v1/subscription_schedules/sub_sched_owner');
@@ -81,7 +82,7 @@ async function fixture() {
       }
       return Response.json(copy(f.schedules[path.split('/').at(-1)] || f.schedules.sub_sched_owner));
     } });
-  const options = { execute: redis, accountId, livemode: false, authorization: a,
+  const options = { execute: redis, accountId, livemode, authorization: a,
     customers: { get: async () => copy(f.customer) }, stripe: { ...reader, ...transport }, priceMap,
     now: () => f.now, fulfill: async (kind, envelope) => {
       const result = await grantMembership(redis, kind, envelope);
@@ -95,26 +96,26 @@ async function fixture() {
   await redis(['SET', 'pro:owner', '{"historical":[],"amount":999}']);
   const schedule = () => core.schedule({ owner: a.owner });
   function invoice(id = 'in_first', start = a.periodEnd, end = NOW + 2591900) {
-    f.bills[id] = { object: 'invoice', id, livemode: false, status: 'paid', customer: a.customerId,
+    f.bills[id] = { object: 'invoice', id, livemode, status: 'paid', customer: a.customerId,
       amount_paid_off_stripe: 0, amount_remaining: 0, status_transitions: { paid_at: NOW - 20 },
       billing_reason: 'subscription_cycle', parent: { type: 'subscription_details',
         subscription_details: { subscription: a.subscriptionId } }, currency: 'usd', amount_paid: 999,
       amount_due: 999, total: 999, amount_overpaid: 0, amount_shipping: 0, starting_balance: 0, ending_balance: 0,
       pre_payment_credit_notes_amount: 0, post_payment_credit_notes_amount: 0, total_taxes: [], total_discount_amounts: [] };
-    f.lines[id] = list([{ object: 'line_item', livemode: false, quantity: 1, quantity_decimal: '1',
+    f.lines[id] = list([{ object: 'line_item', livemode, quantity: 1, quantity_decimal: '1',
       parent: { type: 'subscription_item_details', subscription_item_details: {
         subscription: a.subscriptionId, subscription_item: 'si_owner', proration: false } },
       period: { start, end }, currency: 'usd', amount: 999, pricing: { type: 'price_details',
         price_details: { price: 'price_casual', product: 'prod_casual' }, unit_amount_decimal: '999' },
       taxes: [], discount_amounts: [], pretax_credit_amounts: [] }]);
-    const rawBody = Buffer.from(JSON.stringify({ object: 'event', id: 'evt_' + id, livemode: false,
+    const rawBody = Buffer.from(JSON.stringify({ object: 'event', id: 'evt_' + id, livemode,
       type: 'invoice.paid', data: { object: { object: 'invoice', id } }, created: NOW, api_version: MEMBERSHIP_STRIPE_API_VERSION }));
     return { rawBody, signature: `t=${NOW},v1=${createHmac('sha256', secret).update(NOW + '.').update(rawBody).digest('hex')}` };
   }
   return { ...f, f, a, core, options, schedule, invoice, prices, transport };
 }
-await test('live mode refuses before I/O', async () => {
-  const x = await fixture(); assert.throws(() => createMembershipOwnerMigration({ ...x.options, livemode: true }));
+await test('mode must be explicit before I/O', async () => {
+  const x = await fixture(); assert.throws(() => createMembershipOwnerMigration({ ...x.options, livemode: undefined }));
 });
 await test('wrong owner cannot prepare or schedule', async () => {
   const x = await fixture(); await assert.rejects(() => x.core.schedule({ owner: 'other' }));
@@ -219,6 +220,37 @@ await test('wrong authenticated owner and wrong canonical customer refuse delive
   await assert.rejects(() => x.core.invoiceRecovery({ invoiceId: 'in_first', authenticatedOwner: 'other' }));
   x.f.bills.in_first.customer = 'cus_other'; await assert.rejects(() => x.core.webhook(event));
   assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
+});
+await test('synthetic live migration readback preserves period and first renewal grants once', async () => {
+  const x = await fixture(true);
+  assert.equal((await x.schedule()).status, 'confirmed');
+  assert.equal(x.f.posts.length, 2);
+  assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
+  x.f.now = NOW;
+  const event = x.invoice();
+  await Promise.all(Array.from({ length: 6 }, () => x.core.webhook(event)));
+  await x.core.invoiceRecovery({ invoiceId: 'in_first', authenticatedOwner: 'owner' });
+  const history = JSON.parse(await redis(['GET', membershipIncludedHistoryKey('owner')]));
+  assert.equal(history.count, 1);
+  const period = JSON.parse(await redis(['GET', history.periods[0]]));
+  assert.deepEqual([period.id_grant, period.grade_grant], [50, 15]);
+  assert.equal(await redis(['GET', 'scans:owner:id_paid_left']), '87');
+  assert.equal(await redis(['GET', 'scans:owner:paid_left']), '14');
+});
+await test('live migration refuses a test customer before schedule mutation', async () => {
+  const x = await fixture(true); x.f.customer.livemode = false;
+  await assert.rejects(x.schedule); assert.equal(x.f.posts.length, 0);
+});
+await test('live migration refuses test canonical subscription before mutation', async () => {
+  const x = await fixture(true); x.f.subscription.livemode = false;
+  await assert.rejects(x.schedule); assert.equal(x.f.posts.length, 0);
+});
+await test('live migration refuses a test invoice without credits or origin changes', async () => {
+  const x = await fixture(true); await x.schedule(); x.f.now = NOW;
+  const event = x.invoice(); x.f.bills.in_first.livemode = false;
+  await assert.rejects(() => x.core.webhook(event));
+  assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
+  assert.equal(await redis(['GET', 'pro:owner']), '{"historical":[],"amount":999}');
 });
 console.log(`${passed} passed, 0 failed`);
 process.exit(0);
