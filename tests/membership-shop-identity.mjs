@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { harness } from './_assert.mjs';
+import { publicMembershipCatalogue } from '../api/_membershipPurchaseRoutes.js';
 const t = harness('membership-shop-identity');
 const source = fs.readFileSync(new URL('../js/membership-shop.js', import.meta.url), 'utf8');
 const later = () => { let resolve; const promise = new Promise(r => resolve = r); return { promise, resolve }; };
@@ -11,6 +12,8 @@ const flush = () => new Promise(r => setImmediate(r));
 const walk = e => [e, ...e.children.flatMap(walk)];
 class Element {
   constructor(tag) { this.tag = tag; this.children = []; this.disabled = false; this.listeners = {}; }
+  get textContent() { return (this.text || '') + this.children.map(x => x.textContent || '').join(''); }
+  set textContent(value) { this.text = value; this.children = []; }
   append(x) { this.children.push(x); }
   setAttribute() {}
   addEventListener(name, fn) { this.listeners[name] = fn; }
@@ -21,11 +24,11 @@ class Element {
   focus() {}
 }
 const user = owner => ({ uid: owner, getIdToken: async () => 'synthetic_token_' + owner });
-function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount } = {}) {
+function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false } = {}) {
   const body = new Element('body'), requests = [], navigations = [];
   const window = { googleUser: initial, _waitForAuth: async () => {} };
   const history = { state, replaceState(value) { this.state = value; } };
-  const catalogue = { plans: [], purchaseEnabled: true, packs: [
+  const catalogue = suppliedCatalogue || { plans: [], purchaseEnabled: true, packs: [
     { packId: 'id_25', kind: 'id', credits: 25, amountCents: 299 },
     { packId: 'id_100', kind: 'id', credits: 100, amountCents: 999 },
   ] };
@@ -39,6 +42,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
         : { ok: false, status: 503, json: async () => ({ error: 'not_enabled' }) };
       if (url.includes('catalogue')) {
         if (onCatalogue) await onCatalogue(options);
+        if (rejectAuth && options.headers?.Authorization) return { ok: false, status: 401, json: async () => ({ error: 'authentication_required' }) };
         return { ok: true, status: 200, json: async () => catalogue };
       }
       requests.push({ auth: options.headers.Authorization, request: JSON.parse(options.body) });
@@ -50,6 +54,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
     buttons: () => walk(body).filter(e => e.tag === 'button' && /ID credits/.test(e.textContent || '')),
     controls: () => walk(body).filter(e => e.tag === 'button'),
     links: () => walk(body).filter(e => e.tag === 'a'),
+    elements: () => walk(body),
     message: () => walk(body).filter(e => e.tag === 'p').map(e => e.textContent).join(' '),
   };
 }
@@ -176,7 +181,63 @@ await t.section('normal signed-out shop entry reaches existing sign-in', async (
     /Sign in to verify/.test(h.message()) && !/Purchases are not enabled/.test(h.message()));
   t.check('sign-in preserves the same-origin membership return path',
     h.links().some(a => a.href === '/signin?next=%2F%3Fshop%3D1'));
-  t.check('signed-out packs remain disabled', h.buttons().every(b => b.disabled));
+  await h.buttons()[0].onclick();
+  t.check('signed-out packs navigate to sign-in without a checkout request',
+    h.requests.length === 0 && h.navigations[0] === '/signin?next=%2F%3Fshop%3D1');
+});
+await t.section('rejected billing authentication has a recovery link, not silent dead controls', async () => {
+  const h = setup({ rejectAuth: true }); await h.open();
+  t.check('401 explains rejected sign-in rather than successful pricing',
+    /sign-in was not accepted for billing/.test(h.message()) && !/Membership pricing verified/.test(h.message()));
+  t.check('401 retains safe existing sign-in route and sends no purchase',
+    h.links().some(x => x.textContent === 'Sign in again to verify billing' && x.href === '/signin?next=%2F%3Fshop%3D1') && h.requests.length === 0);
+});
+await t.section('separate subscription navigation and seven exact pack selections', async () => {
+  for (const plan of ['free', 'starter', 'casual', 'pro', 'business']) {
+    const catalogue = { ...publicMembershipCatalogue(plan), purchaseEnabled: true, newSubscriptionAllowed: true };
+    for (const pack of catalogue.packs) {
+      const h = setup({ suppliedCatalogue: catalogue }); await h.open();
+      const label = `${pack.credits.toLocaleString()} ${pack.kind === 'id' ? 'ID' : 'Grade'} credits`;
+      const b = h.controls().find(b => b.textContent.startsWith(label));
+      t.check(`${plan}/${pack.packId} displays server quoted cents`, b?.textContent.endsWith('$' + (pack.amountCents / 100).toFixed(2)));
+      await b.onclick();
+      t.check(`${plan}/${pack.packId} sends exact selection without client financial authority`,
+        h.requests.length === 1 && h.requests[0].request.kind === 'pack' &&
+        h.requests[0].request.selection === pack.packId &&
+        Object.keys(h.requests[0].request).sort().join() === 'kind,requestId,selection');
+    }
+  }
+  const c = { ...publicMembershipCatalogue(), purchaseEnabled: true, newSubscriptionAllowed: true };
+  const h = setup({ suppliedCatalogue: c }); await h.window.openPricingModal();
+  t.check('existing pricing entry opens separate five-card Subscriptions view',
+    h.elements().filter(x => x.tag === 'article').length === 5 && h.buttons().length === 0 &&
+    h.elements().some(x => x.tag === 'h2' && x.textContent === 'Subscriptions'));
+  for (const plan of c.plans.filter(x => x.id !== 'free')) {
+    const s = setup({ suppliedCatalogue: c }); await s.window.openSubscriptions();
+    await s.controls().find(b => b.textContent === 'Choose ' + plan.name).onclick();
+    t.check(`${plan.id} subscription selection preserved`, s.requests[0].request.kind === 'subscription' && s.requests[0].request.selection === plan.id);
+  }
+  await h.controls().find(b => b.textContent === 'Open credit-pack shop').onclick();
+  t.check('Shop contains seven packs, two distinct headings and no plan cards',
+    h.elements().filter(x => x.tag === 'article').length === 0 &&
+    h.elements().filter(x => x.tag === 'strong' && x.className === 'membership-pack-price').length === 7 &&
+    h.elements().some(x => x.tag === 'h3' && x.textContent === 'ID / Scan Credits') &&
+    h.elements().some(x => x.tag === 'h3' && x.textContent === 'Grade Credits'));
+  const signedOut = setup({ initial: null, suppliedCatalogue: c }); await signedOut.window.openSubscriptions();
+  await signedOut.controls().find(b => b.textContent === 'Sign in to choose Casual').onclick();
+  t.check('subscription sign-in returns to subscriptions, not packs',
+    signedOut.navigations[0] === '/signin?next=%2F%3Fsubscriptions%3D1' && signedOut.requests.length === 0);
+  for (const current of ['free', 'casual', 'legacy']) {
+    const a = setup({ suppliedCatalogue: { ...c, currentPlan: current === 'legacy' ? 'business' : current },
+      onAccount: async () => ({ ok: true, json: async () => ({
+        state: { subscriptionId: current === 'free' ? null : 'sub_synthetic', snapshot: { plan: current } },
+        credits: { tier: current }, creditsAvailable: false, management: { portal: current !== 'free' }
+      }) }) });
+    await a.window.openSubscriptions();
+    t.check(`${current} current-plan indicator follows account not discount context`,
+      current === 'legacy' ? /Current plan: existing legacy/.test(a.message()) && !a.controls().some(x => x.textContent === 'Current plan')
+        : a.elements().some(x => x.tag === 'article' && x.textContent.startsWith('Current plan' + current[0].toUpperCase() + current.slice(1))));
+  }
 });
 await t.section('association automatically refreshes normal account flow', async () => {
   let associated = false, gets = 0;
