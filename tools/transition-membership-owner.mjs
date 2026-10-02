@@ -70,12 +70,13 @@ async function inspectImportComparisons(execute) {
 local p=cjson.decode(ARGV[1]); local rows={}
 for i,key in ipairs(KEYS) do
  local raw=redis.call('GET',key); local before=p[i]
- local matches=not ((before==cjson.null and raw) or (before~=cjson.null and raw~=before))
- table.insert(rows,{slot=i,redisType=type(raw),expectedType=type(before),matches=matches})
+ local matches=not ((not before.exists and raw) or (before.exists and raw~=before.value))
+ table.insert(rows,{slot=i,redisType=type(raw),expectedPresent=before.exists,matches=matches})
 end
 return cjson.encode({rows=rows,fence=redis.call('GET','membership:launch-v2:legacy_fence'),
  fenceTTL=redis.call('TTL','membership:launch-v2:legacy_fence')})`;
-  return JSON.parse(await execute(['EVAL', script, keys.length, ...keys, JSON.stringify(observed)]));
+  return JSON.parse(await execute(['EVAL', script, keys.length, ...keys,
+    JSON.stringify(observed.map(value => ({ exists: value !== null, value: value ?? '' })))]));
 }
 export async function transitionMembershipOwner({ stage = 'inspect', env = process.env,
   execute = membershipRedis, fetchImpl = fetch } = {}) {
@@ -113,7 +114,12 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'
     && env.MEMBERSHIP_CUTOVER_PAUSED === 'enabled', 'transition_not_armed_or_purchasing_active');
   let evidence; try { evidence = JSON.parse(env.MEMBERSHIP_OWNER_TRANSITION_EVIDENCE); } catch {}
-  const cutover = validateProductionCutoverEvidence(evidence, commit);
+  const cutover = validateProductionCutoverEvidence(evidence, evidence?.releaseCommit);
+  // Bounded correction bridge: the failed first import installed this receipt
+  // but no owner authority. Keep those exact historical bytes; never replace
+  // them with a fabricated new rotation or backup record.
+  insist(evidence.releaseCommit === commit || (evidence.releaseCommit === '7b1e0fd93e21b84c763fade15b5014612faacedd'
+    && await execute(['GET', CUTOVER_KEY]) === cutover), 'cutover_commit_bridge_unconfirmed');
   if (stage === 'apply') {
     const installed = await execute(['EVAL', INSTALL, 2,
       'membership:launch-v2:legacy_fence', CUTOVER_KEY, cutover]);

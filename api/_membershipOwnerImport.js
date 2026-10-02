@@ -44,13 +44,17 @@ if redis.call('GET',KEYS[1])~='1' or redis.call('TTL',KEYS[1])~=-1 then return 0
 local p=cjson.decode(ARGV[1])
 local now=tonumber(redis.call('TIME')[1])
 if now<p.start or now>=p.finish then return 0 end
+if #p.before~=#KEYS-1 or #p.after~=#KEYS-1 then return 0 end
 for i=2,#KEYS do
  local raw=redis.call('GET',KEYS[i]); local before=p.before[i-1]
- if (before==cjson.null and raw) or (before~=cjson.null and raw~=before) then return 0 end
+ local after=p.after[i-1]
+ if type(before)~='table' or type(before.exists)~='boolean' or type(before.value)~='string'
+   or type(after)~='table' or type(after.write)~='boolean' or type(after.value)~='string' then return 0 end
+ if (not before.exists and raw) or (before.exists and raw~=before.value) then return 0 end
 end
 for i=2,#KEYS do
- local value=p.after[i-1]
- if value~=cjson.null then redis.call('SET',KEYS[i],value) end
+ local after=p.after[i-1]
+ if after.write then redis.call('SET',KEYS[i],after.value) end
 end
 return 1`;
 export function createMembershipOwnerImport({ execute, accountId, livemode, authorization,
@@ -145,8 +149,11 @@ export function createMembershipOwnerImport({ execute, accountId, livemode, auth
     }
     const keys = [prefix + 'legacy_fence', ...observedKeys, ...writes.map(([key]) => key)];
     const result = await execute(['EVAL', CAS, keys.length, ...keys, JSON.stringify({
-      start, finish, before: [...observed, ...priorWrites],
-      after: [...observed.map(() => null), ...writes.map(([, value]) => JSON.stringify(value))],
+      // Dense cells: managed cjson may drop null array elements. A missing key
+      // and a no-write slot must retain their position without JSON null.
+      start, finish, before: [...observed, ...priorWrites].map(value => ({ exists: value !== null, value: value ?? '' })),
+      after: [...observed.map(() => ({ write: false, value: '' })),
+        ...writes.map(([, value]) => ({ write: true, value: JSON.stringify(value) }))],
     })]);
     if (result !== 1) {
       insist(await readOwnerImport(execute, accountId, livemode, a.owner), 'owner_import_retry_required');

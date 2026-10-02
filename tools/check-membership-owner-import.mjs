@@ -6,6 +6,8 @@ import { createMembershipConsumption } from '../api/_membershipConsumption.js';
 import { membershipIncludedHistoryKey, membershipWelcomeKeys, grantMembership } from '../api/_membershipLedger.js';
 import { validateProductionCutoverEvidence, PRODUCTION_DATABASE, PRODUCTION_ENDPOINT_DIGEST, authorization } from './transition-membership-owner.mjs';
 import { membershipSubscriptionAdmission } from '../api/_membershipPurchaseRuntime.js';
+import { withManagedNullArrayLoss, compactNullArrays } from './_managedNullArrayTransport.mjs';
+import { execFileSync } from 'node:child_process';
 const sha = x => createHash('sha256').update(x).digest('hex');
 let passed = 0;
 const test = async (name, fn) => { await fn(); passed++; console.log('PASS ' + name); };
@@ -173,6 +175,30 @@ await test('lost imported subscription lineage cannot permit a second subscripti
   const free = { ...e, plan: 'free' }; delete free.subscription;
   assert.equal(membershipSubscriptionAdmission('owner', free, {}), true);
   assert.equal(membershipSubscriptionAdmission('owner', free, {}, true), false);
+});
+await test('managed null-array loss reproduces old refusal and dense import preserves every source', async () => {
+  const f = await fixture();
+  const original = execFileSync('git', ['show', '7b1e0fd93e21b84c763fade15b5014612faacedd:api/_membershipOwnerImport.js'],
+    { cwd: new URL('../', import.meta.url), encoding: 'utf8' }).match(/const CAS = `([\s\S]*?)`;/)[1];
+  let captured;
+  const capture = createMembershipOwnerImport({ ...f.options, execute: async args => {
+    if (args[0] === 'EVAL') { captured = args; return 0; }
+    return redis(args);
+  } });
+  await assert.rejects(capture);
+  const index = 3 + captured[2], p = JSON.parse(captured[index]);
+  const old = { ...p, before: p.before.map(cell => cell.exists ? cell.value : null),
+    after: p.after.map(cell => cell.write ? cell.value : null) };
+  assert.ok(old.before.some(v => v === null));
+  const oldCommand = [...captured]; oldCommand[1] = original;
+  oldCommand[index] = JSON.stringify(compactNullArrays(old));
+  assert.equal(await redis(oldCommand), 0);
+  assert.equal(await readOwnerImport(redis, 'acct_test', false, 'owner'), null);
+  await f.unchanged();
+  const fixed = createMembershipOwnerImport({ ...f.options, execute: withManagedNullArrayLoss(redis) });
+  assert.equal((await fixed()).status, 'imported');
+  assert.equal((await fixed()).status, 'replayed');
+  await f.unchanged();
 });
 console.log(`${passed} passed, 0 failed`);
 process.exit(0);

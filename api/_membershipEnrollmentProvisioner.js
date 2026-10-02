@@ -10,12 +10,14 @@ const fail = () => { throw Object.assign(Error('enrollment_review_required'), { 
 const SCRIPT = `
 if redis.call('GET',KEYS[1])~='1' then return 0 end
 local p=cjson.decode(ARGV[1])
+if #p.expected~=#KEYS-1 or type(p.audit)~='string' then return 0 end
 for i=2,#KEYS do
  local actual=redis.call('GET',KEYS[i])
  local expected=p.expected[i-1]
- if expected==cjson.null then
+ if type(expected)~='table' or type(expected.exists)~='boolean' or type(expected.value)~='string' then return 0 end
+ if not expected.exists then
   if actual then return 0 end
- elseif actual~=expected then return 0 end
+ elseif actual~=expected.value then return 0 end
 end
 redis.call('SET',KEYS[2],p.audit)
 return 1`;
@@ -48,7 +50,7 @@ export function createMembershipEnrollmentProvisioner({ execute, accountId, envi
       // request. Historical standing balances and welcome markers are CAS
       // observations only and remain byte-identical.
       const ok = await execute(['EVAL', SCRIPT, keys.length, ...keys, JSON.stringify({
-        expected, audit: JSON.stringify(audit),
+        expected: expected.map(value => ({ exists: value !== null, value: value ?? '' })), audit: JSON.stringify(audit),
       })]);
       if (ok === 1) return { status: 'audit_created' };
     }

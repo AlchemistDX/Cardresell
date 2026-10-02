@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { redisCommand as execute } from '../tests/_idRedis.mjs';
+import { redisCommand } from '../tests/_idRedis.mjs';
+import { withManagedNullArrayLoss } from './_managedNullArrayTransport.mjs';
+const execute = withManagedNullArrayLoss(redisCommand);
 import { createMembershipFreeIssuance } from '../api/_membershipFreeIssuance.js';
 import { membershipEnrollmentKey } from '../api/_membershipConsumption.js';
 import { membershipIncludedHistoryKey } from '../api/_membershipLedger.js';

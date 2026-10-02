@@ -21,16 +21,20 @@ if redis.call('GET',KEYS[1])~='1' then return 0 end
 local p=cjson.decode(ARGV[1])
 local now=tonumber(redis.call('TIME')[1])
 if now<p.monthStart or now>=p.monthEnd then return 0 end
+if #p.expected~=#KEYS-1 or #p.values~=#KEYS-1 then return 0 end
 for i=2,#KEYS do
  local actual=redis.call('GET',KEYS[i])
  local expected=p.expected[i-1]
- if expected==cjson.null then
+ local after=p.values[i-1]
+ if type(expected)~='table' or type(expected.exists)~='boolean' or type(expected.value)~='string'
+   or type(after)~='table' or type(after.write)~='boolean' or type(after.value)~='string' then return 0 end
+ if not expected.exists then
   if actual then return 0 end
- elseif actual~=expected then return 0 end
+ elseif actual~=expected.value then return 0 end
 end
 for i=2,#KEYS do
- local value=p.values[i-1]
- if value~=cjson.null then redis.call('SET',KEYS[i],value) end
+ local after=p.values[i-1]
+ if after.write then redis.call('SET',KEYS[i],after.value) end
 end
 return 1`;
 
@@ -104,7 +108,9 @@ export function createMembershipFreeIssuance({ execute }) {
       values[0] = JSON.stringify({ ...enrollment, freeThrough: current });
       values[1] = JSON.stringify(history);
       if (await execute(['EVAL', SCRIPT, keys.length, ...keys, JSON.stringify({
-        monthStart: current, monthEnd: nextMonth(current), expected, values,
+        monthStart: current, monthEnd: nextMonth(current),
+        expected: expected.map(value => ({ exists: value !== null, value: value ?? '' })),
+        values: values.map(value => ({ write: value !== null, value: value ?? '' })),
       })]) === 1) return { status: allocations ? 'issued' : 'replayed', allocations };
     }
     unavailable();
