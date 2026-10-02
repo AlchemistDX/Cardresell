@@ -26,37 +26,46 @@ const jsonBytes = (bytes, code) => {
 };
 const limits = MEMBERSHIP_STRIPE_LIMITS;
 
-// Future handler MUST declare config = { api: { bodyParser: false } } itself.
-// No parsed/string req.body reconstruction: HMAC requires original request bytes.
+// Keep bodyParser:false for frameworks that honor it. The plain @vercel/node
+// runtime instead installs a LAZY req.body getter and restores the original
+// byte stream. Never evaluate that getter: JSON parsing must follow HMAC.
+// No parsed/string req.body reconstruction is allowed.
 export async function readMembershipWebhookBody(req) {
-  insist(req && req.body === undefined && typeof req[Symbol.asyncIterator] === 'function', 'body_invalid');
+  const descriptor = req && Object.getOwnPropertyDescriptor(req, 'body');
+  insist(req && typeof req.on === 'function'
+    && (!descriptor || typeof descriptor.get === 'function' || descriptor.value === undefined), 'body_invalid');
   const type = req.headers?.['content-type'], encoding = req.headers?.['content-encoding'];
   insist(typeof type === 'string' && /^application\/json(?:\s*;.*)?$/i.test(type)
     && (encoding === undefined || encoding === 'identity'), 'body_invalid');
   const length = req.headers?.['content-length'];
   if (length !== undefined) insist(typeof length === 'string' && /^\d+$/.test(length)
     && Number.isSafeInteger(Number(length)) && Number(length) <= limits.bodyBytes, 'body_limit');
-  let timer, size = 0, timedOut = false;
-  const reader = async () => {
+  // Vercel restores data/end listeners, not the already-consumed incoming
+  // stream's internal async-iterator state. Consume those raw events directly.
+  return new Promise((resolve, reject) => {
+    let size = 0, settled = false;
     const chunks = [];
-    for await (const chunk of req) {
-      insist(!timedOut && !req.aborted && chunk instanceof Uint8Array, 'body_invalid');
+    const finish = code => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (code) {
+        req.destroy?.();
+        reject(new MembershipStripeError(code));
+      } else resolve(Buffer.concat(chunks));
+    };
+    const timer = setTimeout(() => finish('body_timeout'), limits.timeoutMs);
+    req.on('error', () => finish('body_invalid'));
+    req.on('aborted', () => finish('body_invalid'));
+    req.on('data', chunk => {
+      if (settled) return;
+      if (req.aborted || !(chunk instanceof Uint8Array)) return finish('body_invalid');
       size += chunk.byteLength;
-      insist(size <= limits.bodyBytes, 'body_limit');
+      if (size > limits.bodyBytes) return finish('body_limit');
       chunks.push(Buffer.from(chunk));
-    }
-    insist(!req.aborted && size > 0 && (length === undefined || size === Number(length)), 'body_invalid');
-    return Buffer.concat(chunks);
-  };
-  try {
-    return await Promise.race([reader(), new Promise((_, reject) => {
-      timer = setTimeout(() => { timedOut = true; req.destroy?.(); reject(new MembershipStripeError('body_timeout')); }, limits.timeoutMs);
-    })]);
-  } catch (error) {
-    req.destroy?.();
-    if (error instanceof MembershipStripeError) throw error;
-    return fail('body_invalid'); // Never expose request/provider error text.
-  } finally { clearTimeout(timer); }
+    });
+    req.on('end', () => finish(req.aborted || size === 0
+      || (length !== undefined && size !== Number(length)) ? 'body_invalid' : null));
+  });
 }
 
 export function createMembershipStripeTransport({

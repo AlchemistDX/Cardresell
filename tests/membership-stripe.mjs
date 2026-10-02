@@ -107,6 +107,26 @@ await t.section('Raw body reader accepts bytes only and enforces bounds', async 
   await rejects('Empty body', () => readMembershipWebhookBody(stream([])), 'body_invalid');
   const failed = new Readable({ read() { this.destroy(new Error('private-upstream-detail')); } }); failed.headers = { 'content-type': 'application/json' };
   await rejects('Stream error sanitized', () => readMembershipWebhookBody(failed), 'body_invalid');
+  const lazy = stream([body]); let parsedReads = 0;
+  Object.defineProperty(lazy, 'body', { get() { parsedReads++; throw Error('must not parse before HMAC'); } });
+  const lazyRaw = await readMembershipWebhookBody(lazy);
+  t.check('Vercel lazy body getter is never evaluated', parsedReads === 0);
+  t.check('Lazy parser cannot change original signed bytes', lazyRaw.equals(body));
+  const f = fixture();
+  t.check('Exact lazy-body bytes verify against their signature', f.client.verifyWebhook(lazyRaw, signature(body)).id === evt().id);
+
+  // Reproduce Vercel addHelpers/restoreBody after IncomingMessage was consumed.
+  const consumed = new Readable({ autoDestroy: false, read() { this.push(null); } });
+  for await (const _ of consumed) {}
+  consumed.headers = { 'content-type': 'application/json', 'content-length': String(body.length) };
+  const restored = stream([body.subarray(0, 5), body.subarray(5)]);
+  const originalOn = consumed.on.bind(consumed);
+  consumed.read = restored.read.bind(restored);
+  consumed.on = consumed.addListener = (name, cb) =>
+    ['data', 'end'].includes(name) ? restored.on(name, cb) : originalOn(name, cb);
+  Object.defineProperty(consumed, 'body', { get() { throw Error('unexpected JSON parser'); } });
+  t.check('Already-consumed Vercel request uses restored raw events',
+    (await readMembershipWebhookBody(consumed)).equals(body));
 });
 
 await t.section('Pinned fixed-origin canonical retrieval and account/mode fence', async () => {
