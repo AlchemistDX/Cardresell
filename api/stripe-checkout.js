@@ -2,6 +2,7 @@
 // Authorization: Bearer <firebase_or_google_id_token> (required)
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,6 +10,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!await legacyRouteAllowed(res)) return;
 
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
   if (!idToken || idToken.length < 20) {

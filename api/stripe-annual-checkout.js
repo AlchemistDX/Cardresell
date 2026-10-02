@@ -6,6 +6,7 @@
 // NEVER from the body — prevents identity spoofing on checkout metadata.
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 const ANNUAL_PRICE_FALLBACK = 'price_1TosPSFW2YZoedIZ5e0abG3y'; // $89.99/yr
 
@@ -15,6 +16,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!await legacyRouteAllowed(res)) return;
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const priceId = process.env.STRIPE_PRICE_ANNUAL_ID || ANNUAL_PRICE_FALLBACK;

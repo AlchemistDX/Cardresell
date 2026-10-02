@@ -2,6 +2,7 @@
 // POST body: { tier: '10' | '40' | '80', email?, userId?, name? }
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { legacyRouteAllowed } from './_membershipLegacyFence.js';
 import { getUserTier, TIER_BENEFITS } from './_tier.js';
 
 export default async function handler(req, res) {
@@ -10,6 +11,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!await legacyRouteAllowed(res)) return;
 
   const body    = req.body || {};
   const tier    = String(body.tier || '10'); // '10', '50', '100'

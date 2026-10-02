@@ -197,4 +197,17 @@ await t.section('association automatically refreshes normal account flow', async
   t.check('refresh replaces association control with portal', !h.controls().some(b => /Set up your billing account/.test(b.textContent))
     && h.controls().some(b => /Manage billing in Stripe/.test(b.textContent)));
 });
+await t.section('legacy profile billing entry uses the verified membership account flow', async () => {
+  let accountReads = 0;
+  const h = setup({ onAccount: async () => {
+    accountReads++;
+    return { ok: true, status: 200, json: async () => ({
+      state: { status: 'associated' }, management: { portal: true }, creditsAvailable: false,
+    }) };
+  } });
+  await h.window.openBillingPortal();
+  t.check('profile billing entry opens new account projection', accountReads === 1);
+  t.check('only verified portal control is offered', h.controls().some(b => /Manage billing in Stripe/.test(b.textContent)));
+  t.check('legacy email-search portal request never sent', h.requests.length === 0 && h.navigations.length === 0);
+});
 t.done();

@@ -57,4 +57,39 @@ await test('cutover blocks legacy mutations, new billing routes and purchase run
     if (old === undefined) delete process.env.MEMBERSHIP_CUTOVER_PAUSED; else process.env.MEMBERSHIP_CUTOVER_PAUSED = old;
   }
 });
+for (const name of ['stripe-checkout', 'stripe-annual-checkout', 'stripe-subscription-checkout',
+  'stripe-id-checkout', 'stripe-grade-checkout', 'stripe-portal']) {
+  await test(`${name} refuses pause and sticky fence before any Stripe request`, async () => {
+    const handler = (await import(`../api/${name}.js`)).default;
+    const names = ['MEMBERSHIP_CUTOVER_PAUSED', 'MEMBERSHIP_BILLING_V2', 'KV_REST_API_URL', 'KV_REST_API_TOKEN'];
+    const prior = Object.fromEntries(names.map(n => [n, process.env[n]]));
+    const savedFetch = globalThis.fetch; let calls = 0;
+    const response = () => ({ statusCode: 0, setHeader() {}, status(n) { this.statusCode = n; return this; },
+      json(body) { this.body = body; return this; }, end() {} });
+    try {
+      process.env.MEMBERSHIP_CUTOVER_PAUSED = 'enabled';
+      globalThis.fetch = async () => { throw Error('no outbound call allowed while paused'); };
+      const paused = response();
+      await handler({ method: 'POST', headers: {}, body: {} }, paused);
+      assert.equal(paused.statusCode, 503);
+      delete process.env.MEMBERSHIP_CUTOVER_PAUSED;
+      delete process.env.MEMBERSHIP_BILLING_V2;
+      process.env.KV_REST_API_URL = 'https://synthetic.upstash.io';
+      process.env.KV_REST_API_TOKEN = 'synthetic';
+      globalThis.fetch = async (url, options) => {
+        assert.equal(new URL(url).hostname, 'synthetic.upstash.io');
+        assert.deepEqual(JSON.parse(options.body), ['GET', MEMBERSHIP_LEGACY_FENCE]);
+        calls++;
+        return new Response('{"result":"1"}', { status: 200 });
+      };
+      const fenced = response();
+      await handler({ method: 'POST', headers: {}, body: {} }, fenced);
+      assert.equal(fenced.statusCode, 503);
+      assert.equal(calls, 1);
+    } finally {
+      globalThis.fetch = savedFetch;
+      for (const n of names) { if (prior[n] === undefined) delete process.env[n]; else process.env[n] = prior[n]; }
+    }
+  });
+}
 console.log(`${passed} passed, 0 failed`);

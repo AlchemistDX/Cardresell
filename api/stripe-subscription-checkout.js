@@ -16,6 +16,7 @@
 // that wants a single unified path.
 
 import { verifyTokenFlexible } from './_verifyToken.js';
+import { legacyRouteAllowed } from './_membershipLegacyFence.js';
 
 // Fallback hardcoded price IDs (for tiers without env vars — mirrors legacy annual endpoint pattern)
 const PRICE_FALLBACK = {
@@ -53,6 +54,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!await legacyRouteAllowed(res)) return;
 
   const body    = req.body || {};
   const idToken = (req.headers['authorization'] || '').replace('Bearer ', '').trim();
