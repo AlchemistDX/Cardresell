@@ -15,6 +15,7 @@ import { grantMembership, membershipIncludedHistoryKey, membershipWelcomeKeys } 
 import { reconcilePaidEnrollment } from '../api/_membershipPaidEnrollment.js';
 import { createMembershipConsumption, membershipEnrollmentKey } from '../api/_membershipConsumption.js';
 import { readMembershipVerification } from '../api/_membershipVerification.js';
+import { inspectMembershipCheckout } from './inspect-membership-checkout.mjs';
 const sha = x => createHash('sha256').update(x).digest('hex');
 const insist = (v, code) => { if (!v) throw Error(code); };
 export const OWNER = 'fzUpcrXKDdQzGORl0bLQ6mTwML73';
@@ -123,7 +124,8 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     fence: await execute(['GET', 'membership:launch-v2:legacy_fence']),
     legacyDigest: sha(raw), backupRequired: true,
     importComparisonReadOnly: await inspectImportComparisons(execute),
-    verificationReadOnly: await inspectVerification(execute) };
+    verificationReadOnly: await inspectVerification(execute),
+    checkoutReadOnly: await inspectMembershipCheckout({ execute, config, owner: OWNER, fetchImpl }) };
   const commit = env.MEMBERSHIP_OWNER_TRANSITION_COMMIT;
   insist(/^[a-f0-9]{40}$/.test(commit || '') && commit === env.VERCEL_GIT_COMMIT_SHA
     && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'
