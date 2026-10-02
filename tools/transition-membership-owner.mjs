@@ -11,9 +11,9 @@ import { createMembershipCustomerStripe } from '../api/_membershipCustomerStripe
 import { createMembershipCustomers } from '../api/_membershipCustomer.js';
 import { createMembershipOwnerImport, readOwnerImport } from '../api/_membershipOwnerImport.js';
 import { createMembershipOwnerMigration } from '../api/_membershipOwnerMigration.js';
-import { grantMembership } from '../api/_membershipLedger.js';
+import { grantMembership, membershipIncludedHistoryKey, membershipWelcomeKeys } from '../api/_membershipLedger.js';
 import { reconcilePaidEnrollment } from '../api/_membershipPaidEnrollment.js';
-import { createMembershipConsumption } from '../api/_membershipConsumption.js';
+import { createMembershipConsumption, membershipEnrollmentKey } from '../api/_membershipConsumption.js';
 const sha = x => createHash('sha256').update(x).digest('hex');
 const insist = (v, code) => { if (!v) throw Error(code); };
 export const OWNER = 'fzUpcrXKDdQzGORl0bLQ6mTwML73';
@@ -54,6 +54,29 @@ export function validateProductionCutoverEvidence(value, commit) {
   'production_backup_and_revocation_evidence_required');
   return JSON.stringify(value);
 }
+async function inspectImportComparisons(execute) {
+  const clock = await execute(['TIME']), now = Number(clock[0]), date = new Date(now * 1000);
+  const stamp = `${date.getUTCFullYear()}_${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  const start = Math.max(authorization.periodStart, Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000);
+  const welcome = membershipWelcomeKeys(OWNER);
+  const keys = [CUTOVER_KEY, `pro:${OWNER}`, `scans:${OWNER}:id_free_used_${stamp}`,
+    `scans:${OWNER}:free_used_${stamp}`, `scans:${OWNER}:id_paid_left`, `scans:${OWNER}:paid_left`,
+    `signup_bonus:${OWNER}`, welcome.id, welcome.grade, membershipEnrollmentKey(OWNER),
+    membershipIncludedHistoryKey(OWNER), 'membership:launch-v2:active:' + sha(OWNER),
+    'membership:launch-v2:subscription:' + sha(authorization.subscriptionId),
+    'membership:launch-v2:period:' + sha(`${authorization.subscriptionId}:${start}`)];
+  const observed = await Promise.all(keys.map(key => execute(['GET', key])));
+  const script = `
+local p=cjson.decode(ARGV[1]); local rows={}
+for i,key in ipairs(KEYS) do
+ local raw=redis.call('GET',key); local before=p[i]
+ local matches=not ((before==cjson.null and raw) or (before~=cjson.null and raw~=before))
+ table.insert(rows,{slot=i,redisType=type(raw),expectedType=type(before),matches=matches})
+end
+return cjson.encode({rows=rows,fence=redis.call('GET','membership:launch-v2:legacy_fence'),
+ fenceTTL=redis.call('TTL','membership:launch-v2:legacy_fence')})`;
+  return JSON.parse(await execute(['EVAL', script, keys.length, ...keys, JSON.stringify(observed)]));
+}
 export async function transitionMembershipOwner({ stage = 'inspect', env = process.env,
   execute = membershipRedis, fetchImpl = fetch } = {}) {
   insist(['inspect', 'apply', 'schedule'].includes(stage), 'invalid_stage');
@@ -83,7 +106,8 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     currentPeriodStart: snapshot.periodStart, currentPeriodEnd: snapshot.periodEnd,
     schedulePresent: snapshot.scheduleId !== null, imported: !!imported,
     fence: await execute(['GET', 'membership:launch-v2:legacy_fence']),
-    legacyDigest: sha(raw), backupRequired: true };
+    legacyDigest: sha(raw), backupRequired: true,
+    importComparisonReadOnly: await inspectImportComparisons(execute) };
   const commit = env.MEMBERSHIP_OWNER_TRANSITION_COMMIT;
   insist(/^[a-f0-9]{40}$/.test(commit || '') && commit === env.VERCEL_GIT_COMMIT_SHA
     && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'
