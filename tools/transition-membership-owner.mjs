@@ -78,6 +78,18 @@ return cjson.encode({rows=rows,fence=redis.call('GET','membership:launch-v2:lega
   return JSON.parse(await execute(['EVAL', script, keys.length, ...keys,
     JSON.stringify(observed.map(value => ({ exists: value !== null, value: value ?? '' })))]));
 }
+async function inspectVerification(execute) {
+  const raw = await execute(['GET', `email_verified:${OWNER}`]);
+  const alias = await execute(['GET', `verified_email:${OWNER}`]);
+  let record; try { record = JSON.parse(raw); } catch {}
+  return { present: raw !== null, rawType: typeof raw,
+    recordType: record === null ? 'null' : Array.isArray(record) ? 'array' : typeof record,
+    via: ['code', 'firebase_link'].includes(record?.via) ? record.via : 'unrecognized',
+    validTimestamp: typeof record?.verifiedAt === 'string' && Number.isFinite(Date.parse(record.verifiedAt)),
+    hasEmail: typeof record?.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email),
+    aliasPresent: alias !== null, aliasMatches: typeof record?.email === 'string' && alias === record.email,
+    mutated: false };
+}
 export async function transitionMembershipOwner({ stage = 'inspect', env = process.env,
   execute = membershipRedis, fetchImpl = fetch } = {}) {
   insist(['inspect', 'apply', 'schedule'].includes(stage), 'invalid_stage');
@@ -108,7 +120,8 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     schedulePresent: snapshot.scheduleId !== null, imported: !!imported,
     fence: await execute(['GET', 'membership:launch-v2:legacy_fence']),
     legacyDigest: sha(raw), backupRequired: true,
-    importComparisonReadOnly: await inspectImportComparisons(execute) };
+    importComparisonReadOnly: await inspectImportComparisons(execute),
+    verificationReadOnly: await inspectVerification(execute) };
   const commit = env.MEMBERSHIP_OWNER_TRANSITION_COMMIT;
   insist(/^[a-f0-9]{40}$/.test(commit || '') && commit === env.VERCEL_GIT_COMMIT_SHA
     && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'
