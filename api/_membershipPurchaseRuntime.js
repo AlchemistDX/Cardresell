@@ -64,6 +64,7 @@ export function createPurchaseContextResolver({ execute, accountId, livemode = f
   };
 }
 export async function membershipPurchaseRuntime() {
+  if (process.env.MEMBERSHIP_CUTOVER_PAUSED === 'enabled') throw Error('membership_cutover_paused');
   const livemode = process.env.VERCEL_ENV === 'production';
   const purchaseEnabled = process.env[livemode ? 'MEMBERSHIP_PURCHASE_LIVE_MODE' : 'MEMBERSHIP_PURCHASE_TEST_MODE'] === 'enabled';
   if (!purchaseEnabled && !(livemode && process.env.MEMBERSHIP_SERVICING_LIVE_MODE === 'enabled')) {

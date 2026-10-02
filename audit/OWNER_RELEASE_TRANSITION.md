@@ -10,6 +10,8 @@ This is the bounded transition for the existing owner subscription, not a histor
 - Preserve the completed provider backup before retiring old credentials. Pause owner scans and old webhook delivery during the cutover; reconcile any in-flight scan/payment before importing. Record rejected old-deployment authorization, then install the nonexpiring fence and exact cutover receipt through the executable. Do not infer rejection from a variable label.
 - Put replacement datastore bindings only in their intended environment. Rebuild the release and rollback candidates with the replacement credentials. An old candidate containing revoked credentials is not a usable rollback.
 - The optional `MEMBERSHIP_OWNER_READ_ONLY_INSPECT=enabled` build flag runs only canonical reads. The normal build hook performs no import or scheduling.
+- Only an explicitly armed operator build may set `MEMBERSHIP_OWNER_TRANSITION_STAGE=apply` or `schedule`; it must also supply the exact commit and externally observed cutover receipt. The script additionally requires `MEMBERSHIP_CUTOVER_PAUSED=enabled`. These flags are absent from ordinary builds.
+- When the dashboard has no exact backup completion timestamp, retain `completedAt: null`, `evidence: owner-dashboard-report` and a separate `completionObservedAt` report timestamp. Never invent a provider completion time.
 
 ## Import
 
@@ -30,6 +32,8 @@ Preserve permanent balances after cancellation and use Stripe Customer Portal fo
 ## Runtime controls and rollback
 
 - `MEMBERSHIP_BILLING_V2=on` requires the durable writer fence. Turning it off does not reopen legacy writers.
+- `MEMBERSHIP_CUTOVER_PAUSED=enabled` blocks both billing dispatch and legacy mutations during the coordinated transition. Keep it on until import readback succeeds.
+- `MEMBERSHIP_CUTOVER_STATUS=enabled` temporarily exposes only a fixed-datastore read-only authorization canary at `/api/membership-cutover-status` on trusted CardResell hosts. It distinguishes observed 401/403 rejection from an unconfirmed outage, without disclosing credentials. Capture its old-deployment rejection before replacing the public deployment, then disable it after verification.
 - `MEMBERSHIP_PURCHASE_LIVE_MODE=enabled` admits new purchases.
 - `MEMBERSHIP_SERVICING_LIVE_MODE=enabled` keeps account, webhook and uncertain-purchase recovery paths available when new purchases are paused.
 - `MEMBERSHIP_LIVE_AUDIENCE=owner` is the default. The one configured owner remains reserved for audited import. `public` additionally permits authenticated new-customer enrollment, but never bypasses a legacy subscription or missing owner import.

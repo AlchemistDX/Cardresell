@@ -151,13 +151,16 @@ await test('Production import requires Production receipt and mode-exact Stripe 
 await test('operator rejects absent backup, wrong database and missing rejection proof', async () => {
   const commit = 'a'.repeat(40);
   const e = { version: 1, environment: 'production', providerDatabaseId: PRODUCTION_DATABASE,
-    releaseCommit: commit, backup: { name: 'synthetic-only', status: 'Completed', completedAt: authorization.approvedAt },
+    releaseCommit: commit, backup: { name: 'synthetic-only', status: 'Completed', completedAt: null,
+      completionObservedAt: authorization.approvedAt, evidence: 'owner-dashboard-report' },
     rotation: { oldAuthorization: 'rejected', httpStatus: 401, oldDeployment: 'dpl_synthetic', evidenceId: sha('synthetic') } };
   assert.equal(validateProductionCutoverEvidence(e, commit), JSON.stringify(e));
   for (const change of [{ backup: null }, { providerDatabaseId: 'wrong' }, { rotation: null },
     { releaseCommit: 'b'.repeat(40) }, { environment: 'preview' }]) {
     assert.throws(() => validateProductionCutoverEvidence({ ...e, ...change }, commit));
   }
+  assert.throws(() => validateProductionCutoverEvidence({ ...e,
+    backup: { ...e.backup, completedAt: authorization.approvedAt } }, commit));
 });
 await test('lost imported subscription lineage cannot permit a second subscription', async () => {
   const e = { version: 'launch-v2', owner: 'owner', verified: true, plan: 'paid', subscription: 'sub_existing' };

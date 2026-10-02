@@ -1,4 +1,4 @@
-// Operator-only executable. Not an HTTP handler or a normal build hook.
+// Operator-only executable. Not an HTTP handler or an ordinary build hook.
 // inspect is read-only. apply/schedule require an exact armed commit plus
 // externally verified completed backup and old-credential rejection evidence.
 import { pathToFileURL } from 'node:url';
@@ -38,8 +38,11 @@ export function validateProductionCutoverEvidence(value, commit) {
   insist(value?.version === 1 && value.environment === 'production'
     && value.providerDatabaseId === PRODUCTION_DATABASE && value.releaseCommit === commit
     && value.backup?.status === 'Completed' && typeof value.backup.name === 'string'
-    && value.backup.name.length > 0 && Number.isSafeInteger(value.backup.completedAt)
-    && value.backup.completedAt >= authorization.approvedAt
+    && value.backup.name.length > 0
+    && value.backup.evidence === 'owner-dashboard-report'
+    && value.backup.completedAt === null
+    && Number.isSafeInteger(value.backup.completionObservedAt)
+    && value.backup.completionObservedAt >= authorization.approvedAt
     && value.rotation?.oldAuthorization === 'rejected'
     && [401, 403].includes(value.rotation.httpStatus)
     && /^dpl_[A-Za-z0-9]+$/.test(value.rotation.oldDeployment)
@@ -74,7 +77,8 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     legacyDigest: sha(raw), backupRequired: true };
   const commit = env.MEMBERSHIP_OWNER_TRANSITION_COMMIT;
   insist(/^[a-f0-9]{40}$/.test(commit || '') && commit === env.VERCEL_GIT_COMMIT_SHA
-    && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled', 'transition_not_armed_or_purchasing_active');
+    && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'
+    && env.MEMBERSHIP_CUTOVER_PAUSED === 'enabled', 'transition_not_armed_or_purchasing_active');
   let evidence; try { evidence = JSON.parse(env.MEMBERSHIP_OWNER_TRANSITION_EVIDENCE); } catch {}
   const cutover = validateProductionCutoverEvidence(evidence, commit);
   if (stage === 'apply') {

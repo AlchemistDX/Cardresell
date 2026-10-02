@@ -3,6 +3,7 @@
 // an environment flag, or this module. Removing the rollout flag cannot erase it.
 export const MEMBERSHIP_LEGACY_FENCE = 'membership:launch-v2:legacy_fence';
 export const membershipEnabled = () => process.env.MEMBERSHIP_BILLING_V2 === 'on';
+export const membershipCutoverPaused = () => process.env.MEMBERSHIP_CUTOVER_PAUSED === 'enabled';
 const prefix = `if redis.call('EXISTS','${MEMBERSHIP_LEGACY_FENCE}')==1 then error('membership_legacy_fenced') end\n`;
 const protectedKey = key => /^(scans:|id_billing:|scan_refund:|scan_refund_count:|signup_bonus:|email_bonus_claimed:|stripe_evt:|ref_claimed:|ref_count:|pro:)/.test(String(key));
 const reads = new Set(['GET', 'MGET', 'EXISTS', 'TTL', 'PTTL', 'SCAN', 'TIME', 'KEYS']);
@@ -12,6 +13,7 @@ const writes = new Set(['SET', 'SETEX', 'PSETEX', 'MSET', 'INCR', 'INCRBY', 'DEC
 export function guardLegacyCommand(args) {
   const command = String(args[0]).toUpperCase();
   if (reads.has(command)) return args;
+  if (membershipCutoverPaused()) throw new Error('membership_cutover_paused');
   if (command === 'EVAL') return ['EVAL', prefix + args[1], ...args.slice(2)];
   if (!writes.has(command)) throw new Error('unsupported_legacy_command');
   const keys = command === 'MSET' ? args.filter((_, i) => i % 2 === 1)
@@ -72,6 +74,7 @@ export async function membershipRedis(args) {
 }
 
 export async function membershipRouteMode(execute = membershipRedis) {
+  if (membershipCutoverPaused()) throw new Error('membership_cutover_paused');
   if (!process.env.KV_REST_API_URL && !membershipEnabled()) return false;
   const fence = await execute(['GET', MEMBERSHIP_LEGACY_FENCE]);
   if (fence !== null && fence !== '1') throw new Error('billing_unavailable');
