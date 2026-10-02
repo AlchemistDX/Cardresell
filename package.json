@@ -1,6 +1,0 @@
-{
-  "private": true,
-  "scripts": {
-    "vercel-build": "node tools/install-preview-writer-fence.mjs"
-  }
-}
