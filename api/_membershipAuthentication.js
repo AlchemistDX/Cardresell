@@ -3,6 +3,7 @@
 import { verifyFirebaseToken } from './_verifyToken.js';
 
 export function createMembershipAuthenticator({ verify = verifyFirebaseToken, now = Date.now,
+  resolveVerification,
   onReject = reason => console.warn('MEMBERSHIP_AUTH_REJECTED', reason) } = {}) {
   return async token => {
     let reason = 'malformed_token';
@@ -38,8 +39,13 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
       reason = 'subject_mismatch';
       if (user?.uid !== claims.sub) throw new Error();
       reason = 'email_not_verified';
-      if (user.emailVerified !== true) throw new Error();
-      return { uid: user.uid, verified: true, email: user.email };
+      if (user.emailVerified === true) return { uid: user.uid, verified: true, email: user.email };
+      // Signature/project/expiry/subject checks have already succeeded. Honor
+      // the site's preexisting server-owned verification for this exact UID.
+      const saved = typeof resolveVerification === 'function' ? await resolveVerification(user.uid) : null;
+      if (saved?.verified !== true || saved.source !== 'stored_account_verification') throw new Error();
+      return { uid: user.uid, verified: true, email: saved.email || user.email,
+        verificationSource: saved.source };
     } catch {
       try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
       throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' });

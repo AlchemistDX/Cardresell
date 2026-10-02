@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
 import { createMembershipAuthenticator } from '../api/_membershipAuthentication.js';
 import { createMembershipAccountRoutes } from '../api/_membershipAccountRoutes.js';
 import { readFileSync } from 'node:fs';
+import { readMembershipVerification } from '../api/_membershipVerification.js';
 
 // Private synthetic keys and a local public-key response only. No Firebase
 // account, managed datastore, real token or production authentication bypass.
@@ -70,7 +71,8 @@ await test('rejected identity cannot trigger account reads, bootstrap or custome
 });
 await test('runtime wires strict auth without flexible email mapping', async () => {
   const source = readFileSync(new URL('../api/_membershipPurchaseRuntime.js', import.meta.url), 'utf8');
-  assert.match(source, /const normalAuthenticate = createMembershipAuthenticator\(\)/);
+  assert.match(source, /const normalAuthenticate = createMembershipAuthenticator\(\{/);
+  assert.match(source, /resolveVerification: uid => readMembershipVerification\(membershipRedis, uid\)/);
   assert.match(source, /const identity = await normalAuthenticate\(token\)/);
   assert.match(source, /livemode && !publicLaunch && !allowed\.includes\(identity\.uid\)/);
   assert.doesNotMatch(source, /verifyTokenFlexible/);
@@ -88,5 +90,47 @@ await test('rejection diagnostics contain fixed categories only, never raw token
 await test('diagnostic callback failure cannot grant admission', async () => {
   const auth = createMembershipAuthenticator({ onReject: () => { throw Error('unavailable'); } });
   await assert.rejects(() => auth('not-a-token'), { code: 'authentication_required' });
+});
+await test('existing UID verification admits a signed account without rewriting Firebase claims or stored history', async () => {
+  const raw = JSON.stringify({ verifiedAt: new Date((seconds - 3600) * 1000).toISOString() });
+  const reads = [];
+  const resolveVerification = uid => readMembershipVerification(async command => {
+    reads.push(command); return command[1] === 'email_verified:' + base.sub ? raw : null;
+  }, uid);
+  const auth = createMembershipAuthenticator({ resolveVerification });
+  const result = await auth(token({ email_verified: false }));
+  assert.equal(result.uid, base.sub);
+  assert.equal(result.verified, true);
+  assert.equal(result.verificationSource, 'stored_account_verification');
+  assert.deepEqual(reads, [['GET', 'email_verified:' + base.sub]]);
+  await assert.rejects(() => auth(token({ sub: 'different-owner', email_verified: false })), { code: 'authentication_required' });
+});
+await test('saved verification cannot bypass signature, audience, expiry or subject validation', async () => {
+  let reads = 0;
+  const auth = createMembershipAuthenticator({ resolveVerification: async () => {
+    reads++; return { verified: true, source: 'stored_account_verification' };
+  } });
+  for (const jwt of [token({ aud: 'wrong' }), token({ exp: seconds - 1 }), 'not-a-token',
+    token({}, { kid: 'unknown' })]) await assert.rejects(() => auth(jwt), { code: 'authentication_required' });
+  const parts = token().split('.');
+  parts[1] = Buffer.from(JSON.stringify({ ...base, sub: 'victim', email_verified: false })).toString('base64url');
+  await assert.rejects(() => auth(parts.join('.')), { code: 'authentication_required' });
+  assert.equal(reads, 0);
+});
+await test('stored verification rejects missing malformed revoked and future records', async () => {
+  for (const raw of [null, 'true', '1', '[]', '{}', '{', JSON.stringify({ verifiedAt: 'bad' }),
+    JSON.stringify({ verifiedAt: new Date((seconds + 3600) * 1000).toISOString() }),
+    JSON.stringify({ verifiedAt: new Date(seconds * 1000).toISOString(), verified: false })]) {
+    assert.equal(await readMembershipVerification(async () => raw, base.sub), null);
+  }
+});
+await test('stored verification lookup outage fails closed and cannot create financial side effects', async () => {
+  const auth = createMembershipAuthenticator({ resolveVerification: async () => { throw Error('unavailable'); } });
+  await assert.rejects(() => auth(token({ email_verified: false })), { code: 'authentication_required' });
+});
+await test('membership status restores the same saved verification read before response', async () => {
+  const source = readFileSync(new URL('../api/pro-status.js', import.meta.url), 'utf8');
+  assert.match(source, /await readMembershipVerification\(membershipRedis, userSub\)/);
+  assert.match(source, /if \(saved\) \{ emailVerified = true/);
 });
 console.log(`${passed} passed, 0 failed`);

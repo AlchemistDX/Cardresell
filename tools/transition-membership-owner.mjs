@@ -14,6 +14,7 @@ import { createMembershipOwnerMigration } from '../api/_membershipOwnerMigration
 import { grantMembership, membershipIncludedHistoryKey, membershipWelcomeKeys } from '../api/_membershipLedger.js';
 import { reconcilePaidEnrollment } from '../api/_membershipPaidEnrollment.js';
 import { createMembershipConsumption, membershipEnrollmentKey } from '../api/_membershipConsumption.js';
+import { readMembershipVerification } from '../api/_membershipVerification.js';
 const sha = x => createHash('sha256').update(x).digest('hex');
 const insist = (v, code) => { if (!v) throw Error(code); };
 export const OWNER = 'fzUpcrXKDdQzGORl0bLQ6mTwML73';
@@ -88,6 +89,7 @@ async function inspectVerification(execute) {
     validTimestamp: typeof record?.verifiedAt === 'string' && Number.isFinite(Date.parse(record.verifiedAt)),
     hasEmail: typeof record?.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email),
     aliasPresent: alias !== null, aliasMatches: typeof record?.email === 'string' && alias === record.email,
+    acceptedByMembershipReader: !!await readMembershipVerification(execute, OWNER),
     mutated: false };
 }
 export async function transitionMembershipOwner({ stage = 'inspect', env = process.env,

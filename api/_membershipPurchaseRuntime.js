@@ -29,6 +29,7 @@ import { createMembershipOwnerMigration } from './_membershipOwnerMigration.js';
 import { createMembershipOwnerLifecycle } from './_membershipOwnerLifecycle.js';
 import { LEGACY_DISCOUNT_PLAN } from './_membershipLegacyPlans.js';
 import { membershipEnrollmentKey } from './_membershipConsumption.js';
+import { readMembershipVerification } from './_membershipVerification.js';
 
 export function membershipSubscriptionAdmission(owner, enrollment, state, importedOwner = false) {
   if (enrollment?.version !== 'launch-v2' || enrollment.owner !== owner || enrollment.verified !== true
@@ -145,7 +146,9 @@ export async function membershipPurchaseRuntime() {
   const lifecycle = imported ? createMembershipOwnerLifecycle({ normal: normalLifecycle, imported,
     customers, stripe, migration, execute: membershipRedis }) : normalLifecycle;
   const fulfillment = createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode });
-  const normalAuthenticate = createMembershipAuthenticator();
+  const normalAuthenticate = createMembershipAuthenticator({
+    resolveVerification: uid => readMembershipVerification(membershipRedis, uid),
+  });
   const authenticate = async token => {
     const identity = await normalAuthenticate(token);
     if (livemode && !publicLaunch && !allowed.includes(identity.uid)) {

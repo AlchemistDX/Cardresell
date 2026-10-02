@@ -1,6 +1,8 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { membershipBalances, membershipRouteMode } from './_membershipRouteBilling.js';
 import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
+import { membershipRedis } from './_membershipLegacyFence.js';
+import { readMembershipVerification } from './_membershipVerification.js';
 // /api/pro-status — Check Pro status + scan credits for a Google user
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
@@ -54,8 +56,10 @@ export default async function handler(req, res) {
   try {
     if (await membershipRouteMode()) {
       const b = await membershipBalances(userSub);
+      const saved = !emailVerified ? await readMembershipVerification(membershipRedis, userSub) : null;
+      if (saved) { emailVerified = true; verifiedEmail = saved.email || ''; }
       return res.status(200).json({ ...b, status: b.isPro ? 'active' : 'free',
-        email: userEmail, emailVerified, verifiedEmail: userEmail, signInProvider,
+        email: userEmail, emailVerified, verifiedEmail: saved ? verifiedEmail : userEmail, signInProvider,
         freeScansLeft: b.freeCredits, idFreeLeft: b.idFreeCredits,
         paidScansLeft: b.paidCredits, idPaidLeft: b.idPaidCredits,
         totalScansLeft: b.credits, refCode: '', refRewarded: false });

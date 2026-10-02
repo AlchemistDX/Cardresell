@@ -203,7 +203,15 @@ await t.section('normal welcome and authenticated read-only balances', async () 
     const statusResult = await call(status, 'GET');
     t.check('normal status reflects same included/purchased balances', statusResult.statusCode === 200
       && statusResult.payload.totalScansLeft === balanceResult.payload.credits);
+    t.check('normal status preserves saved email-code verification despite missing Firebase flag',
+      statusResult.payload.emailVerified === true && statusResult.payload.verifiedEmail === email);
     t.check('balance GET and status GET do not issue grants or mutate state', await state() === before);
+    await redis(['SET', `email_verified:${UID}`, JSON.stringify({ verifiedAt: '2026-01-01T00:00:00.000Z' })]);
+    const legacyBefore = await state();
+    const legacyStatus = await call(status, 'GET');
+    t.check('legacy timestamp-only verification still suppresses a false unverified banner',
+      legacyStatus.statusCode === 200 && legacyStatus.payload.emailVerified === true && legacyStatus.payload.verifiedEmail === '');
+    t.check('restoring legacy verification recognition never re-awards or rewrites history', await state() === legacyBefore);
     globalThis.__STUB = { token: { throw: 'local invalid token' } };
     const invalid = await call(credits, 'GET');
     t.check('balance route rejects invalid authenticated token', invalid.statusCode === 401);
