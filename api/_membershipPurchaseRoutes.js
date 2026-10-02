@@ -17,7 +17,7 @@ export function publicMembershipCatalogue(plan = 'free') {
   };
 }
 
-export function createMembershipPurchaseRoutes({ authenticate, resolveContext, controller }) {
+export function createMembershipPurchaseRoutes({ authenticate, resolveContext, controller, purchaseEnabled = true }) {
   async function identity(req) {
     const token = (req.headers?.authorization || '').replace(/^Bearer /, '').trim();
     if (!token) throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' });
@@ -35,7 +35,7 @@ export function createMembershipPurchaseRoutes({ authenticate, resolveContext, c
         const context = await resolveContext(user.uid);
         if (context?.owner !== user.uid) throw new Error('context_mismatch');
         return res.status(200).json({ ...publicMembershipCatalogue(context.plan),
-          purchaseEnabled: true, newSubscriptionAllowed: context.newSubscriptionAllowed === true });
+          purchaseEnabled, newSubscriptionAllowed: purchaseEnabled && context.newSubscriptionAllowed === true });
       } catch (e) {
         return res.status(e.code === 'authentication_required' ? 401 : 503).json({
           error: e.code === 'authentication_required' ? 'authentication_required' : 'membership_context_unavailable',

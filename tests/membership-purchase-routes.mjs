@@ -45,6 +45,6 @@ for (const delta of [{owner:'other'},{livemode:true},{validUntil:1000},{ready:fa
 }
 const previous=process.env.VERCEL_ENV;
 process.env.VERCEL_ENV='production';
-assert.throws(()=>membershipPurchaseRuntime(),/purchase_disabled/);count++;
+await assert.rejects(()=>membershipPurchaseRuntime(),/purchase_disabled/);count++;
 if(previous===undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV=previous;
 console.log(`membership-purchase-routes: ${count} passed, 0 failed`);

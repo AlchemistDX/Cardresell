@@ -135,7 +135,7 @@ await t.section('account controls preserve identity and durable command', async 
   };
   const h = setup({ onAccount }); await h.open();
   t.check('source balances displayed without expiry', /Included: 50 ID/.test(h.message())
-    && /Verification bonus: 10 ID/.test(h.message()) && /Purchased: 100 ID/.test(h.message()));
+    && /Verification bonus: 10 ID/.test(h.message()) && /Purchased \/ preserved standing credits: 100 ID/.test(h.message()));
   const cancel = h.controls().find(b => /Cancel at renewal/.test(b.textContent));
   await cancel.onclick(); await cancel.onclick();
   t.check('uncertain cancellation retry keeps same operation', calls.length === 2

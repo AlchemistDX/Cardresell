@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "scripts": {
+    "vercel-build": "node tools/membership-release-inspect.mjs"
+  }
+}

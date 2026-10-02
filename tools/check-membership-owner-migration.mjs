@@ -6,6 +6,7 @@ import { createMembershipLifecycleStripe } from '../api/_membershipLifecycleStri
 import { createMembershipStripeTransport, MEMBERSHIP_STRIPE_API_VERSION } from '../api/_membershipStripe.js';
 import { grantMembership, membershipIncludedHistoryKey } from '../api/_membershipLedger.js';
 import { LAUNCH_PLANS, LAUNCH_PACKS } from '../api/_launchMembershipConfig.js';
+import { createMembershipOwnerLifecycle } from '../api/_membershipOwnerLifecycle.js';
 const sha = x => createHash('sha256').update(x).digest('hex');
 const NOW = Number((await redis(['TIME']))[0]);
 const secret = 'whsec_syntheticnotacredential';
@@ -251,6 +252,45 @@ await test('live migration refuses a test invoice without credits or origin chan
   await assert.rejects(() => x.core.webhook(event));
   assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
   assert.equal(await redis(['GET', 'pro:owner']), '{"historical":[],"amount":999}');
+});
+function ownerRuntime(x, normal = {}) {
+  return createMembershipOwnerLifecycle({ imported: { authorization: x.a,
+    accountId: x.options.accountId, livemode: x.options.livemode },
+  normal: { get: async () => ({ status: 'normal' }), webhook: async () => ({ status: 'normal' }), ...normal },
+  customers: x.options.customers, stripe: x.options.stripe, migration: x.core, execute: redis });
+}
+await test('owner runtime reports unscheduled authority honestly and never creates another subscription', async () => {
+  const x = await fixture(); const s = await ownerRuntime(x).get({ owner: x.a.owner });
+  assert.equal(s.subscriptionId, x.a.subscriptionId);
+  assert.equal(s.migration.phase, 'authorized_not_scheduled'); assert.equal(s.command, null);
+  assert.equal(x.f.posts.length, 0);
+});
+await test('normal signed owner webhook reconciles the first Casual invoice exactly once', async () => {
+  const x = await fixture(); await x.schedule(); x.f.now = NOW;
+  const route = ownerRuntime(x), event = x.invoice();
+  await Promise.all(Array.from({ length: 6 }, () => route.webhook(event)));
+  assert.equal(JSON.parse(await redis(['GET', membershipIncludedHistoryKey('owner')])).count, 1);
+  assert.equal((await route.get({ owner: 'owner' })).command.phase, 'confirmed');
+});
+await test('owner runtime refuses forged events without writing an event observation', async () => {
+  const x = await fixture(); await x.schedule(); x.f.now = NOW; const e = x.invoice();
+  await assert.rejects(() => ownerRuntime(x).webhook({ ...e, signature: 'forged' }));
+  assert.equal((await redis(['KEYS', 'membership:launch-v2:owner-event:*'])).length, 0);
+});
+await test('owner runtime failed invoice is observed without credits and later paid retry recovers', async () => {
+  const x = await fixture(); await x.schedule(); x.f.now = NOW; const e = x.invoice();
+  const route = ownerRuntime(x); x.f.bills.in_first.status = 'open';
+  assert.equal((await route.webhook(e)).creditsGranted, false);
+  assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
+  x.f.bills.in_first.status = 'paid';
+  assert.equal((await route.webhook(e)).status, 'fulfilled');
+  assert.equal(JSON.parse(await redis(['GET', membershipIncludedHistoryKey('owner')])).count, 1);
+});
+await test('owner runtime rejects cross-customer canonical invoices before grants', async () => {
+  const x = await fixture(); await x.schedule(); x.f.now = NOW; const e = x.invoice();
+  x.f.bills.in_first.customer = 'cus_other';
+  await assert.rejects(() => ownerRuntime(x).webhook(e));
+  assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
 });
 console.log(`${passed} passed, 0 failed`);
 process.exit(0);

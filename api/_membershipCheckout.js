@@ -51,12 +51,13 @@ error('invalid action')
 
 export function createMembershipCheckoutController({
   execute, bindings, authenticate, resolveContext, stripe, accountId, livemode,
-  now = Date.now, operationTimeoutMs = 15000,
+  now = Date.now, operationTimeoutMs = 15000, allowNewPurchases = true,
 }) {
   insist(id(accountId, 'acct') && typeof livemode === 'boolean'
     && typeof execute === 'function' && typeof authenticate === 'function'
     && typeof resolveContext === 'function' && typeof now === 'function'
     && Number.isInteger(operationTimeoutMs) && operationTimeoutMs >= 10 && operationTimeoutMs <= 30000
+    && typeof allowNewPurchases === 'boolean'
     && object(bindings) && ['createIntent', 'inspectIntent', 'bindSession', 'bindSettlement']
       .every(k => typeof bindings[k] === 'function')
     && object(stripe) && ['createCheckout', 'recoverCheckout', 'retrieveAccount',
@@ -136,6 +137,7 @@ export function createMembershipCheckoutController({
         const read = () => step(() => execute(['GET', key]));
         let raw = await read(), r;
         if (raw === null) {
+          insist(allowNewPurchases, 'purchasing_paused');
           const context = await step(() => resolveContext(owner, options));
           // resolveContext is a READ-ONLY server authority. Customer creation is
           // a separate recoverable workflow, never email-first lookup here.
@@ -155,6 +157,7 @@ export function createMembershipCheckoutController({
           raw = await read();
         }
         r = readRecord(raw, owner, request);
+        insist(allowNewPurchases || r.state === 'creation_claimed', 'purchasing_paused');
         if (r.kind === 'subscription') {
           insist(await step(() => execute(['GET', gateKey])) === key, 'checkout_corrupt');
         }

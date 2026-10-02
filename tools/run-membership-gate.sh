@@ -20,7 +20,7 @@ do
   tail -2 "$OUT/$suite.log"
   if [ "$result" -ne 0 ]; then status=1; fi
 done
-for check in authentication enrollment-flow enrollment-provisioner free-issuance preflight writer-readiness owner-migration
+for check in authentication enrollment-flow enrollment-provisioner free-issuance preflight writer-readiness owner-migration owner-import
 do
   name="membership-$check"
   (cd "$ROOT" && node "tools/check-$name.mjs") > "$OUT/$name.log" 2>&1

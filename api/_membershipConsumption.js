@@ -4,6 +4,8 @@
 import { createHash } from 'node:crypto';
 import { LAUNCH_PLANS, LAUNCH_WELCOME_CREDITS } from './_launchMembershipConfig.js';
 import { membershipWelcomeKeys, membershipIncludedHistoryKey } from './_membershipLedger.js';
+import { LEGACY_CONSUMPTION_PLANS } from './_membershipLegacyPlans.js';
+const CONSUMPTION_PLANS = Object.freeze({ ...LAUNCH_PLANS, ...LEGACY_CONSUMPTION_PLANS });
 
 const hash = v => createHash('sha256').update(v).digest('hex');
 const prefix = 'membership:launch-v2:';
@@ -427,7 +429,7 @@ export function createMembershipConsumption({ execute }) {
         membershipIncludedHistoryKey(owner),
         JSON.stringify({ action, owner, receipt, scan, mode, cost, monthStart, monthEnd,
           bulkGrade: mode === 'grade' && input.bulkGrade === true,
-          activeRaw, plans: LAUNCH_PLANS, welcome: LAUNCH_WELCOME_CREDITS,
+          activeRaw, plans: CONSUMPTION_PLANS, welcome: LAUNCH_WELCOME_CREDITS,
           ...(action === 'offer' ? { candidates: input.candidates, candidate_set: input.candidate_set } : {}),
           ...(action === 'accept' ? { candidate_set: input.candidate_set, candidate: input.candidate } : {}),
           ...(action === 'claim_retry' ? { retry_receipt: input.retry_receipt, retry_scan: input.retry_scan } : {}),
@@ -442,7 +444,7 @@ export function createMembershipConsumption({ execute }) {
         if (action === 'accept' && (!result.pickedCard || typeof result.pickedCard !== 'object'
           || Array.isArray(result.pickedCard) || result.scan_id !== scan || ![0, 1].includes(result.charged))) throw new Error('invalid_response');
         if (['snapshot', 'renew_free'].includes(action) && (!['monthly', 'welcome', 'purchased', 'remaining', 'period_start', 'period_end'].every(k => integer(result[k]))
-          || typeof result.period_active !== 'boolean' || !Object.hasOwn(LAUNCH_PLANS, result.plan)
+          || typeof result.period_active !== 'boolean' || !Object.hasOwn(CONSUMPTION_PLANS, result.plan)
           || (result.bulk_grade !== null && typeof result.bulk_grade !== 'boolean'))) throw new Error('invalid_response');
         if (action === 'offer' && !integer(result.expires)) throw new Error('invalid_response');
         if (action === 'claim_retry' && typeof result.claimed !== 'boolean') throw new Error('invalid_response');

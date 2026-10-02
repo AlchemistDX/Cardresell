@@ -141,6 +141,10 @@ export function createMembershipOwnerMigration({ execute, accountId, livemode, a
     return adapter(false, fulfill)[recovery ? 'invoiceRecovery' : 'webhook'](input);
   }
   return Object.freeze({ schedule,
+    status: async () => {
+      const r = await read();
+      return { phase: r.data?.phase || 'authorized_not_scheduled', operationId, effectiveAt: a.periodEnd };
+    },
     invoiceRecovery: input => reconcile(input, true),
     webhook: input => reconcile(input, false) });
 }

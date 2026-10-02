@@ -238,4 +238,28 @@ await t.section('configuration and locators cannot redirect requests or use live
     !/\.metadata\b|\.email\b|process\.env|method:\s*['"]POST|redis\.call|execute\(/.test(source));
 });
 
+await t.section('audited single-owner subscription origin without invented Checkout', async () => {
+  const f = await fixture('subscription');
+  const before = await snapshot();
+  const authority = { owner: UID, accountId: ACCOUNT, livemode: false,
+    customerId: CUSTOMER, subscriptionId: SUB, evidenceId: sha('synthetic-import') };
+  f.data['checkout/sessions'] = list([]);
+  const api = createMembershipReversalStripe({ ...f.options,
+    getAuditedSubscriptionOwner: async input => {
+      t.check('canonical identities supplied to trusted import lookup',
+        input.accountId === ACCOUNT && input.customerId === CUSTOMER && input.subscriptionId === SUB && !input.livemode);
+      return authority;
+    } });
+  const result = await api.resolveReversalProvenance({ eventType: 'refund.created', objectId: 're_reversal' });
+  t.check('exact invoice/PI provenance works without Checkout lineage', result.invoiceId === IN && result.paymentId === PI);
+  t.check('no synthetic Checkout read or new financial write', !f.calls.some(c => c.route === 'checkout/sessions') && before === await snapshot());
+  const bad = createMembershipReversalStripe({ ...f.options,
+    getAuditedSubscriptionOwner: async () => ({ ...authority, owner: 'other' }) });
+  await reject('wrong imported owner cannot authorize a reversal', () => bad.resolveReversalProvenance({
+    eventType: 'refund.created', objectId: 're_reversal' }), 'reversal_owner_mismatch');
+  const crossed = createMembershipReversalStripe({ ...f.options,
+    getAuditedSubscriptionOwner: async () => ({ ...authority, livemode: true }) });
+  await reject('test/live import mismatch refuses', () => crossed.resolveReversalProvenance({
+    eventType: 'refund.created', objectId: 're_reversal' }), 'reversal_import_unbound');
+});
 t.done();

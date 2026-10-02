@@ -6,6 +6,6 @@ export default async function handler(req, res) {
   if (!req.headers?.authorization) return res.status(200).json({
     ...publicMembershipCatalogue(), purchaseEnabled: false,
   });
-  try { return await membershipPurchaseRuntime().catalogue(req, res); }
+  try { return await (await membershipPurchaseRuntime()).catalogue(req, res); }
   catch { return res.status(503).json({ error: 'membership_purchase_not_enabled' }); }
 }

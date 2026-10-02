@@ -49,5 +49,20 @@ await test('orphan enrollment cannot create a replacement audit', async () => {
   await execute(['SET', membershipEnrollmentKey('orphan'), '{}']);
   await assert.rejects(() => provision('orphan'));
 });
+await test('explicit public live provisioning binds a new audit to live mode', async () => {
+  const publicProvision = createMembershipEnrollmentProvisioner({
+    execute, accountId, environment: 'production', livemode: true,
+    allowedOwners: [], allowNewOwners: true,
+  });
+  assert.equal((await publicProvision('publicOwner')).status, 'audit_created');
+  const audit = JSON.parse(await execute(['GET', membershipBootstrapAuditKey('publicOwner')]));
+  assert.equal(audit.owner, 'publicOwner');
+  assert.equal(audit.accountId, accountId);
+  assert.equal(audit.livemode, true);
+  assert.equal((await publicProvision('publicOwner')).status, 'existing_audit');
+  await assert.rejects(() => publicProvision('legacyOwner'));
+  assert.equal(await execute(['GET', membershipBootstrapAuditKey('legacyOwner')]), null);
+  assert.equal(await execute(['GET', 'pro:legacyOwner']), '{"subscriptionId":"sub_old"}');
+});
 console.log(`${passed} passed, 0 failed`);
 process.exit(0);

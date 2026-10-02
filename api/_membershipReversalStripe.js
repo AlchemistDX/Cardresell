@@ -37,7 +37,7 @@ const EVENTS = Object.freeze({
 
 export function createMembershipReversalStripe({
   apiKey, accountId, livemode = false, bindings, customers,
-  fetchImpl = globalThis.fetch, operationTimeoutMs = 10000,
+  fetchImpl = globalThis.fetch, operationTimeoutMs = 10000, getAuditedSubscriptionOwner,
 } = {}) {
   insist(typeof livemode === 'boolean' && typeof apiKey === 'string'
     && new RegExp(`^(?:sk|rk)_${livemode ? 'live' : 'test'}_[A-Za-z0-9]{8,500}$`).test(apiKey)
@@ -175,6 +175,23 @@ export function createMembershipReversalStripe({
         insist(id(subscriptionId, 'sub'), 'reversal_reference_invalid');
         const subscription = canonical(await request(`subscriptions/${subscriptionId}`), 'subscription', subscriptionId);
         insist(ref(subscription.customer) === customerId, 'reversal_customer_mismatch');
+      }
+      if (subscriptionId !== null && typeof getAuditedSubscriptionOwner === 'function') {
+        const imported = await getAuditedSubscriptionOwner({ accountId, livemode, customerId, subscriptionId }); active();
+        if (imported !== null) {
+          insist(object(imported) && uid(imported.owner) && imported.accountId === accountId
+            && imported.livemode === livemode && imported.customerId === customerId
+            && imported.subscriptionId === subscriptionId && /^[a-f0-9]{64}$/.test(imported.evidenceId),
+          'reversal_import_unbound');
+          const association = await customers.get(imported.owner); active();
+          insist(association?.state === 'bound' && association.owner === imported.owner
+            && association.customerId === customerId && association.accountId === accountId
+            && association.livemode === livemode, 'reversal_owner_mismatch');
+          // Only the explicit audited origin differs. Account/mode, charge,
+          // customer, PI and complete invoice linkage above are unchanged.
+          return { accountId, livemode, objectType: type, objectId, customerId, paymentId, invoiceId,
+            invoiceLookupComplete: true, reason };
+        }
       }
       const sessions = await completeList('checkout/sessions', invoiceId === null
         ? { payment_intent: paymentId } : { subscription: subscriptionId }, 'checkout.session', 'cs');

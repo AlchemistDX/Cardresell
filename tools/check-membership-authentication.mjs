@@ -72,7 +72,7 @@ await test('runtime wires strict auth without flexible email mapping', async () 
   const source = readFileSync(new URL('../api/_membershipPurchaseRuntime.js', import.meta.url), 'utf8');
   assert.match(source, /const normalAuthenticate = createMembershipAuthenticator\(\)/);
   assert.match(source, /const identity = await normalAuthenticate\(token\)/);
-  assert.match(source, /livemode && !allowed\.includes\(identity\.uid\)/);
+  assert.match(source, /livemode && !publicLaunch && !allowed\.includes\(identity\.uid\)/);
   assert.doesNotMatch(source, /verifyTokenFlexible/);
   assert.equal(requests.length, 1);
 });

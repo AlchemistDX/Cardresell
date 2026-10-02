@@ -332,4 +332,18 @@ await t.section('Approved payment adapter fulfills recovered binding exactly onc
   await noWrite('Different authenticated owner cannot collect payment', () => adapter.checkoutReturn({
     sessionId: reply.sessionId, authenticatedOwner: 'otherOwner' }), 'owner_mismatch');
 });
+await t.section('purchase pause preserves existing-operation recovery only', async () => {
+  await reset(); const f = fixture();
+  await noWrite('paused new purchase cannot persist or create a payment attempt',
+    () => f.call(request(), { allowNewPurchases: false }), 'purchasing_paused');
+  t.check('pause made no Stripe creation calls', f.calls === 0);
+  f.afterCreate = async () => { throw Error('synthetic response loss'); };
+  const req = request();
+  await rejected('created session response can be uncertain', () => f.call(req), 'checkout_unavailable');
+  const result = await f.call(req, { allowNewPurchases: false });
+  t.check('paused mode recovers the same existing Checkout session', result.status === 'checkout_ready'
+    && f.calls === 1 && f.recoveries === 1);
+  await noWrite('paused new request cannot reuse authorization to create again',
+    () => f.call(request('b'), { allowNewPurchases: false }), 'purchasing_paused');
+});
 t.done();

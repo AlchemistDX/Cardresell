@@ -24,6 +24,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
     command: state.command ? { operationId: state.command.operationId, kind: state.command.kind, plan: state.command.plan,
       effectiveAt: state.command.effectiveAt, phase: state.command.phase } : null,
     recoveryPending: !!state.claim,
+    migration: state.migration ? { phase: state.migration.phase, effectiveAt: state.migration.effectiveAt } : null,
   });
   async function refresh(uid, state, operationId) {
     const input = { owner: uid, subscriptionId: state.subscriptionId,

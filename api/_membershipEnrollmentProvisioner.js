@@ -19,12 +19,12 @@ for i=2,#KEYS do
 end
 redis.call('SET',KEYS[2],p.audit)
 return 1`;
-export function createMembershipEnrollmentProvisioner({ execute, accountId, environment, allowedOwners, livemode = false }) {
+export function createMembershipEnrollmentProvisioner({ execute, accountId, environment, allowedOwners, livemode = false, allowNewOwners = false }) {
   if (typeof livemode !== 'boolean' || environment !== (livemode ? 'production' : 'preview') || !/^acct_[A-Za-z0-9]+$/.test(accountId)
-    || typeof execute !== 'function' || !Array.isArray(allowedOwners)) fail();
+    || typeof execute !== 'function' || !Array.isArray(allowedOwners) || typeof allowNewOwners !== 'boolean') fail();
   const allowed = new Set(allowedOwners);
   return async owner => {
-    if (!allowed.has(owner)) fail();
+    if (!allowed.has(owner) && !allowNewOwners) fail();
     const auditKey = membershipBootstrapAuditKey(owner);
     const keys = ['membership:launch-v2:legacy_fence', auditKey, membershipEnrollmentKey(owner),
       membershipIncludedHistoryKey(owner), 'membership:launch-v2:active:' + hash(owner),
