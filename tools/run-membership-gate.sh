@@ -30,4 +30,9 @@ do
   tail -2 "$OUT/$name.log"
   if [ "$result" -ne 0 ]; then status=1; fi
 done
+(cd "$ROOT" && node tools/check-preview-writer-cutover.mjs) > "$OUT/preview-writer-cutover.log" 2>&1
+result=$?
+printf 'preview-writer-cutover\t%s\n' "$result" >> "$OUT/results.tsv"
+tail -2 "$OUT/preview-writer-cutover.log"
+if [ "$result" -ne 0 ]; then status=1; fi
 exit "$status"
