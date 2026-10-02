@@ -31,6 +31,10 @@ if (process.env.VERCEL_ENV === 'production') {
     }
     console.log('MEMBERSHIP_PRODUCTION_READ_ONLY ' + JSON.stringify({
       commit: process.env.VERCEL_GIT_COMMIT_SHA, rows,
+      existingStripeCredentialKind: typeof process.env.STRIPE_SECRET_KEY !== 'string' ? 'missing'
+        : /^(?:sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY) ? 'live_prefix'
+        : /^(?:sk|rk)_test_/.test(process.env.STRIPE_SECRET_KEY) ? 'test_prefix' : 'unrecognized',
+      explicitReuseConfigured: process.env.MEMBERSHIP_LIVE_CREDENTIAL_SOURCE === 'existing',
       preflight: await membershipPreflight({ ...process.env, MEMBERSHIP_LIVE_PREFLIGHT: 'enabled' }, fetch, 'live'),
       mutated: false,
     }));

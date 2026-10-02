@@ -13,7 +13,8 @@ export function membershipEnvironment(env, mode = 'test') {
   // never an automatic fallback from missing or broken restricted credentials.
   const reuse = live && env.MEMBERSHIP_LIVE_CREDENTIAL_SOURCE === 'existing';
   if (reuse && env[prefix + 'KEY']) fail();
-  const apiKey = reuse ? env.STRIPE_SECRET_KEY : env[prefix + 'KEY'];
+  const configuredKey = reuse ? env.STRIPE_SECRET_KEY : env[prefix + 'KEY'];
+  const apiKey = typeof configuredKey === 'string' ? configuredKey.trim() : configuredKey;
   const webhookSecret = env[prefix + 'WEBHOOK_SECRET'];
   if (typeof apiKey !== 'string' || !new RegExp(`^${reuse ? '(?:sk|rk)' : 'rk'}_${mode}_[A-Za-z0-9]{8,500}$`).test(apiKey)
     || typeof webhookSecret !== 'string' || !/^whsec_[A-Za-z0-9]{8,500}$/.test(webhookSecret)) fail();

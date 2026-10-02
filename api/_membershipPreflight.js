@@ -14,7 +14,8 @@ export async function membershipPreflight(env, fetchImpl = fetch, mode = 'test')
   }
   const prefix = `MEMBERSHIP_STRIPE_${live ? 'LIVE' : 'TEST'}_`;
   const reuse = live && env.MEMBERSHIP_LIVE_CREDENTIAL_SOURCE === 'existing';
-  const key = reuse ? env.STRIPE_SECRET_KEY : env[prefix + 'KEY'];
+  const configuredKey = reuse ? env.STRIPE_SECRET_KEY : env[prefix + 'KEY'];
+  const key = typeof configuredKey === 'string' ? configuredKey.trim() : configuredKey;
   check(live ? 'live_key_format' : 'restricted_test_key_format', typeof key === 'string'
     && new RegExp(`^${reuse ? '(?:sk|rk)' : 'rk'}_${mode}_[A-Za-z0-9]+$`).test(key));
   if (checks.at(-1).status === 'FAIL') return { status: 'FAIL', checks };

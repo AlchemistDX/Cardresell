@@ -31,6 +31,8 @@ const existing = { ...make('live'), MEMBERSHIP_LIVE_CREDENTIAL_SOURCE: 'existing
   STRIPE_SECRET_KEY: 'sk_live_syntheticOnly' };
 delete existing.MEMBERSHIP_STRIPE_LIVE_KEY;
 assert.equal(membershipEnvironment(existing, 'live').apiKey, existing.STRIPE_SECRET_KEY); n++;
+assert.equal(membershipEnvironment({ ...existing, STRIPE_SECRET_KEY: '\n ' + existing.STRIPE_SECRET_KEY + ' \n' }, 'live').apiKey,
+  existing.STRIPE_SECRET_KEY); n++;
 for (const change of [
   { STRIPE_SECRET_KEY: 'sk_test_syntheticOnly' },
   { MEMBERSHIP_LIVE_CREDENTIAL_SOURCE: undefined },

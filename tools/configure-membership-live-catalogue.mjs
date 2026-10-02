@@ -13,15 +13,25 @@ const apply = process.argv.includes('--apply');
 const catalogueOnly = process.argv.includes('--catalogue-only');
 const insist = (v, code) => { if (!v) throw Error(code); };
 const digest = x => createHash('sha256').update(x).digest('hex');
+let productionCredential;
 function stripe(path, body, operation) {
   const args = ['--silent', '--show-error', '--max-time', '25', '--cacert', '/etc/ssl/certs/ca-certificates.crt',
     '-H', 'Stripe-Version: 2026-08-26.dahlia'];
   if (body) {
     insist(apply, 'apply_required');
-    args.push('-X', 'POST', '-H', 'Idempotency-Key: cr-live-v2-' + digest(operation), '--data-binary', '@-');
+    args.push('-X', 'POST', '-H', 'Idempotency-Key: cr-live-v2-' + digest(operation));
   }
+  const form = body ? new URLSearchParams(body).toString() : undefined;
+  let input = form;
+  if (productionCredential) {
+    // Existing Vercel server credential stays in process memory/stdin. Never
+    // argv, source, a file, console output, or a client response.
+    args.push('--config', '-');
+    input = `header = "Authorization: Bearer ${productionCredential}"\n`
+      + (form ? `data = "${form}"\n` : '');
+  } else if (body) args.push('--data-binary', '@-');
   args.push('https://api.stripe.com/v1/' + path);
-  const raw = execFileSync('curl', args, { encoding: 'utf8', input: body ? new URLSearchParams(body).toString() : undefined });
+  const raw = execFileSync('curl', args, { encoding: 'utf8', input });
   const result = JSON.parse(raw);
   if (result.error) throw Error('stripe_' + (result.error.code || result.error.type || 'failed'));
   return result;
@@ -39,6 +49,14 @@ const events = ['checkout.session.completed', 'checkout.session.async_payment_su
   'charge.refunded', 'refund.created', 'refund.updated', 'refund.failed',
   'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed'];
 try {
+  if (process.argv.includes('--use-production-key')) {
+    const rows = vercel(`/v9/projects/${project}/env`).envs.filter(e =>
+      e.key === 'STRIPE_SECRET_KEY' && e.target?.length === 1 && e.target[0] === 'production');
+    insist(rows.length === 1, 'production_credential_ambiguous');
+    const stored = vercel(`/v1/projects/${project}/env/${rows[0].id}`);
+    productionCredential = typeof stored.value === 'string' ? stored.value.trim() : '';
+    insist(/^(?:sk|rk)_live_[A-Za-z0-9]+$/.test(productionCredential), 'production_credential_invalid');
+  }
   const account = stripe('account');
   insist(account.id === accountId && account.charges_enabled === true, 'wrong_account');
   const list = stripe('prices?limit=100&active=true');
