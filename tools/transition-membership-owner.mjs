@@ -18,6 +18,9 @@ const sha = x => createHash('sha256').update(x).digest('hex');
 const insist = (v, code) => { if (!v) throw Error(code); };
 export const OWNER = 'fzUpcrXKDdQzGORl0bLQ6mTwML73';
 export const PRODUCTION_DATABASE = 'dc621a30-497c-4851-a3c3-42a51309f094';
+// Observed from the old Production deployment before/after provider rotation.
+// This is an endpoint-origin digest, never a credential digest.
+export const PRODUCTION_ENDPOINT_DIGEST = '40dfd723a1c95ebf3a938caa2bf54cd041d9850e4a979f64a1a1ee995a53069b';
 export const CUTOVER_KEY = 'membership:launch-v2:production_cutover:20261002';
 export const authorization = Object.freeze({
   owner: OWNER, customerId: 'cus_UqILx52TtoCldY', subscriptionId: 'sub_1TqbkwFW2YZoedIZGKzsOLjn',
@@ -44,6 +47,7 @@ export function validateProductionCutoverEvidence(value, commit) {
     && Number.isSafeInteger(value.backup.completionObservedAt)
     && value.backup.completionObservedAt >= authorization.approvedAt
     && value.rotation?.oldAuthorization === 'rejected'
+    && value.rotation.datastoreEndpointDigest === PRODUCTION_ENDPOINT_DIGEST
     && [401, 403].includes(value.rotation.httpStatus)
     && /^dpl_[A-Za-z0-9]+$/.test(value.rotation.oldDeployment)
     && typeof value.rotation.evidenceId === 'string' && /^[a-f0-9]{64}$/.test(value.rotation.evidenceId),
@@ -54,6 +58,11 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
   execute = membershipRedis, fetchImpl = fetch } = {}) {
   insist(['inspect', 'apply', 'schedule'].includes(stage), 'invalid_stage');
   insist(env.VERCEL_ENV === 'production', 'production_only');
+  let endpoint;
+  try { endpoint = new URL(env.KV_REST_API_URL); } catch {}
+  insist(endpoint?.protocol === 'https:' && !endpoint.username && !endpoint.password
+    && !endpoint.port && endpoint.pathname === '/' && !endpoint.search && !endpoint.hash
+    && sha(endpoint.origin) === PRODUCTION_ENDPOINT_DIGEST, 'production_datastore_mismatch');
   const config = membershipEnvironment(env, 'live');
   insist(config.accountId === 'acct_1Tno55FW2YZoedIZ', 'account_mismatch');
   const base = { ...config, livemode: true, fetchImpl, apiVersion: MEMBERSHIP_STRIPE_API_VERSION };

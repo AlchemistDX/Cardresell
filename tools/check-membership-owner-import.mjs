@@ -4,7 +4,7 @@ import { redisCommand as redis } from '../tests/_idRedis.mjs';
 import { createMembershipOwnerImport, readOwnerImport } from '../api/_membershipOwnerImport.js';
 import { createMembershipConsumption } from '../api/_membershipConsumption.js';
 import { membershipIncludedHistoryKey, membershipWelcomeKeys, grantMembership } from '../api/_membershipLedger.js';
-import { validateProductionCutoverEvidence, PRODUCTION_DATABASE, authorization } from './transition-membership-owner.mjs';
+import { validateProductionCutoverEvidence, PRODUCTION_DATABASE, PRODUCTION_ENDPOINT_DIGEST, authorization } from './transition-membership-owner.mjs';
 import { membershipSubscriptionAdmission } from '../api/_membershipPurchaseRuntime.js';
 const sha = x => createHash('sha256').update(x).digest('hex');
 let passed = 0;
@@ -153,7 +153,8 @@ await test('operator rejects absent backup, wrong database and missing rejection
   const e = { version: 1, environment: 'production', providerDatabaseId: PRODUCTION_DATABASE,
     releaseCommit: commit, backup: { name: 'synthetic-only', status: 'Completed', completedAt: null,
       completionObservedAt: authorization.approvedAt, evidence: 'owner-dashboard-report' },
-    rotation: { oldAuthorization: 'rejected', httpStatus: 401, oldDeployment: 'dpl_synthetic', evidenceId: sha('synthetic') } };
+    rotation: { oldAuthorization: 'rejected', httpStatus: 401, oldDeployment: 'dpl_synthetic', evidenceId: sha('synthetic'),
+      datastoreEndpointDigest: PRODUCTION_ENDPOINT_DIGEST } };
   assert.equal(validateProductionCutoverEvidence(e, commit), JSON.stringify(e));
   for (const change of [{ backup: null }, { providerDatabaseId: 'wrong' }, { rotation: null },
     { releaseCommit: 'b'.repeat(40) }, { environment: 'preview' }]) {
@@ -161,6 +162,8 @@ await test('operator rejects absent backup, wrong database and missing rejection
   }
   assert.throws(() => validateProductionCutoverEvidence({ ...e,
     backup: { ...e.backup, completedAt: authorization.approvedAt } }, commit));
+  assert.throws(() => validateProductionCutoverEvidence({ ...e,
+    rotation: { ...e.rotation, datastoreEndpointDigest: 'b'.repeat(64) } }, commit));
 });
 await test('lost imported subscription lineage cannot permit a second subscription', async () => {
   const e = { version: 'launch-v2', owner: 'owner', verified: true, plan: 'paid', subscription: 'sub_existing' };
