@@ -11,9 +11,18 @@ const insist = (ok, code = 'lifecycle_transport_unavailable') => {
 const CAS = `if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end
 redis.call('SET',KEYS[1],ARGV[2]); return 1`;
 export function createMembershipLifecycleStripe({ execute, reader, apiKey, accountId, priceMap,
-  fetchImpl = globalThis.fetch, timeoutMs = 5000 }) {
+  fetchImpl = globalThis.fetch, timeoutMs = 5000, legacySubscription = null }) {
   insist(/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(apiKey) && /^acct_[A-Za-z0-9]+$/.test(accountId));
   const prices = structuredClone(priceMap);
+  const legacy = legacySubscription && structuredClone(legacySubscription);
+  if (legacy) {
+    insist(Object.keys(legacy).length === 7 && typeof legacy.owner === 'string' && legacy.owner.length > 0
+      && /^sub_[A-Za-z0-9_]+$/.test(legacy.subscriptionId)
+      && /^cus_[A-Za-z0-9_]+$/.test(legacy.customerId)
+      && /^price_[A-Za-z0-9_]+$/.test(legacy.priceId) && /^prod_[A-Za-z0-9_]+$/.test(legacy.productId)
+      && Number.isSafeInteger(legacy.periodStart) && Number.isSafeInteger(legacy.periodEnd)
+      && legacy.periodEnd > legacy.periodStart, 'invalid_legacy_authority');
+  }
   const plans = Object.keys(LAUNCH_PLANS).filter(x => x !== 'free');
   insist(plans.every(p => /^price_[A-Za-z0-9_]+$/.test(prices.plans[p]?.priceId)));
   const planFor = id => {
@@ -22,10 +31,13 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
     return matches[0];
   };
   async function validatePrice(plan) {
-    const price = await reader.retrievePrice(prices.plans[plan].priceId);
-    insist(price?.object === 'price' && price.id === prices.plans[plan].priceId && price.livemode === false
-      && ref(price.product) === prices.plans[plan].productId && price.currency === 'usd'
-      && price.unit_amount === LAUNCH_PLANS[plan].monthlyPriceCents
+    const mapping = plan === 'legacy' ? legacy : prices.plans[plan];
+    insist(mapping, 'unknown_price');
+    const price = await reader.retrievePrice(mapping.priceId);
+    insist(price?.object === 'price' && price.id === mapping.priceId && price.livemode === false
+      && ref(price.product) === mapping.productId && price.currency === 'usd'
+      && price.type === 'recurring'
+      && price.unit_amount === (plan === 'legacy' ? 999 : LAUNCH_PLANS[plan].monthlyPriceCents)
       && price.recurring?.interval === 'month' && price.recurring.interval_count === 1, 'price_mismatch');
   }
   async function request(path, body, key) {
@@ -81,7 +93,11 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
       && Number.isSafeInteger(item.current_period_start) && Number.isSafeInteger(item.current_period_end)
       && item.current_period_end > item.current_period_start && typeof s.cancel_at_period_end === 'boolean',
     'unsupported_subscription');
-    const plan = planFor(ref(item.price));
+    const isLegacy = legacy && subscriptionId === legacy.subscriptionId && ref(item.price) === legacy.priceId;
+    if (isLegacy) insist(ref(s.customer) === legacy.customerId
+      && item.current_period_start === legacy.periodStart && item.current_period_end === legacy.periodEnd,
+    'legacy_canonical_mismatch');
+    const plan = isLegacy ? 'legacy' : planFor(ref(item.price));
     await validatePrice(plan);
     return { s, item, plan };
   }
@@ -109,6 +125,13 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
         const futurePlan = planFor(ref(phase.items[0].price));
         await validatePrice(futurePlan);
         scheduledChange = { plan: futurePlan, effectiveAt: phase.start_date };
+        if (plan === 'legacy') {
+          const current = schedule.phases.filter(p => p.start_date === legacy.periodStart);
+          insist(schedule.phases.length === 2 && current.length === 1
+            && current[0].end_date === legacy.periodEnd && current[0].proration_behavior === 'none'
+            && current[0].items?.length === 1 && current[0].items[0].quantity === 1
+            && ref(current[0].items[0].price) === legacy.priceId, 'legacy_schedule_mismatch');
+        }
       }
     }
     return { subscriptionId, customerId: ref(s.customer), accountId, livemode: false, status: s.status,
@@ -132,11 +155,21 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
   }
   return Object.freeze({
     retrieveSubscriptionSnapshot: snapshot,
+    async retrieveLegacySubscriptionSnapshot(subscriptionId) {
+      insist(legacy && subscriptionId === legacy.subscriptionId, 'legacy_not_authorized');
+      const { s, item, plan } = await rawSubscription(subscriptionId);
+      insist(plan === 'legacy' && ref(s.customer) === legacy.customerId, 'legacy_canonical_mismatch');
+      return { ...await snapshot(subscriptionId), priceId: ref(item.price), productId: legacy.productId,
+        scheduleId: s.schedule ? ref(s.schedule) : null };
+    },
     async executeCommand(command) {
       insist(command && /^[a-f0-9]{64}$/.test(command.operationId)
         && ['plan_change', 'cancel'].includes(command.kind) && command.phase === 'requested'
         && typeof command.idempotencyKey === 'string', 'invalid_command');
       const { s, item } = await rawSubscription(command.subscriptionId);
+      if (legacy) insist(command.owner === legacy.owner && command.subscriptionId === legacy.subscriptionId
+        && command.kind === 'plan_change' && command.plan === 'casual'
+        && command.effectiveAt === legacy.periodEnd, 'legacy_command_mismatch');
       insist(item.current_period_end === command.effectiveAt && s.status === 'active'
         && (!s.discounts || s.discounts.length === 0) && !s.trial_end
         && (!s.default_tax_rates || s.default_tax_rates.length === 0)
