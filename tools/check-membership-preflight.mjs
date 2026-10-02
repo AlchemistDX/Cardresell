@@ -77,4 +77,46 @@ await test('missing configured coupons cannot pass deployment preflight', async 
 await test('stale configured coupons cannot pass deployment preflight', async () => {
   assert.equal((await membershipPreflight({ ...env, MEMBERSHIP_STRIPE_TEST_COUPONS: '{}' }, fetcher)).status, 'FAIL');
 });
+const { default: handler } = await import('../api/membership-preflight.js');
+Object.assign(process.env, env, { VERCEL_URL: 'synthetic-build.vercel.app',
+  VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), KV_REST_API_URL: 'https://synthetic.upstash.io',
+  KV_REST_API_TOKEN: 'synthetic-not-a-credential' });
+let datastoreStatus = 200;
+globalThis.fetch = async (url, options) => {
+  if (String(url).startsWith('https://synthetic.upstash.io')) {
+    assert.deepEqual(JSON.parse(options.body), ['GET', 'membership:launch-v2:legacy_fence']);
+    return Response.json({ result: null }, { status: datastoreStatus });
+  }
+  return fetcher(String(url), options);
+};
+async function invoke(host) {
+  const res = { setHeader() {}, status(code) { this.code = code; return this; },
+    json(body) { this.body = body; } };
+  await handler({ method: 'GET', headers: { host } }, res);
+  return res;
+}
+await test('immutable Preview exposes only safe deployment identity and read-only checks', async () => {
+  const result = await invoke(process.env.VERCEL_URL);
+  assert.equal(result.code, 200);
+  assert.equal(result.body.deployment.commit, 'a'.repeat(40));
+  assert.equal(result.body.writerReadiness.datastoreAuthorization, 'accepted');
+  assert.equal(JSON.stringify(result.body).includes(process.env.KV_REST_API_TOKEN), false);
+});
+await test('stable Preview alias uses the same read-only deployment checks', async () => {
+  assert.equal((await invoke('cardresell-membership-v2-preview.vercel.app')).code, 200);
+});
+await test('arbitrary host cannot access the deployed diagnostic', async () => {
+  assert.equal((await invoke('attacker.vercel.app')).code, 404);
+});
+await test('Production cannot use immutable-host exception', async () => {
+  process.env.VERCEL_ENV = 'production';
+  assert.equal((await invoke(process.env.VERCEL_URL)).code, 404);
+  process.env.VERCEL_ENV = 'preview';
+});
+await test('old deployment credential denial is distinguishable without returning secrets', async () => {
+  datastoreStatus = 401;
+  const result = await invoke(process.env.VERCEL_URL);
+  assert.equal(result.body.writerReadiness.datastoreAuthorization, 'rejected');
+  assert.equal(result.body.writerReadiness.datastoreReadable, false);
+});
 console.log(`${passed} passed, 0 failed`);

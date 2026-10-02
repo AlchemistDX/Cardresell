@@ -65,7 +65,7 @@ export async function membershipRedis(args) {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(args), redirect: 'error', signal: AbortSignal.timeout(8000),
   });
-  if (!response.ok) throw new Error('billing_unavailable');
+  if (!response.ok) throw Object.assign(new Error('billing_unavailable'), { status: response.status });
   const data = await response.json();
   if (data.error || data.result === undefined) throw new Error('billing_unavailable');
   return data.result;
