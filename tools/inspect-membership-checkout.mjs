@@ -7,6 +7,7 @@ import { createMembershipStripeTransport } from '../api/_membershipStripe.js';
 import { recoverOwnerCheckout } from './recover-owner-checkout.mjs';
 import { createMembershipPaymentAdapter } from '../api/_membershipPayments.js';
 import { createMembershipConsumption } from '../api/_membershipConsumption.js';
+import { createHash } from 'node:crypto';
 export async function inspectMembershipCheckout({ execute, config, owner, fetchImpl = fetch, recover = false }) {
   const read = command => {
     const bindingRead = command[0] === 'EVAL' && command[1] === MEMBERSHIP_BINDINGS_SCRIPT
@@ -71,11 +72,25 @@ export async function inspectMembershipCheckout({ execute, config, owner, fetchI
     paidCheckout = { validated: false, codes: [error.code, error.cause?.code, error.cause?.cause?.code]
       .map(code => /^[a-z_]{1,64}$/.test(code || '') ? code : 'unclassified'), mutated: false };
   }
+  const canonical = x => JSON.stringify(x, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+  const records = [];
+  for (const kind of ['order', 'session', 'settlement']) {
+    const key = `membership:launch-v2:bindings:${kind}:ae8adb21480d6492af94cbc9893f4642ec54188942a80f57e3f36b1a20de408b`;
+    const raw = await read(['GET', key]); const r = raw && JSON.parse(raw);
+    const response = JSON.parse(await read(['EVAL', MEMBERSHIP_BINDINGS_SCRIPT, 1, key,
+      JSON.stringify({ version: 'launch-v2', action: 'read', kind })]));
+    const returned = typeof response.record_json === 'string' ? JSON.parse(response.record_json) : null;
+    const valid = value => !!value && value.hash === createHash('sha256').update(canonical(value.data)).digest('hex');
+    records.push({ kind, present: !!r, storedHashValid: valid(r), returnedHashValid: valid(returned),
+      returnedMatchesStored: canonical(r) === canonical(returned),
+      dataKeys: r ? Object.keys(r.data) : [], subscriptionNull: r?.data?.subscriptionId === null });
+  }
   const consume = createMembershipConsumption({ execute });
   const context = { owner, receipt: '0'.repeat(64), scan: 'operator-read-only-balance' };
   const id = await consume('snapshot', context);
   const grade = await consume('snapshot', { ...context, mode: 'grade' });
-  return { rows, paidCheckout, balances: { id: id.remaining, grade: grade.remaining,
+  return { rows, paidCheckout, records, balances: { id: id.remaining, grade: grade.remaining,
     idPurchased: id.purchased, gradePurchased: grade.purchased },
   datastoreMutated: false, stripeRecoveryRequested: recover };
 }
