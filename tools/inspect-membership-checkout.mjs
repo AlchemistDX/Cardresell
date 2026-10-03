@@ -1,11 +1,13 @@
 // Build-only, read-only diagnostic. Every datastore command and HTTP method is
 // explicitly constrained. Never expose credentials, request bodies or URLs.
-import { createMembershipBindingStore } from '../api/_membershipBindings.js';
+import { createMembershipBindingStore, MEMBERSHIP_BINDINGS_SCRIPT } from '../api/_membershipBindings.js';
 import { createMembershipCheckoutStripeTransport } from '../api/_membershipCheckoutStripe.js';
 import { MEMBERSHIP_STRIPE_API_VERSION } from '../api/_membershipStripe.js';
 export async function inspectMembershipCheckout({ execute, config, owner, fetchImpl = fetch }) {
   const read = command => {
-    if (!['GET', 'SCAN'].includes(command[0])) throw Error('read_only_required');
+    const bindingRead = command[0] === 'EVAL' && command[1] === MEMBERSHIP_BINDINGS_SCRIPT
+      && ['read', 'read_bundle'].includes(JSON.parse(command.at(-1)).action);
+    if (!['GET', 'SCAN'].includes(command[0]) && !bindingRead) throw Error('read_only_required');
     return execute(command);
   };
   const bindings = createMembershipBindingStore({ execute: read, ...config, livemode: true });
