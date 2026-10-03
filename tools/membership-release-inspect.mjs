@@ -7,24 +7,30 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 const stage = process.env.MEMBERSHIP_OWNER_TRANSITION_STAGE;
 const previewInspect = !!process.env.MEMBERSHIP_PREVIEW_INSPECT_COMMIT;
-if (stage || previewInspect || process.env.MEMBERSHIP_OWNER_READ_ONLY_INSPECT === 'enabled') {
+const sandboxRehearsal = !!process.env.MEMBERSHIP_SANDBOX_REHEARSAL_COMMIT;
+if (stage || previewInspect || sandboxRehearsal || process.env.MEMBERSHIP_OWNER_READ_ONLY_INSPECT === 'enabled') {
   let directory, leader = false;
   try {
     if (stage && !['apply', 'schedule'].includes(stage)) throw Error('invalid_transition_stage');
-    if (previewInspect && (stage || process.env.MEMBERSHIP_OWNER_READ_ONLY_INSPECT === 'enabled')) throw Error('mixed_operator_scope');
+    if ((previewInspect || sandboxRehearsal) && (stage || process.env.MEMBERSHIP_OWNER_READ_ONLY_INSPECT === 'enabled')
+      || previewInspect && sandboxRehearsal) throw Error('mixed_operator_scope');
     // Legacy Vercel builds invokes the root script per function. Coordinate
     // within this build only; durable financial authority stays in Redis.
     // An uncertain leader is never reset. A fresh build reconciles the same
     // durable import/command through the normal idempotent operator.
     if (!/^[a-z0-9-]+\.vercel\.app$/.test(process.env.VERCEL_URL || '')) throw Error('deployment_identity_required');
     const id = createHash('sha256').update(JSON.stringify([
-      process.env.VERCEL_URL, process.env.VERCEL_GIT_COMMIT_SHA, previewInspect ? 'preview_inspect' : stage || 'inspect',
+      process.env.VERCEL_URL, process.env.VERCEL_GIT_COMMIT_SHA,
+      sandboxRehearsal ? 'sandbox_rehearsal' : previewInspect ? 'preview_inspect' : stage || 'inspect',
     ])).digest('hex');
     directory = join(tmpdir(), 'cardresell-operator-' + id);
     try { await mkdir(directory, { mode: 0o700 }); leader = true; }
     catch (error) { if (error.code !== 'EEXIST') throw error; }
     if (leader) {
-      if (previewInspect) {
+      if (sandboxRehearsal) {
+        const { prepareMembershipSandboxRehearsal } = await import('./prepare-membership-sandbox-rehearsal.mjs');
+        console.log('MEMBERSHIP_SANDBOX_REHEARSAL ' + JSON.stringify(await prepareMembershipSandboxRehearsal()));
+      } else if (previewInspect) {
         const { inspectMembershipPreview } = await import('./inspect-membership-preview.mjs');
         console.log('MEMBERSHIP_PREVIEW_READ_ONLY ' + JSON.stringify(await inspectMembershipPreview()));
       } else {

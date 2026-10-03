@@ -75,4 +75,71 @@ await test('expiring fence refuses Stripe access', async () => {
     /preview_cutover_audit_expiring/);
   assert.equal(http.length, n);
 });
+const { prepareMembershipSandboxRehearsal } = await import('./prepare-membership-sandbox-rehearsal.mjs');
+function rehearsalFixture({ denied = false, lose = false } = {}) {
+  const store = new Map(values), posts = [], objects = new Map();
+  const runEnv = { ...env, VERCEL_URL: 'fixture.vercel.app', MEMBERSHIP_SANDBOX_REHEARSAL_COMMIT: commit };
+  const runRedis = async args => {
+    const [cmd, key, value] = args;
+    if (cmd === 'GET') return store.get(key) ?? null;
+    if (cmd === 'MGET') return args.slice(1).map(k => store.get(k) ?? null);
+    if (cmd === 'TTL') return -1;
+    if (cmd === 'SET') {
+      assert.equal(args[3], 'NX');
+      if (store.has(key)) return null;
+      store.set(key, value); return 'OK';
+    }
+    assert.equal(cmd, 'EVAL'); assert.equal(args[2], 1);
+    if (store.get(args[3]) !== args[4]) return 0;
+    store.set(args[3], args[5]); return 1;
+  };
+  const runFetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (init.method === 'GET' && objects.has(path)) return Response.json(objects.get(path));
+    if (init.method === 'GET') return fetchImpl(url, init);
+    assert.equal(init.method, 'POST'); assert.equal(new URL(url).origin, 'https://api.stripe.com');
+    assert.equal(init.headers.Authorization, 'Bearer rk_test_syntheticfixture');
+    posts.push(path);
+    if (denied) return Response.json({ error: { message: 'not logged' } }, { status: 403 });
+    const body = Object.fromEntries(new URLSearchParams(init.body));
+    const x = path.endsWith('/products') ? { object: 'product', id: 'prod_rehearsal', livemode: false }
+      : { object: 'price', id: 'price_rehearsal', livemode: false, product: body.product,
+        currency: body.currency, unit_amount: Number(body.unit_amount),
+        recurring: { interval: body['recurring[interval]'], interval_count: 1 } };
+    objects.set(path + '/' + x.id, x);
+    if (lose) throw Error('lost response');
+    return Response.json(x);
+  };
+  return { store, posts, run: override => prepareMembershipSandboxRehearsal({
+    env: { ...runEnv, ...override }, execute: runRedis, fetchImpl: runFetch }) };
+}
+await test('sandbox fixture creation is canonical and exact replay never creates again', async () => {
+  const f = rehearsalFixture(), one = await f.run(), two = await f.run();
+  assert.equal(one.status, 'legacy_test_price_ready'); assert.deepEqual(two, one);
+  assert.deepEqual(f.posts, ['/v1/products', '/v1/prices']);
+  assert.ok([...f.store.keys()].filter(k => !values.has(k)).every(k => k.startsWith('membership:launch-v2:sandbox-rehearsal:')));
+});
+await test('sandbox permission denial is preserved and no downstream POST runs', async () => {
+  const f = rehearsalFixture({ denied: true });
+  assert.equal((await f.run()).steps[0].httpStatus, 403);
+  assert.equal((await f.run()).steps[0].status, 'permission_blocked');
+  assert.deepEqual(f.posts, ['/v1/products']);
+});
+await test('lost sandbox creation response is held, not restarted', async () => {
+  const f = rehearsalFixture({ lose: true });
+  await assert.rejects(f.run(), /sandbox_fixture_pending/);
+  assert.equal((await f.run()).steps[0].status, 'executing'); assert.equal(f.posts.length, 1);
+});
+await test('sandbox creation is denied for Production and wrong arming commit', async () => {
+  const f = rehearsalFixture();
+  await assert.rejects(f.run({ VERCEL_ENV: 'production' }));
+  await assert.rejects(f.run({ MEMBERSHIP_SANDBOX_REHEARSAL_COMMIT: 'b'.repeat(40) }));
+  assert.equal(f.posts.length, 0);
+});
+await test('concurrent sandbox operators create at most one object for each request', async () => {
+  const f = rehearsalFixture();
+  await Promise.allSettled([f.run(), f.run(), f.run()]);
+  assert.ok(f.posts.filter(x => x === '/v1/products').length <= 1);
+  assert.ok(f.posts.filter(x => x === '/v1/prices').length <= 1);
+});
 console.log(`${count} passed, 0 failed`);
