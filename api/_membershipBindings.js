@@ -62,7 +62,17 @@ local function read(key,kind)
   return r
 end
 local writes={}
-local function put(key,r) table.insert(writes,key); table.insert(writes,encode(r)) end
+-- Managed cjson may omit null object fields. Persist the exact validated JS
+-- encoding, not a cjson reconstruction; signatures must cover identical data.
+local function serialized(r)
+  encode(r) -- retain encoder-fault refusal, but never persist reconstructed bytes
+  local s=p.serializedRecords[r.kind..':'..r.hash]
+  if type(s)~='string' then error('missing serialized record') end
+  local ok,v=pcall(cjson.decode,s)
+  if not ok or not same(v,r) then error('serialized record mismatch') end
+  return s
+end
+local function put(key,r) table.insert(writes,key); table.insert(writes,serialized(r)) end
 local function fail(code) return encode({ok=false,code=code}) end
 local function pair(rootKey,root,aliasKey,alias,shared)
   local old=read(rootKey,root.kind)
@@ -151,17 +161,18 @@ elseif p.action=='term' then
   result=p.record
 elseif p.action=='read' then
   result=read(KEYS[1],p.kind)
+  return encode({ok=true,record_json=result and redis.call('GET',KEYS[1]) or false})
 elseif p.action=='read_bundle' then
   -- Atomic snapshot of a fixed server-generated key list. Return serialized
   -- records, not aliased Lua tables in a shared result graph.
   local values={}
   for i,key in ipairs(KEYS) do
     local r=read(key,p.kinds[i])
-    values[i]=r and encode(r) or false
+    values[i]=r and redis.call('GET',key) or false
   end
   return encode({ok=true,records=values})
 else return fail('invalid_action') end
-local response=encode({ok=true,record_json=result and encode(result) or false})
+local response=encode({ok=true,record_json=result and serialized(result) or false})
 if #writes>0 then redis.call('MSET',unpack(writes)) end
 return response
 `;
@@ -187,8 +198,23 @@ export function createMembershipBindingStore({ execute, accountId, livemode, pri
   const termKey = (subScope, start) => `${PREFIX}term:${subScope}:${start}`;
   async function call(action, keys, data) {
     try {
+      const serializedRecords = {};
+      const collect = value => {
+        if (!value || typeof value !== 'object') return;
+        if (value.version === MEMBERSHIP_VERSION && typeof value.kind === 'string'
+          && typeof value.hash === 'string' && isObject(value.data)) {
+          const raw = canonical(value), parsed = JSON.parse(raw);
+          insist(canonical(parsed) === canonical(value), 'corrupt_binding');
+          unseal(parsed, value.kind);
+          const identity = value.kind + ':' + value.hash;
+          insist(!Object.hasOwn(serializedRecords, identity) || serializedRecords[identity] === raw, 'corrupt_binding');
+          serializedRecords[identity] = raw;
+        }
+        for (const item of Object.values(value)) collect(item);
+      };
+      collect(data);
       const raw = await execute(['EVAL', MEMBERSHIP_BINDINGS_SCRIPT, keys.length, ...keys,
-        JSON.stringify({ version: MEMBERSHIP_VERSION, action, ...data })]);
+        JSON.stringify({ version: MEMBERSHIP_VERSION, action, ...data, serializedRecords })]);
       insist(typeof raw === 'string', 'store_unavailable');
       const response = JSON.parse(raw);
       insist(isObject(response) && typeof response.ok === 'boolean', 'store_unavailable');

@@ -429,6 +429,41 @@ await t.section('Real approved adapter and ledger use durable bindings', async (
   t.check('Invoice preserves purchased pack', Number(await raw(`scans:${p.owner}:id_paid_left`)) === 25);
 });
 
+await t.section('Managed null-field loss never changes signed record bytes', async () => {
+  const prelude = `local native=cjson
+local function without_null(v)
+ if type(v)=='table' then
+  for k,x in pairs(v) do
+   if x==native.null then v[k]=nil else without_null(x) end
+  end
+ end
+ return v
+end
+local cjson={decode=function(s) return without_null(native.decode(s)) end,encode=native.encode}
+`;
+  const managed = (legacy = false) => factory({ execute: args => redis([args[0],
+    prelude + (legacy ? args[1].replace('table.insert(writes,serialized(r))', 'table.insert(writes,encode(r))') : args[1]),
+    ...args.slice(2)]) });
+  await reset();
+  const beforeFix = managed(true);
+  await pack('null_legacy', beforeFix);
+  await reject('Former re-encoding reproduces invalid settlement hash', () => beforeFix.getCheckoutOrder('cs_null_legacy'), 'corrupt_binding');
+  await reset();
+  const fixed = managed();
+  const p = await pack('null_fixed', fixed);
+  const saved = JSON.parse(await raw(`${PREFIX}settlement:${p.intentId}`));
+  t.check('Pack null subscription persisted exactly', saved.data.subscriptionId === null);
+  t.check('Managed reads return verifiable original record', (await fixed.getCheckoutOrder('cs_null_fixed')).paymentId === 'pi_null_fixed');
+  const unchanged = await snapshot();
+  await fixed.bindSettlement({ intentId: p.intentId, sessionId: 'cs_null_fixed', paymentId: 'pi_null_fixed' });
+  t.check('Repeated settlement preserves every stored byte', await snapshot() === unchanged);
+  const s = await subscription('sub', fixed);
+  await fixed.createTerm(term(s));
+  t.check('Subscription null payment persisted exactly', JSON.parse(await raw(`${PREFIX}settlement:${s.intentId}`)).data.paymentId === null);
+  t.check('Subscription history remains readable through managed decoder',
+    (await fixed.getSubscriptionTerm('sub_sub', 1800000010)).plan === 'casual');
+});
+
 await t.section('Scope and frozen dependencies', async () => {
   await reset(); await pack(); const s = await subscription(); await store.createTerm(term(s));
   t.check('Only versioned binding keys created', (await keys()).every(k => k.startsWith(PREFIX)));

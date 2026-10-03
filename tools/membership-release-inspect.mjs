@@ -24,13 +24,16 @@ if (stage || process.env.MEMBERSHIP_OWNER_READ_ONLY_INSPECT === 'enabled') {
     if (leader) {
       const { transitionMembershipOwner } = await import('./transition-membership-owner.mjs');
       const result = await transitionMembershipOwner({ stage: stage || 'inspect' });
+      if (result.paidReconciliation) console.log('MEMBERSHIP_OWNER_PAID_RECONCILIATION ' + JSON.stringify({
+        commit: process.env.VERCEL_GIT_COMMIT_SHA, ...result.paidReconciliation,
+      }));
       if (result.checkoutInspection) console.log('MEMBERSHIP_PAID_CHECKOUT_INSPECTION ' + JSON.stringify({
         commit: process.env.VERCEL_GIT_COMMIT_SHA,
         paidCheckout: result.checkoutInspection.paidCheckout,
         records: result.checkoutInspection.records,
         balances: result.checkoutInspection.balances,
       }));
-      console.log((stage ? 'MEMBERSHIP_OWNER_OPERATOR ' : process.env.MEMBERSHIP_OWNER_CHECKOUT_RECOVERY === 'enabled'
+      console.log((stage || result.paidReconciliation ? 'MEMBERSHIP_OWNER_OPERATOR ' : process.env.MEMBERSHIP_OWNER_CHECKOUT_RECOVERY === 'enabled'
         ? 'MEMBERSHIP_OWNER_CHECKOUT_RECOVERY ' : 'MEMBERSHIP_OWNER_READ_ONLY ') + JSON.stringify({
         commit: process.env.VERCEL_GIT_COMMIT_SHA, ...result,
       }));

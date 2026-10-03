@@ -16,6 +16,7 @@ import { reconcilePaidEnrollment } from '../api/_membershipPaidEnrollment.js';
 import { createMembershipConsumption, membershipEnrollmentKey } from '../api/_membershipConsumption.js';
 import { readMembershipVerification } from '../api/_membershipVerification.js';
 import { inspectMembershipCheckout } from './inspect-membership-checkout.mjs';
+import { reconcileOwnerPaidCheckout } from './reconcile-owner-paid-checkout.mjs';
 const sha = x => createHash('sha256').update(x).digest('hex');
 const insist = (v, code) => { if (!v) throw Error(code); };
 export const OWNER = 'fzUpcrXKDdQzGORl0bLQ6mTwML73';
@@ -121,7 +122,15 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
   if (recoverCheckout) insist(stage === 'inspect' && /^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA || '')
     && env.MEMBERSHIP_OWNER_CHECKOUT_RECOVERY_COMMIT === env.VERCEL_GIT_COMMIT_SHA
     && imported?.authorization.owner === OWNER, 'checkout_recovery_not_armed');
-  if (stage === 'inspect') return { stage, mutated: false, legacyTier: old.tier || 'pro',
+  let paidReconciliation;
+  if (env.MEMBERSHIP_OWNER_PAID_RECONCILE === 'enabled') {
+    insist(stage === 'inspect' && /^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA || '')
+      && env.MEMBERSHIP_OWNER_PAID_RECONCILE_COMMIT === env.VERCEL_GIT_COMMIT_SHA
+      && env.MEMBERSHIP_PURCHASE_LIVE_MODE === 'disabled' && imported?.authorization.owner === OWNER,
+    'paid_reconciliation_not_armed');
+    paidReconciliation = await reconcileOwnerPaidCheckout({ execute, config, fetchImpl });
+  }
+  if (stage === 'inspect') return { stage, mutated: !!paidReconciliation, legacyTier: old.tier || 'pro',
     subscriptionId: snapshot.subscriptionId, customerId: snapshot.customerId,
     currentPeriodStart: snapshot.periodStart, currentPeriodEnd: snapshot.periodEnd,
     schedulePresent: snapshot.scheduleId !== null, imported: !!imported,
@@ -129,7 +138,8 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     legacyDigest: sha(raw), backupRequired: true,
     importComparisonReadOnly: await inspectImportComparisons(execute),
     verificationReadOnly: await inspectVerification(execute),
-    checkoutInspection: await inspectMembershipCheckout({ execute, config, owner: OWNER, fetchImpl, recover: recoverCheckout }) };
+    checkoutInspection: await inspectMembershipCheckout({ execute, config, owner: OWNER, fetchImpl, recover: recoverCheckout }),
+    paidReconciliation };
   const commit = env.MEMBERSHIP_OWNER_TRANSITION_COMMIT;
   insist(/^[a-f0-9]{40}$/.test(commit || '') && commit === env.VERCEL_GIT_COMMIT_SHA
     && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'
