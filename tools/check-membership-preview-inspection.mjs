@@ -110,7 +110,7 @@ function rehearsalFixture({ denied = false, lose = false } = {}) {
     if (lose) throw Error('lost response');
     return Response.json(x);
   };
-  return { store, posts, run: override => prepareMembershipSandboxRehearsal({
+  return { store, posts, objects, run: override => prepareMembershipSandboxRehearsal({
     env: { ...runEnv, ...override }, execute: runRedis, fetchImpl: runFetch }) };
 }
 await test('sandbox fixture creation is canonical and exact replay never creates again', async () => {
@@ -141,5 +141,33 @@ await test('concurrent sandbox operators create at most one object for each requ
   await Promise.allSettled([f.run(), f.run(), f.run()]);
   assert.ok(f.posts.filter(x => x === '/v1/products').length <= 1);
   assert.ok(f.posts.filter(x => x === '/v1/prices').length <= 1);
+});
+function suppliedFixture() {
+  const f = rehearsalFixture();
+  f.objects.set('/v1/prices/price_ownerfixture', { object: 'price', id: 'price_ownerfixture',
+    product: 'prod_ownerfixture', livemode: false, active: true, type: 'recurring', unit_amount: 999, currency: 'usd',
+    recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' } });
+  f.objects.set('/v1/products/prod_ownerfixture', { object: 'product', id: 'prod_ownerfixture', livemode: false, active: true });
+  return f;
+}
+await test('owner-provided test fixture is read-only in Stripe and replay preserves its authority', async () => {
+  const f = suppliedFixture(), option = { MEMBERSHIP_SANDBOX_LEGACY_PRICE: 'price_ownerfixture' };
+  const r = await f.run(option), before = JSON.stringify([...f.store]);
+  assert.equal(r.status, 'legacy_test_price_ready');
+  assert.deepEqual(await f.run(option), r); assert.equal(JSON.stringify([...f.store]), before);
+  assert.equal(f.posts.length, 0);
+});
+await test('supplied fixture rejects live mode, annual interval and incorrect price', async () => {
+  for (const change of [{ livemode: true }, { unit_amount: 998 }, { recurring: { interval: 'year', interval_count: 1 } }]) {
+    const f = suppliedFixture(), p = f.objects.get('/v1/prices/price_ownerfixture');
+    Object.assign(p, change);
+    await assert.rejects(f.run({ MEMBERSHIP_SANDBOX_LEGACY_PRICE: p.id }), /sandbox_fixture_price_mismatch/);
+    assert.equal([...f.store.keys()].filter(k => !values.has(k)).length, 0);
+  }
+});
+await test('supplied fixture never borrows a mapped catalogue price', async () => {
+  const f = suppliedFixture();
+  await assert.rejects(f.run({ MEMBERSHIP_SANDBOX_LEGACY_PRICE: prices.plans.casual.priceId }), /sandbox_fixture_price_mismatch/);
+  assert.equal(f.posts.length, 0);
 });
 console.log(`${count} passed, 0 failed`);

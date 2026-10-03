@@ -19,7 +19,7 @@ export async function prepareMembershipSandboxRehearsal({
   const config = membershipEnvironment(env, 'test');
   if (!inspected.datastore.cutoverAuditVerified || !inspected.datastore.distinctFromProduction) throw Error('sandbox_rehearsal_scope');
   const report = { environment: 'preview', livemode: false, commit: env.VERCEL_GIT_COMMIT_SHA,
-    fixture: 'legacy-casual-20261003', ownerDataChanged: false, steps: [] };
+    fixture: 'legacy-casual-20261003', status: 'incomplete', ownerDataChanged: false, steps: [] };
   const request = async (path, body, idempotencyKey) => {
     const response = await fetchImpl('https://api.stripe.com/v1/' + path, {
       method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
@@ -30,6 +30,34 @@ export async function prepareMembershipSandboxRehearsal({
     if (!response.ok) return { httpStatus: response.status };
     return { httpStatus: response.status, data: await response.json() };
   };
+  // The deployment credential intentionally need not have catalogue-write
+  // permission. An owner-created sandbox-only legacy price can be adopted by
+  // explicit nonsecret ID without reopening the earlier denied/unknown claim.
+  const suppliedPrice = env.MEMBERSHIP_SANDBOX_LEGACY_PRICE;
+  if (suppliedPrice) {
+    if (!/^price_[A-Za-z0-9]+$/.test(suppliedPrice)
+      || [...Object.values(config.priceMap.plans), ...Object.values(config.priceMap.packs)]
+        .some(p => p.priceId === suppliedPrice)) throw Error('sandbox_fixture_price_mismatch');
+    const p = (await request('prices/' + suppliedPrice)).data;
+    if (p?.object !== 'price' || p.id !== suppliedPrice || p.livemode !== false || p.active !== true
+      || p.type !== 'recurring' || p.currency !== 'usd' || p.unit_amount !== 999
+      || p.recurring?.interval !== 'month' || p.recurring.interval_count !== 1
+      || p.recurring.usage_type !== 'licensed' || !/^prod_[A-Za-z0-9]+$/.test(p.product)) {
+      throw Error('sandbox_fixture_price_mismatch');
+    }
+    const product = (await request('products/' + p.product)).data;
+    if (product?.object !== 'product' || product.id !== p.product || product.livemode !== false
+      || product.active !== true) throw Error('sandbox_fixture_product_mismatch');
+    const key = PREFIX + 'owner-supplied-price';
+    const raw = JSON.stringify({ version: 1, accountId: config.accountId, livemode: false,
+      priceId: p.id, productId: p.product, amountCents: 999, currency: 'usd',
+      interval: 'month', authorization: 'owner-supplied-sandbox-rehearsal-price' });
+    await execute(['SET', key, raw, 'NX']);
+    if (await execute(['GET', key]) !== raw) throw Error('sandbox_fixture_conflict');
+    report.steps.push({ name: 'owner-supplied-legacy-price', status: 'canonically_verified', priceId: p.id, productId: p.product });
+    report.status = 'legacy_test_price_ready';
+    return report;
+  }
   // Exact request bytes are retained server-side. Only allowlisted IDs/status
   // reach build logs; no raw Stripe bodies, payment secrets, or credentials.
   const create = async (name, path, body, objectType, idPrefix) => {
@@ -59,6 +87,7 @@ export async function prepareMembershipSandboxRehearsal({
         const next = JSON.stringify({ binding, phase, httpStatus: result.httpStatus });
         await execute(['EVAL', CAS, 1, key, raw, next]);
         report.steps.push({ name, status: phase, httpStatus: result.httpStatus });
+        report.status = phase;
         return null;
       }
       const x = result.data;
@@ -72,6 +101,7 @@ export async function prepareMembershipSandboxRehearsal({
     if (record.binding !== binding) throw Error('sandbox_fixture_conflict');
     if (record.phase !== 'created') {
       report.steps.push({ name, status: record.phase, ...(record.httpStatus ? { httpStatus: record.httpStatus } : {}) });
+      report.status = record.phase;
       return null;
     }
     const canonical = await request(path + '/' + encodeURIComponent(record.id));
