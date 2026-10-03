@@ -45,6 +45,12 @@ await test('read-only cutover audit and absent enrollment are faithfully reporte
   assert.equal(r.stripe.clocks.httpStatus, 403); assert.equal(r.stripe.clocks.available, false);
   assert.ok(!JSON.stringify(r).includes('syntheticfixture')); assert.ok(!JSON.stringify(r).includes('secret not emitted'));
 });
+await test('disabled purchasing can be inspected without changing activation', async () => {
+  const disabled = { ...env, MEMBERSHIP_PURCHASE_TEST_MODE: 'disabled' };
+  const r = await inspectMembershipPreview({ env: disabled, execute, fetchImpl });
+  assert.equal(r.purchasingEnabled, false);
+  assert.equal(disabled.MEMBERSHIP_PURCHASE_TEST_MODE, 'disabled');
+});
 for (const [name, change] of [
   ['production refused before I/O', { VERCEL_ENV: 'production' }],
   ['wrong branch refused before I/O', { VERCEL_GIT_COMMIT_REF: 'main' }],

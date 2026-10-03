@@ -15,7 +15,9 @@ export async function inspectMembershipPreview({
   if (env.VERCEL_ENV !== 'preview' || env.VERCEL_GIT_COMMIT_REF !== evidence.branch
     || !/^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA || '')
     || env.MEMBERSHIP_PREVIEW_INSPECT_COMMIT !== env.VERCEL_GIT_COMMIT_SHA) throw Error('preview_inspect_scope');
-  const config = membershipEnvironment(env, 'test');
+  // Validate the credentials/catalogue independently of purchase activation.
+  // This copied object never reaches a route or changes the deployment flag.
+  const config = membershipEnvironment({ ...env, MEMBERSHIP_PURCHASE_TEST_MODE: 'enabled' }, 'test');
   if (config.accountId !== 'acct_1Tno55FW2YZoedIZ'
     || config.returnOrigin !== 'https://cardresell-membership-v2-preview.vercel.app') throw Error('preview_inspect_scope');
   let endpoint;
@@ -71,6 +73,7 @@ export async function inspectMembershipPreview({
   const endpoints = await get('webhook_endpoints?limit=100');
   const result = {
     commit: env.VERCEL_GIT_COMMIT_SHA, environment: 'preview', branch: evidence.branch,
+    purchasingEnabled: env.MEMBERSHIP_PURCHASE_TEST_MODE === 'enabled',
     datastore: { endpointHash, distinctFromProduction: true, cutoverAuditVerified: true,
       providerDatabaseId: audit.providerDatabaseId, cutoverCommit: audit.releaseCommit,
       installedAt: Number(installed), permanentFence: true },
