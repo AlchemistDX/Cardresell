@@ -69,6 +69,11 @@ function fixture(extra = {}) {
         applies_to: { products: Object.values(prices.packs).map(p => p.productId) } });
     }
     if (u.pathname === '/v1/checkout/sessions' && init.method === 'POST') {
+      if (params.has('discounts[0][coupon]') && params.has('allow_promotion_codes')) {
+        return new Response(JSON.stringify({ error: { type: 'invalid_request_error',
+          message: 'You may only specify one of these parameters: allow_promotion_codes, discounts.' } }),
+        { status: 400, headers: { 'content-type': 'application/json' } });
+      }
       const order = await store.getIntent(params.get('client_reference_id'));
       const base = order.kind === 'pack' ? LAUNCH_PACKS[order.packId].basePriceCents : order.amountCents;
       const s = { object: 'checkout.session', id: `cs_${order.intentId}`, livemode: false,
@@ -110,6 +115,8 @@ await t.section('All catalog selections derive exact fixed creation parameters',
       t.check(`${plan}/${packId}: one saved-intent session`, result.id === `cs_${order.intentId}` && f.postCount() === 1);
       t.check(`${plan}/${packId}: exact pack and coupon mapping`, p.get('line_items[0][price]') === order.priceId
         && p.get('line_items[0][quantity]') === '1' && p.get('discounts[0][coupon]') === coupons[plan]);
+      t.check(`${plan}/${packId}: discounts never conflict with promotion-code parameter`,
+        coupons[plan] === null ? p.get('allow_promotion_codes') === 'false' : !p.has('allow_promotion_codes'));
       t.check(`${plan}/${packId}: trusted customer not email`, p.get('customer') === order.customerId
         && !p.has('customer_email') && !p.has('metadata[google_sub]') && !p.has('metadata[tier]'));
       t.check(`${plan}/${packId}: fixed URLs no legacy grant trigger`, p.get('success_url') === `${ORIGIN}/?membership_return=1&session_id={CHECKOUT_SESSION_ID}`
@@ -121,7 +128,7 @@ await t.section('All catalog selections derive exact fixed creation parameters',
       }
       const post = f.calls.find(c => c.init.method === 'POST');
       t.check(`${plan}/${packId}: stable server idempotency/no pricing override`, post.init.headers['Idempotency-Key'] === order.stripeIdempotencyKey
-        && p.get('allow_promotion_codes') === 'false' && p.get('automatic_tax[enabled]') === 'false'
+        && p.get('allow_promotion_codes') !== 'true' && p.get('automatic_tax[enabled]') === 'false'
         && ![...p.keys()].some(k => k.startsWith('payment_method_types') || k.includes('price_data')));
     }
   }

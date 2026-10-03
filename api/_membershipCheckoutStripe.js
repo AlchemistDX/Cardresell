@@ -191,12 +191,15 @@ export function createMembershipCheckoutStripeTransport({
           mode: pack ? 'payment' : 'subscription', customer: saved.customerId,
           client_reference_id: saved.intentId, 'line_items[0][price]': saved.priceId,
           'line_items[0][quantity]': '1',
-          'automatic_tax[enabled]': 'false', allow_promotion_codes: 'false',
+          'automatic_tax[enabled]': 'false',
           success_url: `${returnOrigin}/?membership_return=1&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${returnOrigin}/?membership_cancel=1`,
           'metadata[membership_version]': MEMBERSHIP_VERSION, 'metadata[intent_id]': saved.intentId,
         });
+        // Stripe rejects the presence of both fields, even when promotion codes
+        // are false. Omission keeps customer-entered codes disabled.
         if (coupon !== null) params.set('discounts[0][coupon]', coupon);
+        else params.set('allow_promotion_codes', 'false');
         const session = await request('checkout/sessions', '', params, saved.stripeIdempotencyKey);
         return { id: sessionReference(session, saved) };
         // No retries here: timeout/status/body failure may follow a committed

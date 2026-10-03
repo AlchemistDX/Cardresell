@@ -117,6 +117,10 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
   const old = JSON.parse(raw);
   insist(old?.subscriptionId === authorization.subscriptionId && old.status === 'active', 'legacy_owner_mismatch');
   const imported = await readOwnerImport(execute, config.accountId, true, OWNER);
+  const recoverCheckout = env.MEMBERSHIP_OWNER_CHECKOUT_RECOVERY === 'enabled';
+  if (recoverCheckout) insist(stage === 'inspect' && /^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA || '')
+    && env.MEMBERSHIP_OWNER_CHECKOUT_RECOVERY_COMMIT === env.VERCEL_GIT_COMMIT_SHA
+    && imported?.authorization.owner === OWNER, 'checkout_recovery_not_armed');
   if (stage === 'inspect') return { stage, mutated: false, legacyTier: old.tier || 'pro',
     subscriptionId: snapshot.subscriptionId, customerId: snapshot.customerId,
     currentPeriodStart: snapshot.periodStart, currentPeriodEnd: snapshot.periodEnd,
@@ -125,7 +129,7 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     legacyDigest: sha(raw), backupRequired: true,
     importComparisonReadOnly: await inspectImportComparisons(execute),
     verificationReadOnly: await inspectVerification(execute),
-    checkoutReadOnly: await inspectMembershipCheckout({ execute, config, owner: OWNER, fetchImpl }) };
+    checkoutInspection: await inspectMembershipCheckout({ execute, config, owner: OWNER, fetchImpl, recover: recoverCheckout }) };
   const commit = env.MEMBERSHIP_OWNER_TRANSITION_COMMIT;
   insist(/^[a-f0-9]{40}$/.test(commit || '') && commit === env.VERCEL_GIT_COMMIT_SHA
     && env.MEMBERSHIP_PURCHASE_LIVE_MODE !== 'enabled'

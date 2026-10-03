@@ -24,7 +24,8 @@ if (stage || process.env.MEMBERSHIP_OWNER_READ_ONLY_INSPECT === 'enabled') {
     if (leader) {
       const { transitionMembershipOwner } = await import('./transition-membership-owner.mjs');
       const result = await transitionMembershipOwner({ stage: stage || 'inspect' });
-      console.log((stage ? 'MEMBERSHIP_OWNER_OPERATOR ' : 'MEMBERSHIP_OWNER_READ_ONLY ') + JSON.stringify({
+      console.log((stage ? 'MEMBERSHIP_OWNER_OPERATOR ' : process.env.MEMBERSHIP_OWNER_CHECKOUT_RECOVERY === 'enabled'
+        ? 'MEMBERSHIP_OWNER_CHECKOUT_RECOVERY ' : 'MEMBERSHIP_OWNER_READ_ONLY ') + JSON.stringify({
         commit: process.env.VERCEL_GIT_COMMIT_SHA, ...result,
       }));
       await writeFile(join(directory, 'confirmed'), 'ok', { flag: 'wx', mode: 0o600 });
