@@ -117,6 +117,13 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
       } catch (e) {
         // No early processed marker. Stripe retries transient/corrupt/missing
         // binding failures; financial idempotence belongs to the ledger.
+        const known = new Set(['invalid_signature', 'invalid_event', 'binding_missing', 'binding_invalid',
+          'corrupt_binding', 'corrupt_mapping', 'store_unavailable', 'payment_unavailable', 'ledger_unavailable',
+          'transport_status', 'transport_response', 'transport_unavailable', 'payment_mismatch',
+          'session_mismatch', 'settlement_mismatch', 'amount_mismatch', 'line_mismatch', 'price_mismatch',
+          'invalid_grant', 'invalid_pack', 'invalid_purchase', 'ledger_conflict']);
+        console.warn('MEMBERSHIP_WEBHOOK_REJECTED', [e.code, e.cause?.code, e.cause?.cause?.code]
+          .map(code => known.has(code) ? code : 'unclassified').join(':'));
         return res.status(['invalid_signature', 'invalid_event'].includes(e.code) ? 400 : 503)
           .json({ error: 'webhook_not_processed' });
       }

@@ -5,6 +5,8 @@ import { createMembershipCheckoutStripeTransport } from '../api/_membershipCheck
 import { MEMBERSHIP_STRIPE_API_VERSION } from '../api/_membershipStripe.js';
 import { createMembershipStripeTransport } from '../api/_membershipStripe.js';
 import { recoverOwnerCheckout } from './recover-owner-checkout.mjs';
+import { createMembershipPaymentAdapter } from '../api/_membershipPayments.js';
+import { createMembershipConsumption } from '../api/_membershipConsumption.js';
 export async function inspectMembershipCheckout({ execute, config, owner, fetchImpl = fetch, recover = false }) {
   const read = command => {
     const bindingRead = command[0] === 'EVAL' && command[1] === MEMBERSHIP_BINDINGS_SCRIPT
@@ -55,5 +57,25 @@ export async function inspectMembershipCheckout({ execute, config, owner, fetchI
   if (recover && rows.filter(row => row.recovery?.status === 'checkout_ready').length !== 1) {
     throw Error('owner_checkout_recovery_unconfirmed');
   }
-  return { rows, datastoreMutated: false, stripeRecoveryRequested: recover };
+  const reader = createMembershipStripeTransport({ ...config, livemode: true,
+    apiVersion: MEMBERSHIP_STRIPE_API_VERSION, fetchImpl });
+  const payments = createMembershipPaymentAdapter({ stripe: reader, bindings, ...config, livemode: true,
+    fulfill: async (kind, envelope) => ({ validated: true, kind, ownerMatches: envelope.owner === owner,
+      packId: envelope.packId, amountCents: envelope.amountCents, paid: envelope.paid, mutated: false }) });
+  let paidCheckout;
+  try {
+    paidCheckout = await payments.checkoutReturn({
+      sessionId: 'cs_live_a1mAUM0XNbKZScLoCwVcBaKlwDkPSTsRXTxntchUiar4MjmkK3CvLFGe1R',
+      authenticatedOwner: owner });
+  } catch (error) {
+    paidCheckout = { validated: false, codes: [error.code, error.cause?.code, error.cause?.cause?.code]
+      .map(code => /^[a-z_]{1,64}$/.test(code || '') ? code : 'unclassified'), mutated: false };
+  }
+  const consume = createMembershipConsumption({ execute });
+  const context = { owner, receipt: '0'.repeat(64), scan: 'operator-read-only-balance' };
+  const id = await consume('snapshot', context);
+  const grade = await consume('snapshot', { ...context, mode: 'grade' });
+  return { rows, paidCheckout, balances: { id: id.remaining, grade: grade.remaining,
+    idPurchased: id.purchased, gradePurchased: grade.purchased },
+  datastoreMutated: false, stripeRecoveryRequested: recover };
 }
