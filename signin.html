@@ -373,6 +373,25 @@
 
   <div class="bottom-brand">CardResell · Bradenton, FL · Free to use</div>
 
+  <script id="signin-destination">
+    // Both sign-in completion paths use the same bounded app destination.
+    // Never navigate directly to caller-controlled `next`, including same-origin
+    // APIs, sign-in loops, protocol-relative URLs or credential-bearing URLs.
+    window._safeSignInDestination = function(next) {
+      if (next === 'flips' || next === 'collection') return '/?next=' + next;
+      if (typeof next !== 'string' || !next || /[\u0000-\u0020\u007f\\]/.test(next) || next.startsWith('//')) return '/';
+      try {
+        const target = new URL(next, location.origin + '/');
+        if (!['https:', 'http:'].includes(target.protocol) ||
+            target.origin !== location.origin || target.username || target.password ||
+            !['/', '/index.html', '/pricing', '/pricing.html'].includes(target.pathname)) return '/';
+        return target.pathname + target.search + target.hash;
+      } catch (_) {
+        return '/';
+      }
+    };
+  </script>
+
   <!-- Firebase -->
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -487,7 +506,7 @@
       const params = new URLSearchParams(location.search);
       const nextParam = params.get('next');
       if (window._justSignedIn || nextParam) {
-        const dest = nextParam || '/';
+        const dest = window._safeSignInDestination(nextParam);
         window.location.replace(dest);
         return;
       }
@@ -678,7 +697,7 @@
         const user = window._fbAuth.currentUser;
         if (user && user.emailVerified) {
           window._justSignedUp = false;
-          const dest = new URLSearchParams(location.search).get('next') || '/';
+          const dest = window._safeSignInDestination(new URLSearchParams(location.search).get('next'));
           window.location.replace(dest);
           return;
         }

@@ -14,8 +14,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const INDEX = '/home/user/workspace/cardresell/index.html';
-const SIGNIN = '/home/user/workspace/cardresell/signin.html';
+const INDEX = path.join(__dirname, '..', 'index.html');
+const SIGNIN = path.join(__dirname, '..', 'signin.html');
 const { readAppSource } = require('./_appsource.cjs');
 
 let failures = 0;
@@ -287,6 +287,47 @@ if (signin) {
     /browserPopupRedirectResolver/.test(signinAuthModule),
     ''
   );
+
+  section('bounded sign-in return destinations (local source tests, not Firebase acceptance)');
+  const vm = require('node:vm');
+  const destinationScript = signin.match(/<script id="signin-destination">([\s\S]*?)<\/script>/);
+  check('shared destination resolver precedes Firebase module', !!destinationScript &&
+    signin.indexOf(destinationScript[0]) < signin.indexOf('<script type="module">'));
+  const allowed = [
+    ['/?shop=1', '/?shop=1'],
+    ['/?subscriptions=1', '/?subscriptions=1'],
+    ['/?membership_return=1&session_id=cs_test_fixture', '/?membership_return=1&session_id=cs_test_fixture'],
+    ['/index.html?verified=1#account', '/index.html?verified=1#account'],
+    ['/pricing.html?upgrade=pro', '/pricing.html?upgrade=pro'],
+    ['/pricing', '/pricing'],
+    ['flips', '/?next=flips'],
+    ['collection', '/?next=collection'],
+  ];
+  const rejected = [
+    null, undefined, '', 'https://attacker.invalid/', '//attacker.invalid/',
+    '///attacker.invalid/', '\\\\attacker.invalid/', '/\\attacker.invalid/',
+    'javascript:alert(1)', 'data:text/html,hello', 'https://www.cardresell.org.attacker.invalid/',
+    '/api/membership-account', '/signin?next=/?shop=1', '/signin.html', '/unknown',
+    '/%2f%2fattacker.invalid', '/%5cattacker.invalid', '/%252f%252fattacker.invalid',
+    '/\n/attacker.invalid', '\thttps://attacker.invalid/', 'https://',
+  ];
+  for (const origin of ['https://www.cardresell.org', 'https://cardresell-membership-v2-preview.vercel.app']) {
+    const context = { window: {}, location: { origin }, URL };
+    vm.runInNewContext(destinationScript ? destinationScript[1] : '', context);
+    const resolve = context.window._safeSignInDestination || (() => 'MISSING');
+    for (const [input, expected] of allowed) {
+      check(`${origin}: preserve ${input}`, resolve(input) === expected);
+    }
+    for (const input of rejected) {
+      check(`${origin}: reject ${JSON.stringify(input)}`, resolve(input) === '/');
+    }
+    check(`${origin}: accept same-origin absolute app link`, resolve(origin + '/?shop=1') === '/?shop=1');
+    check(`${origin}: reject embedded credentials`, resolve(origin.replace('://', '://user:pass@') + '/?shop=1') === '/');
+    check(`${origin}: reject foreign port`, resolve(origin + ':444/?shop=1') === '/');
+    check(`${origin}: reject protocol downgrade`, resolve(origin.replace('https:', 'http:') + '/?shop=1') === '/');
+  }
+  check('both completion paths call shared resolver', (signin.match(/const dest = window\._safeSignInDestination\(/g) || []).length === 2);
+  check('no raw next fallback remains at navigation sinks', !/const dest = (?:nextParam|new URLSearchParams)/.test(signin));
 }
 
 // ─── Summary ───
