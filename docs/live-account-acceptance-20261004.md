@@ -14,3 +14,11 @@ Live results:
 - Fixed subsequent presentation bug: customer-associated Free state lacks a subscription status, and the public adapter mislabeled it not_associated. Return associated when lifecycle contains customerId; do not invite setup again.
 
 Remaining acceptance: a real card photo scan and credit accounting, phone camera capture, subscription lifecycle acceptance where not already evidenced, consistent old upsell copy, and a measured seller pilot before paid advertising scale. Opening Checkout is not a completed-charge or webhook acceptance claim.
+
+## Live photo acceptance
+
+Production dpl_6pe93Urt6rEodJ2DmcBpZzc8sB9b, source 3cbc395d4cc812402340bca844e0517e52f08222: supplied IMG_4064(3).jpeg identified correctly as Minun, Paradox Rift #194, Illustration Rare. Shop ledger changed from 5 ID / 2 Grade to 4 ID / 2 Grade. Front plus IMG_4065.jpeg Quick Grade completed with a low-confidence PSA 8 estimate and an explicit holder/sleeve limitation. This verifies workflow, not physical grading accuracy. Shop ledger then showed included 4 ID / 0 Grade and preserved 0 ID / 1 Grade: total 4 ID / 1 Grade, exactly one debit per operation.
+
+The first live attempt exposed missing operation IDs in the legacy browser callers; added an owner-bound, request-digest operation helper, persisting only hashes/random IDs in sessionStorage for reload/network recovery. Server scan-intent tests: 70 passed. The grade test then exposed cloned file inputs retaining inline onchange while also receiving addEventListener: the durable server intent returned 202 for the duplicate and prevented a second debit. Follow-up removes the cloned inline handler before binding one listener, refreshes authoritative balances after completed HTTP responses, and preserves separate paid/included counters so totals are not doubled. Targeted input/reset and request/recovery regressions pass; asset checks 99 and auth integrity 96 pass.
+
+No payment was made. Public advertising remains blocked on the remaining acceptance list and current closed pilot admission. Do not infer general launch readiness from this single-card test.

@@ -3,10 +3,10 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 const source = readFileSync('js/scan-request.js', 'utf8');
-const records = new Map(); let requests = [], status = 200, offline = false;
+const records = new Map(); let requests = [], status = 200, offline = false, refreshes = 0;
 const make = (uid='owner-a', storage=true) => {
  const user={uid,getIdToken:async()=> 'synthetic-token'};
- const sandbox={ window:{_fbAuth:{currentUser:user}}, crypto:webcrypto, TextEncoder,
+ const sandbox={ window:{_fbAuth:{currentUser:user},loadSettingsScanCredits:async()=>{refreshes++;}}, crypto:webcrypto, TextEncoder,
   sessionStorage:{getItem:k=>records.get(k)??null,setItem:(k,v)=>{if(!storage)throw Error();records.set(k,v);}},
   fetch:async(url,options)=>{requests.push(JSON.parse(options.body));if(offline)throw Error('offline');return {status,ok:status<400};}};
  vm.runInNewContext(source,sandbox);return sandbox.window;
@@ -29,4 +29,7 @@ const html=readFileSync('index.html','utf8');
 const core=html.match(/\/js\/core\.[a-f0-9]{8}\.js/)[0],ui=html.match(/\/js\/ui\.[a-f0-9]{8}\.js/)[0];
 assert.ok(html.indexOf('/js/scan-request.')<html.indexOf(core));
 for(const path of [core,ui]){const s=readFileSync('.'+path,'utf8');assert.ok(!s.includes("fetch('/api/scan',"));assert.ok(s.includes("window.cardResellScanRequest('/api/scan',"));}
+const refreshed=refreshes;await req(make('refresh-check'));assert.equal(refreshes,refreshed+1);
+status=202;await assert.rejects(()=>req(make('pending-check')),/still processing/);assert.equal(refreshes,refreshed+1);status=200;
+const refreshFails=make('refresh-fails');refreshFails.loadSettingsScanCredits=()=>{throw Error('offline');};assert.equal((await req(refreshFails)).status,200);
 console.log('PASS scan recovery: concurrent/reloaded retries, pending/network failures, account isolation, storage failure and all shipped callers');
