@@ -4,6 +4,7 @@ import { createMembershipAuthenticator } from '../api/_membershipAuthentication.
 import { createMembershipAccountRoutes } from '../api/_membershipAccountRoutes.js';
 import { readFileSync } from 'node:fs';
 import { readMembershipVerification } from '../api/_membershipVerification.js';
+import { membershipPreviewAuthDiagnostics } from '../api/_membershipPreviewAuthDiagnostics.js';
 
 // Private synthetic keys and a local public-key response only. No Firebase
 // account, managed datastore, real token or production authentication bypass.
@@ -72,7 +73,7 @@ await test('rejected identity cannot trigger account reads, bootstrap or custome
 await test('runtime wires strict auth without flexible email mapping', async () => {
   const source = readFileSync(new URL('../api/_membershipPurchaseRuntime.js', import.meta.url), 'utf8');
   assert.match(source, /const normalAuthenticate = createMembershipAuthenticator\(\{/);
-  assert.match(source, /resolveVerification: uid => readMembershipVerification\(membershipRedis, uid\)/);
+  assert.match(source, /resolveVerification: uid => readMembershipVerification\(membershipRedis, uid, Date\.now\(\), authDiagnostic\)/);
   assert.match(source, /const identity = await normalAuthenticate\(token\)/);
   assert.match(source, /livemode && !publicLaunch && !allowed\.includes\(identity\.uid\)/);
   assert.doesNotMatch(source, /verifyTokenFlexible/);
@@ -132,5 +133,79 @@ await test('membership status restores the same saved verification read before r
   const source = readFileSync(new URL('../api/pro-status.js', import.meta.url), 'utf8');
   assert.match(source, /await readMembershipVerification\(membershipRedis, userSub\)/);
   assert.match(source, /if \(saved\) \{ emailVerified = true/);
+});
+await test('Preview diagnostics are disabled for Production Development other branches and absent environment', async () => {
+  for (const env of [{}, { VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2' },
+    { VERCEL_ENV: 'development', VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2' },
+    { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'other' },
+    { VERCEL_ENV: 'preview', MEMBERSHIP_PREFLIGHT_BRANCH: 'feature/launch-membership-v2' }]) {
+    const events = [];
+    membershipPreviewAuthDiagnostics(env, x => events.push(x))('token_received');
+    assert.deepEqual(events, []);
+  }
+});
+await test('Preview diagnostic sink allows only fixed stages never arbitrary values', async () => {
+  const events = [];
+  const observe = membershipPreviewAuthDiagnostics({ VERCEL_ENV: 'preview',
+    VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2' }, x => events.push(x));
+  for (const value of ['token_received', 'private diagnostic sentinel', token(), base.sub, base.email, {}, undefined]) observe(value);
+  assert.deepEqual(events, ['token_received']);
+});
+for (const [name, raw, expected] of [
+  ['missing', null, 'stored_verification_missing'],
+  ['malformed', '{', 'stored_verification_malformed_json'],
+  ['shape', '[]', 'stored_verification_invalid_record'],
+  ['negative', JSON.stringify({ verified: false }), 'stored_verification_negative'],
+  ['missing timestamp', '{}', 'stored_verification_invalid_record'],
+  ['bad timestamp', JSON.stringify({ verifiedAt: 'bad' }), 'stored_verification_invalid_timestamp'],
+  ['future', JSON.stringify({ verifiedAt: new Date((seconds + 3600) * 1000).toISOString() }), 'stored_verification_invalid_timestamp'],
+]) {
+  await test('diagnostic distinguishes stored verification '+name+' without changing refusal', async () => {
+    const events = [], reads = [];
+    const observe = x => events.push(x);
+    const auth = createMembershipAuthenticator({ onDiagnostic: observe,
+      resolveVerification: uid => readMembershipVerification(async command => { reads.push(command); return raw; }, uid, seconds * 1000, observe) });
+    await assert.rejects(() => auth(token({ email_verified: false })), { code: 'authentication_required' });
+    assert.deepEqual(reads, [['GET', 'email_verified:' + base.sub]]);
+    assert.deepEqual(events, ['token_received', 'token_claims_well_formed',
+      'firebase_signature_claims_verified', 'subject_matched', 'token_email_unverified_or_absent',
+      'stored_verification_lookup_started', expected, 'stored_verification_unavailable', 'authentication_rejected']);
+    assert.ok(!JSON.stringify(events).includes(base.sub));
+    assert.ok(!JSON.stringify(events).includes(base.email));
+  });
+}
+await test('diagnostic distinguishes storage outage without logging its message or allowing access', async () => {
+  const events = [];
+  const auth = createMembershipAuthenticator({ onDiagnostic: x => events.push(x),
+    resolveVerification: uid => readMembershipVerification(async () => { throw Error('private datastore details'); },
+      uid, seconds * 1000, x => events.push(x)) });
+  await assert.rejects(() => auth(token({ email_verified: false })), { code: 'authentication_required' });
+  assert.ok(events.includes('stored_verification_read_failed'));
+  assert.equal(events.at(-1), 'authentication_rejected');
+  assert.ok(!JSON.stringify(events).includes('private'));
+});
+await test('verified token diagnostic succeeds without stored verification read', async () => {
+  const events = [];
+  const auth = createMembershipAuthenticator({ onDiagnostic: x => events.push(x),
+    resolveVerification: () => { throw Error('must not read'); } });
+  assert.equal((await auth(token())).uid, base.sub);
+  assert.ok(events.includes('token_email_verified'));
+  assert.equal(events.at(-1), 'authentication_accepted');
+  assert.ok(!events.includes('stored_verification_lookup_started'));
+});
+await test('diagnostic failure changes neither valid admission nor invalid refusal', async () => {
+  const onDiagnostic = () => { throw Error('unavailable'); };
+  const auth = createMembershipAuthenticator({ onDiagnostic });
+  assert.equal((await auth(token())).uid, base.sub);
+  await assert.rejects(() => auth(token({ aud: 'wrong' })), { code: 'authentication_required' });
+  assert.equal((await readMembershipVerification(async () => JSON.stringify({
+    verifiedAt: new Date(seconds * 1000).toISOString() }), base.sub, seconds * 1000, onDiagnostic)).verified, true);
+});
+await test('invalid signature or project never reaches verified email diagnostics or lookup', async () => {
+  const events = [];
+  const auth = createMembershipAuthenticator({ onDiagnostic: x => events.push(x),
+    resolveVerification: () => { throw Error('must not read'); } });
+  await assert.rejects(() => auth(token({ aud: 'wrong' })), { code: 'authentication_required' });
+  assert.deepEqual(events, ['token_received', 'token_claims_well_formed', 'authentication_rejected']);
 });
 console.log(`${passed} passed, 0 failed`);

@@ -30,6 +30,7 @@ import { createMembershipOwnerLifecycle } from './_membershipOwnerLifecycle.js';
 import { LEGACY_DISCOUNT_PLAN } from './_membershipLegacyPlans.js';
 import { membershipEnrollmentKey } from './_membershipConsumption.js';
 import { readMembershipVerification } from './_membershipVerification.js';
+import { membershipPreviewAuthDiagnostics } from './_membershipPreviewAuthDiagnostics.js';
 
 export function membershipSubscriptionAdmission(owner, enrollment, state, importedOwner = false) {
   if (enrollment?.version !== 'launch-v2' || enrollment.owner !== owner || enrollment.verified !== true
@@ -146,8 +147,10 @@ export async function membershipPurchaseRuntime() {
   const lifecycle = imported ? createMembershipOwnerLifecycle({ normal: normalLifecycle, imported,
     customers, stripe, migration, execute: membershipRedis }) : normalLifecycle;
   const fulfillment = createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode });
+  const authDiagnostic = membershipPreviewAuthDiagnostics(process.env);
   const normalAuthenticate = createMembershipAuthenticator({
-    resolveVerification: uid => readMembershipVerification(membershipRedis, uid),
+    onDiagnostic: authDiagnostic,
+    resolveVerification: uid => readMembershipVerification(membershipRedis, uid, Date.now(), authDiagnostic),
   });
   const authenticate = async token => {
     const identity = await normalAuthenticate(token);
@@ -155,6 +158,7 @@ export async function membershipPurchaseRuntime() {
       console.warn('MEMBERSHIP_AUTH_REJECTED', 'owner_not_allowed');
       throw Object.assign(Error('authentication_required'), { code: 'authentication_required' });
     }
+    if (!livemode) authDiagnostic('preview_identity_authorized');
     return identity;
   };
   const resolveContext = async owner => {

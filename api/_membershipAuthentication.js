@@ -3,11 +3,13 @@
 import { verifyFirebaseToken } from './_verifyToken.js';
 
 export function createMembershipAuthenticator({ verify = verifyFirebaseToken, now = Date.now,
-  resolveVerification,
+  resolveVerification, onDiagnostic,
   onReject = reason => console.warn('MEMBERSHIP_AUTH_REJECTED', reason) } = {}) {
+  const observe = stage => { try { onDiagnostic?.(stage); } catch {} };
   return async token => {
     let reason = 'malformed_token';
     try {
+      observe('token_received');
       if (typeof token !== 'string' || token.length > 16384) throw new Error();
       const parts = token.split('.');
       if (parts.length !== 3 || parts.some(part => !/^[A-Za-z0-9_-]+$/.test(part))) throw new Error();
@@ -21,6 +23,7 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
         || !Number.isSafeInteger(claims.exp) || claims.exp <= seconds
         || !Number.isSafeInteger(claims.iat) || claims.iat < 0 || claims.iat > seconds + 300
         || typeof claims.sub !== 'string' || !claims.sub.trim() || claims.sub.length > 128) throw new Error();
+      observe('token_claims_well_formed');
       reason = 'firebase_verification_failed';
       let user;
       try { user = await verify(token); }
@@ -36,17 +39,30 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
         reason = Object.hasOwn(known, error?.message) ? known[error.message] : reason;
         throw new Error();
       }
+      observe('firebase_signature_claims_verified');
       reason = 'subject_mismatch';
       if (user?.uid !== claims.sub) throw new Error();
+      observe('subject_matched');
       reason = 'email_not_verified';
-      if (user.emailVerified === true) return { uid: user.uid, verified: true, email: user.email };
+      if (user.emailVerified === true) {
+        observe('token_email_verified');
+        observe('authentication_accepted');
+        return { uid: user.uid, verified: true, email: user.email };
+      }
+      observe('token_email_unverified_or_absent');
       // Signature/project/expiry/subject checks have already succeeded. Honor
       // the site's preexisting server-owned verification for this exact UID.
+      observe('stored_verification_lookup_started');
       const saved = typeof resolveVerification === 'function' ? await resolveVerification(user.uid) : null;
-      if (saved?.verified !== true || saved.source !== 'stored_account_verification') throw new Error();
+      if (saved?.verified !== true || saved.source !== 'stored_account_verification') {
+        observe('stored_verification_unavailable');
+        throw new Error();
+      }
+      observe('authentication_accepted');
       return { uid: user.uid, verified: true, email: saved.email || user.email,
         verificationSource: saved.source };
     } catch {
+      observe('authentication_rejected');
       try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
       throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' });
     }
