@@ -1,3 +1,21 @@
+# Photo capture reliability — October 4, 2026
+
+Implemented and locally verified; publication/deployment status will be recorded after delivery.
+
+- Single ID scan, grading front/back and edge capture now show short, task-specific photo instructions. No paid AI call powers this guidance.
+- Camera sessions discard late permission results, play completions and photo callbacks after cancel or replacement. Obsolete streams stop; teardown clears the video source. Double shutter taps produce one capture, with retry available after encoding failure.
+- Photo QC records only accepted photos in duplicate history. Small/blurry rejected images no longer poison a corrected retake. Intentional duplicate override remains available.
+- Rejection copy describes similarity rather than claiming card identity, removes the uncalibrated sharpness score from user instructions, and states that no credit was used at this pre-request stage. Rejected-photo controls and temporary preview URLs are cleaned up.
+- Actual index references new immutable core/UI assets; old assets retained unchanged. Authentication, billing routes, prices, ledger and recognition thresholds unchanged.
+
+Verification: full repository gate passed with 72 slots (69 executed, three existing explicitly skipped slots); decoder 10, retake 8 and camera lifecycle 11 cases passed. Browser fixture passed all four capture modes at 390×844, 844×390 and 1280×900, with visible controls, readable guidance and working Cancel. Test runtime: isolated Redis 7.4.2, Chromium 153. Initial runs failed because the local browser runtime was missing; restored runtime and reran the complete gate successfully.
+
+Limits: browser fixtures use mocked camera permission/streams; physical iPhone capture, provider recognition quality, catalog coverage, failed-provider charge reconciliation and measured 90% accuracy are not established by this slice. Do not advertise an accuracy percentage from these results.
+
+Rollback baseline for this slice: live code `ccbe04757004104cfe7661f0acffe4c254516486`, deployment `dpl_RsDGG3A8GajJdcsiiDTcx87qoEdm`. The working live sign-in remains intact.
+
+---
+
 # Production release verified — October 4, 2026
 
 This section supersedes the historical blockers below.

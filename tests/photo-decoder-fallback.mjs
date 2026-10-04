@@ -39,3 +39,19 @@ for (const source of [canonical, bundle.slice(start, end)]) {
   }
 }
 console.log(`Photo decoder fallback: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+
+// A rejected image must not make a corrected retake look like a duplicate.
+let retakes=0;
+for (const source of [canonical, bundle.slice(start,end)]) {
+  let short=100, sharp=true;
+  const context={window:{},console:{warn(){}},createImageBitmap:async()=>({width:short,height:short,close(){}}),document:{createElement(){return {getContext(){return {drawImage(){},getImageData(x,y,w,h){const data=new Uint8ClampedArray(w*h*4);for(let p=0;p<w*h;p++){const value=sharp && w!==9 ? ((p%w+Math.floor(p/w))%2)*255 : 0;data[p*4]=data[p*4+1]=data[p*4+2]=value;data[p*4+3]=255;}return {data};}};}};}}};
+  vm.runInNewContext(source,context);
+  const qc=context.window.CardResellPhotoQC;
+  assert.equal((await qc.check({})).ok,false);short=800;
+  assert.equal((await qc.check({})).ok,true,'low-resolution reject does not poison retake');retakes++;
+  assert.deepEqual(Array.from((await qc.check({})).reasons),['duplicate']);retakes++;
+  assert.equal((await qc.check({},{skipDupe:true})).ok,true,'intentional second copy is permitted');retakes++;
+  qc.reset();sharp=false;assert.equal((await qc.check({})).ok,false);sharp=true;
+  assert.equal((await qc.check({})).ok,true,'blurry reject does not poison corrected retake');retakes++;
+}
+console.log(`Photo retake history: ${retakes} passed, 0 failed -- SUITE COMPLETE, exit=0`);

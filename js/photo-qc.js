@@ -227,7 +227,7 @@
         }
       }
       // Record AFTER dupe check so we don't dupe against ourselves.
-      recordHash(details.phash);
+      if (reasons.length === 0) recordHash(details.phash);
     } catch (e) {
       console.warn('[photo-qc] phash failed', e);
     }
