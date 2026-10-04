@@ -140,7 +140,8 @@ await test('Preview diagnostics are disabled for Production Development other br
     { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'other' },
     { VERCEL_ENV: 'preview', MEMBERSHIP_PREFLIGHT_BRANCH: 'feature/launch-membership-v2' }]) {
     const events = [];
-    membershipPreviewAuthDiagnostics(env, x => events.push(x))('token_received');
+    const observe = membershipPreviewAuthDiagnostics(env, x => events.push(x));
+    observe('token_received'); observe('authentication_rejected');
     assert.deepEqual(events, []);
   }
 });
@@ -149,7 +150,31 @@ await test('Preview diagnostic sink allows only fixed stages never arbitrary val
   const observe = membershipPreviewAuthDiagnostics({ VERCEL_ENV: 'preview',
     VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2' }, x => events.push(x));
   for (const value of ['token_received', 'private diagnostic sentinel', token(), base.sub, base.email, {}, undefined]) observe(value);
-  assert.deepEqual(events, ['token_received']);
+  assert.deepEqual(events, []);
+  observe('authentication_rejected');
+  assert.deepEqual(events, ['token_received > authentication_rejected']);
+});
+await test('diagnostic summaries retain the stored-record outcome in the first log entry', async () => {
+  const events = [], env = { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2' };
+  const observe = membershipPreviewAuthDiagnostics(env, x => events.push(x));
+  const auth = createMembershipAuthenticator({ onDiagnostic: observe, onReject: () => {},
+    resolveVerification: uid => readMembershipVerification(async () => null, uid, seconds * 1000, observe) });
+  await assert.rejects(() => auth(token({ email_verified: false })), { code: 'authentication_required' });
+  assert.equal(events.length, 1);
+  assert.match(events[0], /firebase_signature_claims_verified > subject_matched > token_email_unverified_or_absent/);
+  assert.match(events[0], /stored_verification_missing > stored_verification_unavailable > authentication_rejected$/);
+});
+await test('per-invocation diagnostic buffers do not mix interleaved authentication', async () => {
+  const a = [], b = [], env = { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'feature/launch-membership-v2' };
+  const first = membershipPreviewAuthDiagnostics(env, x => a.push(x));
+  const second = membershipPreviewAuthDiagnostics(env, x => b.push(x));
+  first('token_received'); second('token_received');
+  first('stored_verification_missing'); second('token_email_verified');
+  first('authentication_rejected'); second('authentication_accepted'); second('preview_identity_authorized');
+  assert.deepEqual(a, ['token_received > stored_verification_missing > authentication_rejected']);
+  assert.deepEqual(b, ['token_received > token_email_verified > authentication_accepted > preview_identity_authorized']);
+  const runtime = readFileSync(new URL('../api/_membershipPurchaseRuntime.js', import.meta.url), 'utf8');
+  assert.match(runtime, /const authenticate = async token => \{[\s\S]*?const authDiagnostic = membershipPreviewAuthDiagnostics\(process\.env\)/);
 });
 for (const [name, raw, expected] of [
   ['missing', null, 'stored_verification_missing'],

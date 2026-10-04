@@ -147,12 +147,14 @@ export async function membershipPurchaseRuntime() {
   const lifecycle = imported ? createMembershipOwnerLifecycle({ normal: normalLifecycle, imported,
     customers, stripe, migration, execute: membershipRedis }) : normalLifecycle;
   const fulfillment = createMembershipFulfillment({ stripe, bindings, payments, lifecycle, accountId, livemode });
-  const authDiagnostic = membershipPreviewAuthDiagnostics(process.env);
-  const normalAuthenticate = createMembershipAuthenticator({
-    onDiagnostic: authDiagnostic,
-    resolveVerification: uid => readMembershipVerification(membershipRedis, uid, Date.now(), authDiagnostic),
-  });
   const authenticate = async token => {
+    // A fresh observer per invocation prevents concurrent requests or repeated
+    // controller authentication from mixing their diagnostic stages.
+    const authDiagnostic = membershipPreviewAuthDiagnostics(process.env);
+    const normalAuthenticate = createMembershipAuthenticator({
+      onDiagnostic: authDiagnostic,
+      resolveVerification: uid => readMembershipVerification(membershipRedis, uid, Date.now(), authDiagnostic),
+    });
     const identity = await normalAuthenticate(token);
     if (livemode && !publicLaunch && !allowed.includes(identity.uid)) {
       console.warn('MEMBERSHIP_AUTH_REJECTED', 'owner_not_allowed');

@@ -16,8 +16,17 @@ export function membershipPreviewAuthDiagnostics(env, write = stage =>
   console.info('MEMBERSHIP_AUTH_PREVIEW_V1', stage)) {
   const enabled = env?.VERCEL_ENV === 'preview'
     && env?.VERCEL_GIT_COMMIT_REF === 'feature/launch-membership-v2';
+  // One instance per authentication invocation. Emit one bounded summary so
+  // request-log views that display only the first console entry retain the
+  // actual verification outcome. This buffer never contains identity values.
+  let trace = [];
   return stage => {
     if (!enabled || !stages.has(stage)) return;
-    try { write(stage); } catch { /* Observation cannot affect admission. */ }
+    if (stage === 'token_received') trace = [];
+    if (trace.length < 24) trace.push(stage);
+    if (stage !== 'authentication_rejected' && stage !== 'preview_identity_authorized') return;
+    const summary = trace.join(' > ');
+    trace = [];
+    try { write(summary); } catch { /* Observation cannot affect admission. */ }
   };
 }
