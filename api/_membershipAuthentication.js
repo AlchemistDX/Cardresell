@@ -3,7 +3,7 @@
 import { verifyFirebaseToken } from './_verifyToken.js';
 
 export function createMembershipAuthenticator({ verify = verifyFirebaseToken, now = Date.now,
-  resolveVerification,
+  resolveVerification, resolveAccountEmail,
   onReject = reason => console.warn('MEMBERSHIP_AUTH_REJECTED', reason) } = {}) {
   return async token => {
     let reason = 'malformed_token';
@@ -48,8 +48,13 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
         action = 'verify_email';
         throw new Error();
       }
-      return { uid: user.uid, verified: true, email: saved.email || user.email,
-        verificationSource: saved.source, authenticatedEmail: user.email, verificationEmail: saved.email };
+      let authenticatedEmail = user.email;
+      if (!authenticatedEmail && saved.email && typeof resolveAccountEmail === 'function') {
+        reason = 'account_email_unavailable';
+        authenticatedEmail = await resolveAccountEmail(token, user.uid);
+      }
+      return { uid: user.uid, verified: true, email: saved.email || authenticatedEmail,
+        verificationSource: saved.source, authenticatedEmail, verificationEmail: saved.email };
     } catch {
       try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
       throw Object.assign(new Error('authentication_required'), { code: 'authentication_required',

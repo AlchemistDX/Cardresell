@@ -1,3 +1,4 @@
+import { readMembershipAccountEmail } from '../api/_membershipAccountEmail.js';
 import { createMembershipLivePilot } from '../api/_membershipLivePilot.js';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
@@ -227,5 +228,39 @@ await test('billing access denial is a 403 with no authentication retry or finan
     assert.equal(res.body.action, undefined);
   }
   assert.equal(calls, 0);
+});
+await test('legacy missing email is recovered from UID-matched Firebase record before pilot admission', async () => {
+  const pilot = createMembershipLivePilot('["same@example.invalid"]');
+  const missing = token({ email: undefined, email_verified: false });
+  let lookups = 0;
+  const auth = createMembershipAuthenticator({
+    resolveVerification: async uid => uid === base.sub ? { verified: true, source: 'stored_account_verification', email: base.email } : null,
+    resolveAccountEmail: (jwt, uid) => readMembershipAccountEmail(jwt, uid, async (url, options) => {
+      lookups++;
+      assert.equal(JSON.parse(options.body).idToken, missing);
+      assert.match(url, /^https:\/\/identitytoolkit.googleapis.com\/v1\/accounts:lookup\?key=/);
+      return { ok: true, json: async () => ({ users: [{ localId: base.sub, providerUserInfo: [{ providerId: 'google.com', email: base.email }] }] }) };
+    }),
+  });
+  const identity = await auth(missing);
+  assert.equal(identity.uid, base.sub); assert.equal(identity.authenticatedEmail, base.email);
+  assert.equal(pilot(identity), true); assert.equal(lookups, 1);
+  await auth(token({ email_verified: false })); assert.equal(lookups, 1);
+  await assert.rejects(() => auth(token({ sub: 'other', email: undefined, email_verified: false })));
+  assert.equal(lookups, 1);
+});
+await test('account lookup rejects wrong UID, disabled account, ambiguous provider emails and outage', async () => {
+  const read = users => readMembershipAccountEmail('synthetic', base.sub, async () => ({ ok: true, json: async () => ({ users }) }));
+  for (const users of [[], [{ localId: 'other', email: base.email }], [{ localId: base.sub, disabled: true, email: base.email }]]) {
+    await assert.rejects(() => read(users), /account_email_unavailable/);
+  }
+  assert.equal(await read([{ localId: base.sub, providerUserInfo: [{ providerId: 'password', email: base.email }] }]), null);
+  assert.equal(await read([{ localId: base.sub, providerUserInfo: [
+    { providerId: 'google.com', email: base.email }, { providerId: 'google.com', email: 'other@example.invalid' }] }]), null);
+  assert.equal(await read([{ localId: base.sub, email: 'other@example.invalid', providerUserInfo: [{ providerId: 'google.com', email: base.email }] }]), 'other@example.invalid');
+  await assert.rejects(() => readMembershipAccountEmail('synthetic', base.sub, async () => ({ ok: false })), /account_email_unavailable/);
+  const auth = createMembershipAuthenticator({ resolveVerification: async () => ({ verified: true, source: 'stored_account_verification', email: base.email }),
+    resolveAccountEmail: async () => { throw Error('upstream'); }, onReject() {} });
+  await assert.rejects(() => auth(token({ email: undefined, email_verified: false })), { code: 'authentication_required' });
 });
 console.log(`${passed} passed, 0 failed`);
