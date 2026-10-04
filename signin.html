@@ -42,9 +42,9 @@
 
     /* Back link */
     .back-link {
-      position: fixed;
-      top: 1.1rem;
-      left: 1.1rem;
+      position: static;
+      align-self: flex-start;
+      margin-bottom: 1rem;
       display: flex;
       align-items: center;
       gap: .4rem;
@@ -56,6 +56,11 @@
       transition: color .15s;
     }
     .back-link:hover { color: var(--text); }
+    #browserRecovery p { margin-bottom: .75rem; }
+    #browserRecovery [hidden] { display: none !important; }
+    #browserRecovery summary:focus-visible, #browserRecovery button:focus-visible,
+    .browser-help-link:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+    .browser-help-link { display:block; color:var(--gold); font-size:.875rem; line-height:1.5; margin-bottom:.75rem; padding:.5rem 0; }
 
     /* Card */
     .auth-card {
@@ -249,11 +254,11 @@
     Back to CardResell
   </a>
 
-  <!-- Private-mode warning banner (shown via JS if IndexedDB is blocked) -->
-  <div id="pmBanner" style="display:none;max-width:420px;width:100%;margin:0 auto 1rem;background:#3a1010;border:2px solid #dc2626;border-radius:12px;padding:.85rem 1rem;color:#fecaca;font-size:.82rem;line-height:1.45">
-    <div style="font-weight:800;color:#fca5a5;margin-bottom:.35rem;font-size:.9rem">⚠️ Private Browsing detected</div>
-    Sign-in will <strong>not persist</strong> in Private/Incognito mode. iOS Safari blocks the storage Firebase needs.
-    <div style="margin-top:.5rem"><strong>Fix:</strong> Close this tab → open a <strong>regular Safari tab</strong> → go to <strong>cardresell.org</strong> and try again.</div>
+  <!-- A failed capability probe is not proof of private browsing or its cause. -->
+  <div id="pmBanner" role="status" style="display:none;max-width:420px;width:100%;margin:0 auto 1rem;background:#3a1010;border:1px solid #dc2626;border-radius:12px;padding:.85rem 1rem;color:#fecaca;font-size:.875rem;line-height:1.5">
+    <strong>Browser storage is limited</strong>
+    <div id="storageDetail">A storage check failed on this page. Sign-in may not survive navigation. This does not identify the browser mode or test Firebase's separate sign-in window.</div>
+    <div>See “Trouble signing in?” below. Keep any pending checkout tab open; do not clear browser data.</div>
   </div>
 
   <div class="auth-card">
@@ -268,6 +273,7 @@
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
       <span class="logo-text">Card<span>Resell</span></span>
     </div>
+    <a class="browser-help-link" href="#browserRecovery" onclick="window._showBrowserRecovery()">In an app browser? Sign-in help</a>
 
     <!-- Tab switcher -->
     <div class="auth-tabs">
@@ -370,6 +376,16 @@
 
   </div>
 
+  <details id="browserRecovery" style="max-width:420px;width:100%;margin:1rem auto 0;padding:.85rem 1rem;border:1px solid var(--border);border-radius:12px;font-size:.875rem;line-height:1.5">
+    <summary style="cursor:pointer;min-height:44px;padding:.5rem 0;color:var(--gold)">Trouble signing in?</summary>
+    <p>If Google shows “missing initial state,” close only the failed sign-in window and return here. The message alone does not identify the cause.</p>
+    <p id="browserTransferHelp">If this page is inside another app, open a fresh sign-in in Safari or Chrome and keep the entire sign-in there. Copy the link below, open your browser app directly, and paste it into its address bar. Opening another in-app tab may not switch browsers.</p>
+    <p id="browserRecoverySafety">Do not clear browser data or disable privacy protections. Use your existing account; no new account or purchase is needed.</p>
+    <button type="button" class="btn-google" id="copyBrowserSignIn" onclick="copyBrowserSignIn()">Copy sign-in link</button>
+    <label id="browserSignInLabel" for="browserSignInLink">Same-site sign-in link</label>
+    <input class="auth-input" id="browserSignInLink" type="text" readonly aria-describedby="browserRecoverySafety" style="margin-top:.35rem;font-size:.8rem" />
+    <div id="browserRecoveryStatus" role="status" aria-live="polite" style="margin-top:.5rem"></div>
+  </details>
   <div class="bottom-brand">CardResell · Bradenton, FL · Free to use</div>
 
   <script id="signin-destination">
@@ -394,6 +410,85 @@
         'https://cardresell-membership-v2-preview.vercel.app'].includes(location.origin)
         ? location.origin : null;
     };
+  </script>
+  <script id="signin-browser-recovery">
+    // Never export a tab-scoped billing handoff to a browser that cannot read it.
+    // A fresh link carries only a known view, never caller-supplied query values.
+    window._externalBrowserSignInLink = function() {
+      try {
+        if (!window._verificationReturnOrigin()) return null;
+        const params = new URLSearchParams(location.search);
+        if (params.getAll('next').length > 1) return null;
+        const rawTarget = new URL(params.get('next') || '/', location.origin);
+        const target = new URL(window._safeSignInDestination(params.get('next')), location.origin);
+        if (!window.history) return null;
+        const state = window.history.state;
+        if (['membership_recovery', 'membership_return', 'session_id'].some(key =>
+            params.has(key) || rawTarget.searchParams.has(key) || target.searchParams.has(key)) ||
+            (state && (state.membershipPurchase || state.membershipPurchases || state.membershipCommands))) return null;
+        let next = '/';
+        if (target.searchParams.get('shop') === '1') next = '/?shop=1';
+        else if (target.searchParams.get('subscriptions') === '1') next = '/?subscriptions=1';
+        else if (['flips', 'collection'].includes(target.searchParams.get('next'))) next = '/?next=' + target.searchParams.get('next');
+        else if (['/pricing', '/pricing.html'].includes(target.pathname)) next = '/pricing';
+        return location.origin + '/signin?reauth=1&next=' + encodeURIComponent(next);
+      } catch (_) { return null; }
+    };
+    window._showBrowserRecovery = function() {
+      const panel = document.getElementById('browserRecovery');
+      if (panel) panel.open = true;
+    };
+    window._refreshBrowserRecovery = function() {
+      const link = window._externalBrowserSignInLink();
+      document.getElementById('browserSignInLink').value = link || '';
+      document.getElementById('browserSignInLink').hidden = !link;
+      document.getElementById('copyBrowserSignIn').disabled = !link;
+      document.getElementById('copyBrowserSignIn').hidden = !link;
+      document.getElementById('browserTransferHelp').hidden = !link;
+      document.getElementById('browserSignInLabel').hidden = !link;
+      if (!link) {
+        document.getElementById('browserRecoverySafety').textContent =
+          'Do not move this recovery to another browser or start a replacement purchase. Keep the original CardResell tab open and finish sign-in in that browser. If that is impossible, report the sign-in error so the existing operation can be reconciled. Do not clear browser data.';
+      }
+      return link;
+    };
+    window.copyBrowserSignIn = async function() {
+      const link = window._refreshBrowserRecovery();
+      const status = document.getElementById('browserRecoveryStatus');
+      if (!link) { status.textContent = 'This recovery cannot be transferred safely.'; return; }
+      if (window._signInFlowPending) {
+        status.textContent = 'Close the existing Google sign-in window before starting sign-in elsewhere.';
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(link);
+        status.textContent = 'Link copied. Open Safari or Chrome directly and paste it into the address bar.';
+      } catch (_) {
+        const field = document.getElementById('browserSignInLink');
+        field.focus(); field.select();
+        status.textContent = 'Copy is unavailable. Select and copy the same-site link shown above.';
+      }
+    };
+    window._refreshBrowserRecovery();
+    // This checks only this origin in this tab, not cross-origin Firebase state.
+    (function checkSessionStorage() {
+      const key = '__cardresell_auth_probe_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      try {
+        sessionStorage.setItem(key, key);
+        window._signInSessionStorageAvailable = sessionStorage.getItem(key) === key;
+      } catch (_) { window._signInSessionStorageAvailable = false; }
+      finally { try { sessionStorage.removeItem(key); } catch (_) {} }
+      if (!window._signInSessionStorageAvailable) {
+        document.getElementById('pmBanner').style.display = '';
+        document.getElementById('storageDetail').textContent =
+          'Session storage could not be written and read on this page. Firebase may be unable to finish sign-in; its separate window has not been tested.';
+        window._showBrowserRecovery();
+      }
+    })();
+    // Hint only: browser identification is imperfect and must not authorize or
+    // block authentication. Help remains available even when the UA is unknown.
+    if (/(FBAN|FBAV|Instagram|Line\/|; wv\))/i.test(navigator.userAgent) ||
+        (/iPhone|iPad|iPod/.test(navigator.userAgent) && !/Safari\//.test(navigator.userAgent))) window._showBrowserRecovery();
   </script>
 
   <!-- Firebase -->
@@ -432,17 +527,16 @@
       popupRedirectResolver: browserPopupRedirectResolver
     });
 
-    // Private-mode detection — IndexedDB is blocked in Safari Private mode
-    // (or errors on open). Show a red banner so the user knows sign-in won't
-    // persist and offers a fix. Also disable auto-clicks to avoid confusion.
-    (function detectPrivateMode() {
+    // Capability observation only, not a private-mode detector. Close the probe
+    // handle before deleting this probe database; never clear application data.
+    (function checkIndexedDB() {
       try {
         const req = indexedDB.open('__pm_probe__', 1);
         req.onerror = () => {
           const b = document.getElementById('pmBanner');
           if (b) b.style.display = '';
         };
-        req.onsuccess = () => { try { indexedDB.deleteDatabase('__pm_probe__'); } catch(e){} };
+        req.onsuccess = () => { try { req.result.close(); indexedDB.deleteDatabase('__pm_probe__'); } catch(e){} };
       } catch (e) {
         const b = document.getElementById('pmBanner');
         if (b) b.style.display = '';
@@ -605,9 +699,10 @@
       window._signInFlowPending = true;
       window._dbg('googleSignIn: clicked, _fbGoogleSignIn type=' + typeof window._fbGoogleSignIn);
       clearErr('errSignIn'); clearErr('errSignUp');
-      try { await window._fbPersistenceReady; } catch(e) {}
       window._justSignedIn = false;
       try {
+        // Call the popup in the button's activation turn, with no pre-popup
+        // await. Persistence is already configured by initializeAuth.
         if (typeof window._fbGoogleSignIn !== 'function') throw new Error('module-not-loaded: _fbGoogleSignIn missing');
         window._dbg('googleSignIn: calling signInWithPopup');
         const credential = await window._fbGoogleSignIn();
@@ -615,7 +710,8 @@
       }
       catch(e) {
         window._justSignedIn = false;
-        window._dbg('googleSignIn ERROR: code=' + (e?.code||'none') + ' msg=' + (e?.message||e));
+        window._dbg('googleSignIn ERROR: code=' + (e?.code||'unknown'));
+        window._showBrowserRecovery();
         // Show on BOTH sign-in and sign-up error areas since the Google button appears on both tabs.
         showErr('errSignIn', fbMsg(e));
         showErr('errSignUp', fbMsg(e));
@@ -765,6 +861,9 @@
     function clearErr(id) { const el = document.getElementById(id); if (el) { el.classList.remove('show'); el.style.display = 'none'; el.textContent = ''; } }
     function setLoading(id, on, label) { const el = document.getElementById(id); if (el) { el.disabled = on; el.textContent = label; } }
     function fbMsg(e) {
+      if (/missing initial state/i.test(e && e.message || '')) {
+        return 'Google could not recover its sign-in state. Close the failed sign-in window and follow “Trouble signing in?” below. No sign-in has been confirmed.';
+      }
       return ({
         'auth/invalid-email': 'Invalid email address.',
         'auth/user-not-found': 'No account found with that email.',
@@ -776,6 +875,8 @@
         'auth/network-request-failed': 'Network error — check your connection.',
         'auth/popup-blocked': 'Pop-up blocked — please allow pop-ups and try again.',
         'auth/popup-closed-by-user': 'Sign-in was canceled. Choose a sign-in method to try again.',
+        'auth/web-storage-unsupported': 'Browser storage is unavailable. Follow “Trouble signing in?” below; keep any pending checkout tab open.',
+        'auth/operation-not-supported-in-this-environment': 'This browser cannot complete this sign-in flow. Follow “Trouble signing in?” below.',
         'auth/unauthorized-domain': 'Sign-in is not enabled for this hostname. Return to the normal CardResell site or report this hostname.',
       })[e.code] || e.message || 'Something went wrong.';
     }
