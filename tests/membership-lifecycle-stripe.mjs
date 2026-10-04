@@ -52,4 +52,32 @@ await test('canonical discounted future phase cannot confirm full-price change',
 await test('future item tax rejects canonical confirmation',async()=>{const f=await fixture();f.afterUpdate=s=>{s.phases[1].items[0].tax_rates=['txr_unapproved']};await assert.rejects(()=>f.api.executeCommand(f.command))});
 await test('future phase trial rejects canonical confirmation',async()=>{const f=await fixture();f.afterUpdate=s=>{s.phases[1].trial_end=1703000000};await assert.rejects(()=>f.api.executeCommand(f.command))});
 await test('saved schedule detached on retry cannot receive update',async()=>{const f=await fixture();f.fault='subscription_schedules/sub_sched_test';await assert.rejects(()=>f.api.executeCommand(f.command));f.sub.schedule='sub_sched_unrelated';await assert.rejects(()=>f.api.executeCommand(f.command));assert.equal(f.posts.length,2)});
+await test('Portal timestamp-only cancellation preserves paid-through and projects canceled renewal', async () => {
+ const f=await fixture();f.sub.cancel_at=f.sub.items.data[0].current_period_end;
+ const s=await f.api.retrieveSubscriptionSnapshot(f.sub.id);
+ assert.equal(f.sub.cancel_at_period_end,false);assert.equal(s.cancelAtPeriodEnd,true);
+ assert.equal(s.status,'active');assert.equal(s.periodEnd,f.command.effectiveAt);assert.equal(f.posts.length,0);
+});
+await test('timestamp-only cancellation fences plan change before any Stripe mutation', async () => {
+ const f=await fixture();f.sub.cancel_at=f.command.effectiveAt;
+ await assert.rejects(f.api.executeCommand(f.command),/invalid_plan_change/);assert.equal(f.posts.length,0);
+});
+await test('existing timestamp cancellation confirms cancel replay without another POST', async () => {
+ const f=await fixture();f.sub.cancel_at=f.command.effectiveAt;
+ const r=await f.api.executeCommand({...f.command,kind:'cancel',plan:null});
+ assert.equal(r.status,'confirmed');assert.equal(r.snapshot.cancelAtPeriodEnd,true);assert.equal(f.posts.length,0);
+});
+await test('off-boundary and malformed cancellation timestamps fail closed', async () => {
+ for(const value of [1702591999,1702592001,'1702592000',0]) {
+  const f=await fixture();f.sub.cancel_at=value;
+  await assert.rejects(f.api.retrieveSubscriptionSnapshot(f.sub.id),/unsupported_cancellation_boundary/);
+  await assert.rejects(f.api.executeCommand(f.command));assert.equal(f.posts.length,0);
+ }
+});
+await test('Portal cancellation appearing after schedule creation prevents phase update', async () => {
+ const f=await fixture(),original=f.reader.retrieveSubscription;let reads=0;
+ f.reader.retrieveSubscription=async()=>{const s=await original();if(++reads>=2)s.cancel_at=f.command.effectiveAt;return s;};
+ await assert.rejects(f.api.executeCommand(f.command),/invalid_plan_change/);
+ assert.equal(f.posts.length,1);assert.equal(f.posts[0].path,'subscription_schedules');
+});
 console.log(`membership-lifecycle-stripe: ${passed} passed, ${failed} failed`);process.exit(failed?1:0);

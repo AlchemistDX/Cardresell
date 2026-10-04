@@ -271,4 +271,19 @@ await t.section('legacy profile billing entry uses the verified membership accou
   t.check('only verified portal control is offered', h.controls().some(b => /Manage billing in Stripe/.test(b.textContent)));
   t.check('legacy email-search portal request never sent', h.requests.length === 0 && h.navigations.length === 0);
 });
+await t.section('confirmed Portal cancellation is not presented as another renewal', async () => {
+  const h = setup({ onAccount: async () => ({ ok: true, status: 200, json: async () => ({
+    state: { subscriptionId: 'sub_fixture', snapshot: { status: 'active', plan: 'legacy',
+      cancelAtPeriodEnd: true, periodEnd: 1791390116 }, migration: { phase: 'authorized_not_scheduled' } },
+    management: { portal: true, scheduleChanges: true }, creditsAvailable: false,
+  }) }) });
+  await h.open();
+  t.check('scheduled cancellation is visible', h.message().includes('Cancellation scheduled.'));
+  t.check('paid-through boundary replaces renewal wording', h.message().includes('Paid through; cancellation effective:')
+    && !h.message().includes('Renewal boundary:'));
+  t.check('permanent credits are explicitly retained', h.message().includes('All issued ID and Grade credits remain yours and never expire.'));
+  t.check('migration is not advertised over a cancellation', !h.message().includes('Casual transition'));
+  t.check('no competing cancellation or change command offered', !h.controls().some(b => /Change to |Cancel at renewal/.test(b.textContent)));
+  t.check('normal Stripe Portal remains available', h.controls().some(b => b.textContent === 'Manage billing in Stripe'));
+});
 t.done();

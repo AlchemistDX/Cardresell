@@ -94,16 +94,23 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
       && Number.isSafeInteger(item.current_period_start) && Number.isSafeInteger(item.current_period_end)
       && item.current_period_end > item.current_period_start && typeof s.cancel_at_period_end === 'boolean',
     'unsupported_subscription');
+    // Portal may schedule the same paid-through cancellation with cancel_at
+    // while cancel_at_period_end remains false. Never treat that as renewal
+    // permission, overwrite it with a plan schedule, or shorten paid benefits.
+    // Other cancellation boundaries need explicit reconciliation, not guessing.
+    insist(s.cancel_at == null || (Number.isSafeInteger(s.cancel_at)
+      && s.cancel_at === item.current_period_end), 'unsupported_cancellation_boundary');
+    const cancelsAtPeriodEnd = s.cancel_at_period_end || s.cancel_at === item.current_period_end;
     const isLegacy = legacy && subscriptionId === legacy.subscriptionId && ref(item.price) === legacy.priceId;
     if (isLegacy) insist(ref(s.customer) === legacy.customerId
       && item.current_period_start === legacy.periodStart && item.current_period_end === legacy.periodEnd,
     'legacy_canonical_mismatch');
     const plan = isLegacy ? 'legacy' : planFor(ref(item.price));
     await validatePrice(plan);
-    return { s, item, plan };
+    return { s, item, plan, cancelsAtPeriodEnd };
   }
   async function snapshot(subscriptionId) {
-    const { s, item, plan } = await rawSubscription(subscriptionId);
+    const { s, item, plan, cancelsAtPeriodEnd } = await rawSubscription(subscriptionId);
     let scheduledChange = null;
     if (s.schedule) {
       const scheduleId = ref(s.schedule);
@@ -137,7 +144,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
     }
     return { subscriptionId, customerId: ref(s.customer), accountId, livemode, status: s.status,
       plan, periodStart: item.current_period_start, periodEnd: item.current_period_end,
-      cancelAtPeriodEnd: s.cancel_at_period_end, scheduledChange };
+      cancelAtPeriodEnd: cancelsAtPeriodEnd, scheduledChange };
   }
   async function step(command, stage, operation) {
     const key = `membership:launch-v2:stripe-command${livemode ? '-live' : ''}:`
@@ -168,7 +175,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
       insist(command && /^[a-f0-9]{64}$/.test(command.operationId)
         && ['plan_change', 'cancel'].includes(command.kind) && command.phase === 'requested'
         && typeof command.idempotencyKey === 'string', 'invalid_command');
-      const { s, item } = await rawSubscription(command.subscriptionId);
+      const { s, item, cancelsAtPeriodEnd } = await rawSubscription(command.subscriptionId);
       if (legacy) insist(command.owner === legacy.owner && command.subscriptionId === legacy.subscriptionId
         && command.kind === 'plan_change' && command.plan === 'casual'
         && command.effectiveAt === legacy.periodEnd, 'legacy_command_mismatch');
@@ -178,12 +185,12 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
         && s.automatic_tax?.enabled !== true, 'unsupported_subscription');
       if (command.kind === 'cancel') {
         insist(!s.schedule, 'schedule_requires_reconciliation');
-        if (s.cancel_at_period_end) return { status: 'confirmed', snapshot: await snapshot(s.id) };
+        if (cancelsAtPeriodEnd) return { status: 'confirmed', snapshot: await snapshot(s.id) };
         const result = await step(command, 'cancel', () => request('subscriptions/' + s.id,
           { cancel_at_period_end: 'true', proration_behavior: 'none' }, command.idempotencyKey + '-cancel'));
         return { status: result ? 'submitted' : 'pending', snapshot: await snapshot(s.id) };
       }
-      insist(Object.hasOwn(prices.plans, command.plan) && !s.cancel_at_period_end, 'invalid_plan_change');
+      insist(Object.hasOwn(prices.plans, command.plan) && !cancelsAtPeriodEnd, 'invalid_plan_change');
       await validatePrice(command.plan);
       const created = await step(command, 'schedule-create', async () => {
         insist(!s.schedule, 'schedule_requires_reconciliation');
@@ -197,6 +204,8 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
       const attached = await rawSubscription(s.id);
       insist(ref(attached.s.schedule) === created.id
         && ref(attached.s.customer) === ref(s.customer), 'schedule_mismatch');
+      insist(!attached.cancelsAtPeriodEnd
+        && attached.item.current_period_end === command.effectiveAt, 'invalid_plan_change');
       const desired = {
         end_behavior: 'release', proration_behavior: 'none',
         'phases[0][start_date]': String(item.current_period_start),
@@ -211,7 +220,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
       await step(command, 'schedule-update', () => request('subscription_schedules/' + created.id,
         desired, command.idempotencyKey + '-update'));
       const current = await snapshot(s.id);
-      return { status: current.scheduledChange?.plan === command.plan
+      return { status: !current.cancelAtPeriodEnd && current.scheduledChange?.plan === command.plan
         && current.scheduledChange.effectiveAt === command.effectiveAt ? 'confirmed' : 'pending', snapshot: current };
     },
   });

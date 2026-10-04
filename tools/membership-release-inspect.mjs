@@ -36,6 +36,9 @@ if (stage || previewInspect || sandboxRehearsal || process.env.MEMBERSHIP_OWNER_
       } else {
       const { transitionMembershipOwner } = await import('./transition-membership-owner.mjs');
       const result = await transitionMembershipOwner({ stage: stage || 'inspect' });
+      if (result.subscriptionSnapshot) console.log('MEMBERSHIP_OWNER_SUBSCRIPTION_READ_ONLY ' + JSON.stringify({
+        commit: process.env.VERCEL_GIT_COMMIT_SHA, ...result.subscriptionSnapshot,
+      }));
       if (result.paidReconciliation) console.log('MEMBERSHIP_OWNER_PAID_RECONCILIATION ' + JSON.stringify({
         commit: process.env.VERCEL_GIT_COMMIT_SHA, ...result.paidReconciliation,
       }));

@@ -134,6 +134,8 @@ export async function transitionMembershipOwner({ stage = 'inspect', env = proce
     subscriptionId: snapshot.subscriptionId, customerId: snapshot.customerId,
     currentPeriodStart: snapshot.periodStart, currentPeriodEnd: snapshot.periodEnd,
     schedulePresent: snapshot.scheduleId !== null, imported: !!imported,
+    subscriptionSnapshot: { status: snapshot.status, cancelAtPeriodEnd: snapshot.cancelAtPeriodEnd,
+      periodEnd: snapshot.periodEnd, scheduledChange: snapshot.scheduledChange },
     fence: await execute(['GET', 'membership:launch-v2:legacy_fence']),
     legacyDigest: sha(raw), backupRequired: true,
     importComparisonReadOnly: await inspectImportComparisons(execute),
