@@ -46,13 +46,13 @@
   const recentHashes = []; // ring buffer of hex strings
 
   // ── helpers ────────────────────────────────────────────────────────
-  function loadBitmap(file) {
+  async function loadBitmap(file) {
+    // A browser can expose createImageBitmap but reject a format its image
+    // element supports. Try both decoders before asking for another photo.
+    if (typeof createImageBitmap === 'function') {
+      try { return await createImageBitmap(file); } catch (_) {}
+    }
     return new Promise((resolve, reject) => {
-      // Prefer createImageBitmap where available (Safari 15+, all modern)
-      if (typeof createImageBitmap === 'function') {
-        createImageBitmap(file).then(resolve).catch(reject);
-        return;
-      }
       // Fallback: HTMLImageElement
       const url = URL.createObjectURL(file);
       const img = new Image();

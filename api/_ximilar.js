@@ -44,10 +44,10 @@ export async function identifyWithXimilar(imageBase64, mime, apiToken, kind = 't
   // Ximilar accepts either `_base64` or `_url`. Use base64 since the client
   // uploaded the image directly and we haven't stored it anywhere public.
 
-  let resp;
+  let resp, timeoutId;
   try {
     const ac = new AbortController();
-    const timeoutId = setTimeout(() => ac.abort(), 15000);
+    timeoutId = setTimeout(() => ac.abort(), 15000);
     resp = await fetch(url, {
       method: 'POST',
       headers: {
@@ -57,10 +57,11 @@ export async function identifyWithXimilar(imageBase64, mime, apiToken, kind = 't
       body: JSON.stringify(body),
       signal: ac.signal,
     });
-    clearTimeout(timeoutId);
   } catch (e) {
     console.warn('[ximilar] fetch failed:', e.message);
     return { ok: false, reason: 'network', error: e.message };
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!resp.ok) {

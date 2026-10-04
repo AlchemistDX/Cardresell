@@ -54,10 +54,10 @@ export async function gradeWithXimilar(imagesBase64, mime, apiToken) {
   }));
 
   const url = 'https://api.ximilar.com/card-grader/v2/grade';
-  let resp;
+  let resp, timeoutId;
   try {
     const ac = new AbortController();
-    const timeoutId = setTimeout(() => ac.abort(), 30000); // grader is slower than ID (~3-8s)
+    timeoutId = setTimeout(() => ac.abort(), 30000); // grader is slower than ID (~3-8s)
     resp = await fetch(url, {
       method: 'POST',
       headers: {
@@ -67,9 +67,10 @@ export async function gradeWithXimilar(imagesBase64, mime, apiToken) {
       body: JSON.stringify({ records }),
       signal: ac.signal,
     });
-    clearTimeout(timeoutId);
   } catch(e) {
     return { ok: false, reason: e.name === 'AbortError' ? 'timeout' : 'network_error', error: e.message };
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!resp.ok) {
