@@ -110,7 +110,8 @@ export default async function handler(req, res) {
   });
   try {
     const setResp = await kvSet(`email_verified:${userSub}`, verifiedRecord);
-    if (!setResp.ok) throw new Error('KV set failed');
+    const result = await setResp.json();
+    if (!setResp.ok || result.error || result.result !== 'OK') throw new Error('KV set failed');
   } catch(e) {
     console.error('verify-confirm KV set error:', e);
     return res.status(500).json({ error: 'Could not save verification' });

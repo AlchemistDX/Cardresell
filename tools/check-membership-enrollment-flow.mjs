@@ -87,5 +87,25 @@ await test('paid enrollment remains byte-identical with no new welcome', async (
   assert.equal(await execute(['GET', membershipEnrollmentKey('paid')]), paid);
   assert.equal(await execute(['GET', membershipWelcomeKeys('paid').id]), null);
 });
+await test('live pilot enrollment is UID-isolated, repeat-safe and request-local', async () => {
+  const original = await execute(['GET', membershipEnrollmentKey('paid')]);
+  const admitted = ['paid'];
+  const liveProvision = owner => createMembershipEnrollmentProvisioner({ execute, accountId,
+    environment: 'production', allowedOwners: admitted, livemode: true })(owner);
+  const liveFlow = createMembershipEnrollmentFlow({ execute, provision: liveProvision,
+    bootstrap: createMembershipBootstrap({ execute, accountId, livemode: true }), issueFree });
+  await assert.rejects(() => liveFlow('pilot', identity('pilot')));
+  admitted.push('pilot'); // Only after strict authentication and exact pilot admission.
+  await liveFlow('pilot', identity('pilot'));
+  await Promise.all(Array.from({ length: 8 }, () => liveFlow('pilot', identity('pilot'))));
+  assert.equal((await balance('pilot')).remaining, 15);
+  assert.equal((await balance('pilot', 'grade')).remaining, 2);
+  assert.equal(await execute(['GET', membershipEnrollmentKey('paid')]), original);
+  const nextRequest = createMembershipEnrollmentProvisioner({ execute, accountId,
+    environment: 'production', allowedOwners: ['paid'], livemode: true });
+  await assert.rejects(() => nextRequest('pilot'));
+  await assert.rejects(() => liveFlow('other-pilot', identity('other-pilot')));
+  assert.equal(await execute(['GET', membershipEnrollmentKey('other-pilot')]), null);
+});
 console.log(`${passed} passed, 0 failed`);
 process.exit(0);

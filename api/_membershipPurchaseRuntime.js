@@ -30,6 +30,7 @@ import { createMembershipOwnerLifecycle } from './_membershipOwnerLifecycle.js';
 import { LEGACY_DISCOUNT_PLAN } from './_membershipLegacyPlans.js';
 import { membershipEnrollmentKey } from './_membershipConsumption.js';
 import { readMembershipVerification } from './_membershipVerification.js';
+import { createMembershipLivePilot } from './_membershipLivePilot.js';
 
 export function membershipSubscriptionAdmission(owner, enrollment, state, importedOwner = false) {
   if (enrollment?.version !== 'launch-v2' || enrollment.owner !== owner || enrollment.verified !== true
@@ -84,6 +85,7 @@ export async function membershipPurchaseRuntime() {
   if (livemode && !['owner', 'public'].includes(audience)) throw Error('invalid_live_audience');
   const publicLaunch = livemode && audience === 'public';
   const reservedOwner = livemode ? allowed[0] : null;
+  const isApprovedPilot = createMembershipLivePilot(livemode ? process.env.MEMBERSHIP_LIVE_PILOT_EMAILS : undefined);
   const imported = allowed.length === 1 ? await readOwnerImport(membershipRedis, accountId, livemode, allowed[0]) : null;
   const customerStripe = createMembershipCustomerStripe({ apiKey, accountId, reader, returnOrigin, livemode, portalConfiguration });
   const customerStore = createMembershipCustomers({ execute: membershipRedis, stripe: customerStripe,
@@ -103,10 +105,11 @@ export async function membershipPurchaseRuntime() {
     } });
   const customers = { ...customerStore, ensure: owner => owner === imported?.authorization.owner
     ? customerStore.bindAuditedExisting(owner) : customerStore.ensure(owner) };
-  const provisionEnrollment = createMembershipEnrollmentProvisioner({
+  // Snapshot the request-local admitted UID list only after authentication.
+  const provisionEnrollment = owner => createMembershipEnrollmentProvisioner({
     execute: membershipRedis, accountId, environment: process.env.VERCEL_ENV, allowedOwners: allowed, livemode,
     allowNewOwners: publicLaunch,
-  });
+  })(owner);
   const auditedBootstrap = createMembershipBootstrap({ execute: membershipRedis, accountId, livemode });
   const freeBootstrap = createMembershipEnrollmentFlow({ execute: membershipRedis,
     provision: provisionEnrollment, bootstrap: auditedBootstrap, issueFree: issueMembershipFree });
@@ -151,6 +154,11 @@ export async function membershipPurchaseRuntime() {
   });
   const authenticate = async token => {
     const identity = await normalAuthenticate(token);
+    // Add only this cryptographically verified subject to this request's pilot
+    // audience. Emails never locate or rebind a customer, balance or subscription.
+    if (livemode && !publicLaunch && !allowed.includes(identity.uid) && isApprovedPilot(identity)) {
+      allowed.push(identity.uid);
+    }
     if (livemode && !publicLaunch && !allowed.includes(identity.uid)) {
       console.warn('MEMBERSHIP_AUTH_REJECTED', 'owner_not_allowed');
       throw Object.assign(Error('authentication_required'), { code: 'authentication_required' });

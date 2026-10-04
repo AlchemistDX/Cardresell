@@ -301,6 +301,37 @@ eq('a null queue revokes nothing', G2.run(null, null), []);
 ok('the front/back-only cleanup no longer exists',
    !/q && q\.back && q\.back\.objectUrl/.test(HTML));
 
+/* Server verification is independent from an unavailable credit ledger. */
+{
+  const { runInNewContext } = await import('node:vm');
+  const fn = 'async ' + grabFn(HTML, 'checkProStatus');
+  for (const verified of [true, false]) {
+    let bannerUpdates = 0, creditRefreshes = 0;
+    const facade = { uid: 'fixture', emailVerified: false };
+    const context = { window: { googleUser: facade, _googleIdToken: 'synthetic',
+      _waitForAuth: async () => {}, _verificationStatusPending: true,
+      _scanCredits: 23, _idScanCredits: 47, _userTier: 'paid' },
+      document: { getElementById: () => null },
+      fetch: async () => ({ status: 503, ok: false, json: async () => ({
+        emailVerified: verified, verifiedEmail: 'fixture@example.invalid', creditsAvailable: false }) }),
+      _updateVerifyBanner: () => { bannerUpdates++; }, _updateVerifiedEmailPanel: () => {},
+      loadSettingsScanCredits: () => { creditRefreshes++; } };
+    runInNewContext(fn, context);
+    await context.checkProStatus();
+    ok('503 restores verification ' + verified, facade.emailVerified === verified
+      && context.window._emailVerified === verified && !context.window._verificationStatusPending && bannerUpdates === 1);
+    ok('503 preserves credits and offers balance recovery ' + verified,
+      context.window._scanCredits === 23 && context.window._idScanCredits === 47
+      && context.window._userTier === 'paid' && creditRefreshes === 1);
+    context.fetch = async () => {
+      context.window.googleUser = { uid: 'different-user', emailVerified: false };
+      return { status: 503, ok: false, json: async () => ({ emailVerified: true }) };
+    };
+    await context.checkProStatus();
+    ok('stale response cannot verify another account ' + verified, context.window.googleUser.emailVerified === false);
+  }
+}
+
 /* ── standing copy rules ── */
 ok('no maintenance wording', !/maintenance/i.test(HTML));
 ok('no beta wording', !/\bbeta\b/i.test(HTML));

@@ -55,9 +55,15 @@ export default async function handler(req, res) {
   const kvToken = process.env.KV_REST_API_TOKEN;
   try {
     if (await membershipRouteMode()) {
-      const b = await membershipBalances(userSub);
       const saved = !emailVerified ? await readMembershipVerification(membershipRedis, userSub) : null;
       if (saved) { emailVerified = true; verifiedEmail = saved.email || ''; }
+      // Verification survives an unavailable ledger; do not invent zero balances.
+      let b;
+      try { b = await membershipBalances(userSub); }
+      catch {
+        return res.status(503).json({ error: 'billing_unavailable', creditsAvailable: false,
+          email: userEmail, emailVerified, verifiedEmail: saved ? verifiedEmail : userEmail, signInProvider });
+      }
       return res.status(200).json({ ...b, status: b.isPro ? 'active' : 'free',
         email: userEmail, emailVerified, verifiedEmail: saved ? verifiedEmail : userEmail, signInProvider,
         freeScansLeft: b.freeCredits, idFreeLeft: b.idFreeCredits,

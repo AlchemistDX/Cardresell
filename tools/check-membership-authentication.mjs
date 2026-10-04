@@ -1,3 +1,4 @@
+import { createMembershipLivePilot } from '../api/_membershipLivePilot.js';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
 import { createMembershipAuthenticator } from '../api/_membershipAuthentication.js';
@@ -156,5 +157,25 @@ await test('catalogue and checkout retain 401 with only the fixed verification a
     }
   }
   assert.equal(calls, 0);
+});
+await test('pilot admits only exact provider-verified email and keeps token UID', async () => {
+  const pilot = createMembershipLivePilot('["same@example.invalid"]');
+  const a = await authenticate(token()), b = await authenticate(token({ sub: 'separate-owner' }));
+  assert.equal(pilot(a), true); assert.equal(pilot(b), true);
+  assert.notEqual(a.uid, b.uid);
+  assert.equal(pilot(await authenticate(token({ email: 'SAME@EXAMPLE.INVALID' }))), true);
+  for (const email of ['other@example.invalid', 'same+alias@example.invalid', 's.ame@example.invalid']) {
+    assert.equal(pilot(await authenticate(token({ email }))), false);
+  }
+  assert.equal(createMembershipLivePilot()(a), false);
+  assert.equal(pilot({ ...a, verified: false }), false);
+  assert.equal(pilot({ ...a, uid: '' }), false);
+  const stored = createMembershipAuthenticator({ resolveVerification: async () => ({ verified: true, source: 'stored_account_verification' }) });
+  assert.equal(pilot(await stored(token({ email_verified: false }))), false);
+});
+await test('malformed pilot configuration fails closed', async () => {
+  for (const raw of ['null', '{}', '[1]', '["bad"]', '[" same@example.invalid"]', JSON.stringify(Array(6).fill('a@example.invalid'))]) {
+    assert.throws(() => createMembershipLivePilot(raw));
+  }
 });
 console.log(`${passed} passed, 0 failed`);

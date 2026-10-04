@@ -218,6 +218,29 @@ await t.section('normal welcome and authenticated read-only balances', async () 
   } finally { finish(h); }
 });
 
+await t.section('verification survives missing enrollment and repeated confirmation cannot multiply credits', async () => {
+  const h = billingHarness();
+  try {
+    await seed(); globalThis.__STUB = exact();
+    const email = 'repeated@example.test';
+    await redis(['DEL', membershipEnrollmentKey(UID)]);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await redis(['SET', `verify_code:${UID}:${email}`, '123456']);
+      const result = await call(confirm, 'POST', { email, code: '123456' });
+      t.check('verification attempt ' + attempt + ' succeeds', result.statusCode === 200 && result.payload.verified);
+      t.check('only first attempt reports new award ' + attempt, result.payload.bonusGranted === (attempt === 0));
+      const restored = await call(status, 'GET');
+      t.check('reload retains verification while ledger unavailable ' + attempt,
+        restored.statusCode === 503 && restored.payload.emailVerified === true
+        && restored.payload.verifiedEmail === email && restored.payload.creditsAvailable === false
+        && !Object.hasOwn(restored.payload, 'idCredits'));
+    }
+    t.check('repeated verification stays at one welcome award',
+      await redis(['GET', membershipWelcomeKeys(UID).id]) === '10'
+      && await redis(['GET', membershipWelcomeKeys(UID).grade]) === '1');
+  } finally { finish(h); }
+});
+
 await t.section('legacy routes fence before marker/external writes and survive flag OFF', async () => {
   const h = billingHarness();
   try {
