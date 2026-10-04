@@ -13,8 +13,9 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
     if (!user?.uid || user.verified !== true) fail('authentication_required');
     return user;
   }
-  const error = (res, e) => res.status(e.code === 'authentication_required' ? 401 : 503).json({
-    error: e.code === 'authentication_required' ? e.code : 'membership_pending',
+  const error = (res, e) => res.status(e.code === 'authentication_required' ? 401
+    : e.code === 'membership_access_restricted' ? 403 : 503).json({
+    error: ['authentication_required', 'membership_access_restricted'].includes(e.code) ? e.code : 'membership_pending',
     ...(e.code === 'authentication_required' && e.action === 'verify_email' ? { action: 'verify_email' } : {}),
     message: 'Unable to confirm the operation yet. Existing credits are preserved. Retry the same operation.',
   });

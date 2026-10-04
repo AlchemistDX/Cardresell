@@ -178,4 +178,54 @@ await test('malformed pilot configuration fails closed', async () => {
     assert.throws(() => createMembershipLivePilot(raw));
   }
 });
+await test('exact UID-saved email proof admits matching pilot account through billing routes', async () => {
+  const pilot = createMembershipLivePilot('["same@example.invalid"]');
+  const records = new Map([[base.sub, JSON.stringify({ verifiedAt: new Date((seconds - 60) * 1000).toISOString(),
+    email: base.email, via: 'code' })]]);
+  const auth = createMembershipAuthenticator({ resolveVerification: uid => readMembershipVerification(
+    async () => records.get(uid) ?? null, uid) });
+  const admitted = async jwt => {
+    const identity = await auth(jwt);
+    if (!pilot(identity)) throw Object.assign(Error(), { code: 'membership_access_restricted' });
+    return identity;
+  };
+  const jwt = token({ email_verified: false });
+  const identity = await admitted(jwt);
+  assert.equal(identity.uid, base.sub);
+  assert.equal(identity.authenticatedEmail, base.email);
+  assert.equal(identity.verificationEmail, base.email);
+  assert.equal(pilot(await auth(token({ email_verified: false, email: 'SAME@EXAMPLE.INVALID' }))), true);
+  let bootstrapIdentity, customerOwner, calls = 0;
+  const routes = createMembershipAccountRoutes({ authenticate: admitted,
+    bootstrap: async (uid, identity) => { bootstrapIdentity = identity; assert.equal(uid, base.sub); },
+    customers: { ensure: async uid => { customerOwner = uid; return { state: 'bound', customerId: 'cus_separate' }; } },
+    lifecycle: { associate: async input => { calls++; assert.equal(input.owner, base.sub); } } });
+  const res = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  await routes.account({ method: 'POST', headers: { authorization: 'Bearer ' + jwt }, body: { action: 'associate' } }, res);
+  assert.equal(res.code, 200); assert.equal(res.body.status, 'associated');
+  assert.equal(bootstrapIdentity.uid, base.sub); assert.equal(customerOwner, base.sub); assert.equal(calls, 1);
+  await assert.rejects(() => admitted(token({ sub: 'other-uid', email_verified: false })), { code: 'authentication_required' });
+  assert.equal(pilot(await auth(token({ email: 'different@example.invalid', email_verified: false }))), false);
+  records.set(base.sub, JSON.stringify({ verifiedAt: new Date((seconds - 60) * 1000).toISOString(), email: 'different@example.invalid', via: 'code' }));
+  assert.equal(pilot(await auth(jwt)), false);
+  records.set(base.sub, JSON.stringify({ verifiedAt: new Date((seconds - 60) * 1000).toISOString() }));
+  assert.equal(pilot(await auth(jwt)), false);
+  records.set(base.sub, JSON.stringify({ verifiedAt: new Date((seconds - 60) * 1000).toISOString(), email: base.email, verified: false }));
+  await assert.rejects(() => admitted(jwt), { code: 'authentication_required' });
+});
+await test('billing access denial is a 403 with no authentication retry or financial calls', async () => {
+  let calls = 0;
+  const authenticate = async () => { throw Object.assign(Error(), { code: 'membership_access_restricted' }); };
+  const purchase = createMembershipPurchaseRoutes({ authenticate, resolveContext: async () => { calls++; },
+    controller: { checkout: async () => { calls++; } } });
+  const account = createMembershipAccountRoutes({ authenticate, bootstrap: async () => { calls++; } });
+  for (const [handler, method] of [[purchase.catalogue, 'GET'], [purchase.checkout, 'POST'],
+    [account.account, 'GET'], [account.account, 'POST']]) {
+    const res = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+    await handler({ method, headers: { authorization: 'Bearer synthetic' }, body: { action: 'associate' } }, res);
+    assert.equal(res.code, 403); assert.equal(res.body.error, 'membership_access_restricted');
+    assert.equal(res.body.action, undefined);
+  }
+  assert.equal(calls, 0);
+});
 console.log(`${passed} passed, 0 failed`);

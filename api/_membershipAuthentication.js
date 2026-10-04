@@ -49,7 +49,7 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
         throw new Error();
       }
       return { uid: user.uid, verified: true, email: saved.email || user.email,
-        verificationSource: saved.source };
+        verificationSource: saved.source, authenticatedEmail: user.email, verificationEmail: saved.email };
     } catch {
       try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
       throw Object.assign(new Error('authentication_required'), { code: 'authentication_required',

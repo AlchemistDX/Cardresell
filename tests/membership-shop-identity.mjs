@@ -307,4 +307,16 @@ await t.section('verified identity without email authority gets verification, ne
   h.window.googleUser = user('B'); stale.onclick();
   t.check('stale account cannot launch verification', opened === 1);
 });
+await t.section('billing access policy rejection does not send verified users through another login loop', async () => {
+  let accountCalls = 0;
+  const h = setup({ onCatalogue: options => options.headers?.Authorization
+    ? { ok: false, status: 403, json: async () => ({ error: 'membership_access_restricted' }) } : null,
+    onAccount: () => { accountCalls++; throw Error('unexpected account call'); } });
+  await h.open();
+  t.check('403 identifies access policy and no payment', /billing access is not enabled/.test(h.message()) && /no payment was started/.test(h.message()));
+  t.check('403 does not advise owner login or re-verification', !/Sign in again|existing owner|Verify email/.test(h.message())
+    && !h.links().some(x => /signin/.test(x.href || '')));
+  t.check('403 keeps purchases disabled and makes no account mutation', h.buttons().every(x => x.disabled)
+    && h.requests.length === 0 && accountCalls === 0);
+});
 t.done();

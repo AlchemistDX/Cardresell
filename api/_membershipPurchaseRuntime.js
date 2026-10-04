@@ -160,8 +160,9 @@ export async function membershipPurchaseRuntime() {
       allowed.push(identity.uid);
     }
     if (livemode && !publicLaunch && !allowed.includes(identity.uid)) {
-      console.warn('MEMBERSHIP_AUTH_REJECTED', 'owner_not_allowed');
-      throw Object.assign(Error('authentication_required'), { code: 'authentication_required' });
+      console.warn('MEMBERSHIP_AUTH_REJECTED', identity.verificationSource === 'stored_account_verification'
+        ? 'pilot_saved_email_not_admitted' : 'pilot_provider_email_not_admitted');
+      throw Object.assign(Error('membership_access_restricted'), { code: 'membership_access_restricted' });
     }
     return identity;
   };

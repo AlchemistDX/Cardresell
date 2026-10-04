@@ -37,8 +37,9 @@ export function createMembershipPurchaseRoutes({ authenticate, resolveContext, c
         return res.status(200).json({ ...publicMembershipCatalogue(context.plan),
           purchaseEnabled, newSubscriptionAllowed: purchaseEnabled && context.newSubscriptionAllowed === true });
       } catch (e) {
-        return res.status(e.code === 'authentication_required' ? 401 : 503).json({
-          error: e.code === 'authentication_required' ? 'authentication_required' : 'membership_context_unavailable',
+        const denied = ['authentication_required', 'membership_access_restricted'].includes(e.code);
+        return res.status(e.code === 'authentication_required' ? 401 : e.code === 'membership_access_restricted' ? 403 : 503).json({
+          error: denied ? e.code : 'membership_context_unavailable',
           ...(e.code === 'authentication_required' && e.action === 'verify_email' ? { action: 'verify_email' } : {}),
         });
       }
@@ -55,7 +56,7 @@ export function createMembershipPurchaseRoutes({ authenticate, resolveContext, c
       } catch (e) {
         const code = e.code;
         const status = code === 'authentication_required' ? 401
-          : code === 'invalid_request' ? 400
+          : code === 'membership_access_restricted' ? 403 : code === 'invalid_request' ? 400
             : ['request_conflict', 'subscription_in_progress', 'checkout_not_authorized'].includes(code) ? 409 : 503;
         return res.status(status).json({ error: status === 503 ? 'checkout_unavailable' : code,
           ...(status === 401 && e.action === 'verify_email' ? { action: 'verify_email' } : {}) });

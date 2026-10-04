@@ -1,3 +1,11 @@
+## Secondary test-account admission follow-up, 2026-10-04 13:01 Eastern
+
+Owner screenshots and Production logs confirmed the last release still returned owner_not_allowed at 17:00–17:01Z, despite the verified badge. The pilot helper excluded saved site verification. Corrected admission accepts that existing proof only when its verified email and the cryptographically authenticated account email both exactly match the configured pilot email. Missing/timestamp-only/revoked proof, other UIDs, alternate emails and malformed tokens remain rejected. The exact Firebase UID still owns every customer and ledger operation.
+
+An access policy rejection now returns a distinct 403 and the Shop does not send the verified user through an owner-account sign-in loop. Expired/invalid authentication retains 401 and unverified authentication retains its verification action.
+
+Validation: all 37 focused billing suites passed, including 32 cryptographic authentication/admission cases and 132 storefront identity cases; 97 asset fingerprints and 96 auth integrity checks passed. Added an integration regression using a signed Firebase token with email_verified=false plus a stored, UID-specific verification record, proving the same identity reaches normal account association. Tested mismatch, missing proof, revoked proof, wrong UID, and 403 with zero downstream financial operations. Live signed-in owner acceptance remains outstanding; no claim that these tests replace it.
+
 ## Live account recovery, 2026-10-04 afternoon
 
 Owner authorized a separate secondary live test account after Google security prevented access to the original billing account. Production pilot eligibility is an exact server-configured verified email; all customer, credit and subscription ownership remains keyed to the signed Firebase UID. The original owner/import and paid account are not rebound, reset or merged. Public audience remains closed.
