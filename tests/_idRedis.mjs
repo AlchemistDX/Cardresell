@@ -1,25 +1,53 @@
-// Local, isolated Lua runtime. No TCP listener, credentials, existing database,
-// production endpoint, or live service. Each process owns one private socket.
+// Local, isolated Lua runtime. Each process owns a fresh store; no production
+// endpoint or existing database. Unix socket by default; explicit loopback
+// fallback uses a process-local random password, never service credentials.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import { createClient } from 'redis';
 
 const dir = mkdtempSync(join(tmpdir(), 'cr-id-billing-'));
 const socket = join(dir, 'redis.sock');
-const server = spawn('redis-server', ['--port', '0', '--unixsocket', socket,
+// Explicit test-only fallback for hosts without Unix socket support. A random
+// password prevents a port-allocation race from connecting to another store.
+const tcp = process.env.CARDRESELL_TEST_REDIS_TCP === '1';
+let port = 0;
+const password = tcp ? randomBytes(32).toString('hex') : '';
+if (tcp) {
+  const probe = createServer();
+  await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+  port = probe.address().port;
+  await new Promise(resolve => probe.close(resolve));
+}
+const server = spawn('redis-server', [...(tcp
+  ? ['--bind', '127.0.0.1', '--port', String(port), '--requirepass', password]
+  : ['--port', '0', '--unixsocket', socket]),
   '--save', '', '--appendonly', 'no', '--dir', dir], { stdio: 'ignore' });
 process.on('exit', () => server.kill('SIGTERM'));
-for (let i = 0; !existsSync(socket) && i < 100; i++) await new Promise(r => setTimeout(r, 20));
-if (!existsSync(socket)) throw new Error('isolated redis-server failed to start');
-const client = createClient({ socket: { path: socket, reconnectStrategy: false } });
+for (let i = 0; i < 100; i++) {
+  if (tcp) {
+    try {
+      if (execFileSync('redis-cli', ['-h', '127.0.0.1', '-p', String(port), 'PING'],
+        { encoding: 'utf8', env: { ...process.env, REDISCLI_AUTH: password }, stdio: ['ignore', 'pipe', 'ignore'] }).trim() === 'PONG') break;
+    } catch (_) {}
+  } else if (existsSync(socket)) break;
+  await new Promise(r => setTimeout(r, 20));
+}
+if (!tcp && !existsSync(socket)) throw new Error('isolated redis-server failed to start');
+const client = createClient({ ...(tcp ? { password } : {}), socket: {
+  ...(tcp ? { host: '127.0.0.1', port } : { path: socket }), reconnectStrategy: false,
+} });
 client.on('error', () => {});
 await client.connect();
 export async function redisCommand(args) {
   return client.sendCommand(args.map(String));
 }
-const sync = (...args) => JSON.parse(execFileSync('redis-cli', ['-s', socket, '--json', ...args.map(String)], { encoding: 'utf8' }));
+const sync = (...args) => JSON.parse(execFileSync('redis-cli', [
+  ...(tcp ? ['-h', '127.0.0.1', '-p', String(port)] : ['-s', socket]), '--json', ...args.map(String)],
+  { encoding: 'utf8', env: { ...process.env, ...(tcp ? { REDISCLI_AUTH: password } : {}) } }));
 export function redisStore() {
   // Only this process's fresh database; used as a Map facade by old tests.
   sync('FLUSHDB');

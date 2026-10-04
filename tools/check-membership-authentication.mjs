@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
 import { createMembershipAuthenticator } from '../api/_membershipAuthentication.js';
+import { createMembershipPurchaseRoutes } from '../api/_membershipPurchaseRoutes.js';
 import { createMembershipAccountRoutes } from '../api/_membershipAccountRoutes.js';
 import { readFileSync } from 'node:fs';
 import { readMembershipVerification } from '../api/_membershipVerification.js';
@@ -67,6 +68,7 @@ await test('rejected identity cannot trigger account reads, bootstrap or custome
     await routes.account({ method, headers: { authorization: 'Bearer ' + token({ email_verified: false }) },
       body: { action: 'associate' } }, res);
     assert.equal(res.code, 401);
+    assert.equal(res.body.action, 'verify_email');
   }
   assert.equal(calls, 0);
 });
@@ -232,5 +234,28 @@ await test('invalid signature or project never reaches verified email diagnostic
     resolveVerification: () => { throw Error('must not read'); } });
   await assert.rejects(() => auth(token({ aud: 'wrong' })), { code: 'authentication_required' });
   assert.deepEqual(events, ['token_received', 'token_claims_well_formed', 'authentication_rejected']);
+});
+await test('email verification action is exposed only after verified identity and completed lookup', async () => {
+  const auth = createMembershipAuthenticator({ resolveVerification: async () => null, onReject: () => {} });
+  await assert.rejects(() => auth(token({ email_verified: false })), { code: 'authentication_required', action: 'verify_email' });
+  for (const jwt of ['malformed', token({ aud: 'wrong' })]) {
+    await assert.rejects(() => auth(jwt), error => error.code === 'authentication_required' && !error.action);
+  }
+  const outage = createMembershipAuthenticator({ resolveVerification: async () => { throw Error('outage'); }, onReject: () => {} });
+  await assert.rejects(() => outage(token({ email_verified: false })), error => !error.action);
+});
+await test('catalogue and checkout retain 401 with only the fixed verification action and no side effects', async () => {
+  let calls = 0;
+  const routes = createMembershipPurchaseRoutes({ authenticate,
+    resolveContext: async () => { calls++; }, controller: { checkout: async () => { calls++; } } });
+  for (const [name, method] of [['catalogue', 'GET'], ['checkout', 'POST']]) {
+    for (const jwt of [token({ email_verified: false }), 'malformed']) {
+      const res = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+      await routes[name]({ method, headers: { authorization: 'Bearer ' + jwt }, body: {} }, res);
+      assert.equal(res.code, 401);
+      assert.deepEqual(res.body, { error: 'authentication_required', ...(jwt === 'malformed' ? {} : { action: 'verify_email' }) });
+    }
+  }
+  assert.equal(calls, 0);
 });
 console.log(`${passed} passed, 0 failed`);

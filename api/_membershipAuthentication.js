@@ -8,6 +8,7 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
   const observe = stage => { try { onDiagnostic?.(stage); } catch {} };
   return async token => {
     let reason = 'malformed_token';
+    let action;
     try {
       observe('token_received');
       if (typeof token !== 'string' || token.length > 16384) throw new Error();
@@ -56,6 +57,7 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
       const saved = typeof resolveVerification === 'function' ? await resolveVerification(user.uid) : null;
       if (saved?.verified !== true || saved.source !== 'stored_account_verification') {
         observe('stored_verification_unavailable');
+        action = 'verify_email';
         throw new Error();
       }
       observe('authentication_accepted');
@@ -64,7 +66,8 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
     } catch {
       observe('authentication_rejected');
       try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
-      throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' });
+      throw Object.assign(new Error('authentication_required'), { code: 'authentication_required',
+        ...(action ? { action } : {}) });
     }
   };
 }

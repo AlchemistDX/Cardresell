@@ -3,8 +3,8 @@ const path = require('path');
 
 const files = process.argv.slice(2);
 const targets = files.length ? files : [
-  '/home/user/workspace/cardresell/index.html',
-  '/home/user/workspace/cardresell/signin.html',
+  path.join(__dirname, '..', 'index.html'),
+  path.join(__dirname, '..', 'signin.html'),
 ];
 
 // Classic inline scripts (skip src=, JSON, and module — modules checked separately)

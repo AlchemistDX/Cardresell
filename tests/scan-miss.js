@@ -10,10 +10,10 @@
 // Usage: node tests/scan-miss.js
 
 const fs = require('fs');
+const path = require('path');
 
-const INDEX = '/home/user/workspace/cardresell/index.html';
 const { readAppSource } = require('./_appsource.cjs');
-const SCAN_MISS_API = '/home/user/workspace/cardresell/api/scan-miss.js';
+const SCAN_MISS_API = path.join(__dirname, '../api/scan-miss.js');
 
 let failures = 0;
 let checks = 0;
