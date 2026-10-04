@@ -20,7 +20,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
     message: 'Unable to confirm the operation yet. Existing credits are preserved. Retry the same operation.',
   });
   const publicState = state => ({
-    status: state.status || state.snapshot?.status || 'not_associated',
+    status: state.status || state.snapshot?.status || (state.customerId ? 'associated' : 'not_associated'),
     subscriptionId: state.subscriptionId || null,
     snapshot: state.snapshot || null,
     command: state.command ? { operationId: state.command.operationId, kind: state.command.kind, plan: state.command.plan,

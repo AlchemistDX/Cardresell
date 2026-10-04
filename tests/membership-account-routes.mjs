@@ -97,6 +97,10 @@ check((await launchCall({ ...portalCommand, customerId: 'cus_attacker' })).code 
 check((await launchCall({ action: 'change', operationId: 'a'.repeat(64), plan: 'pro' })).code === 409);
 check((await launchCall({ action: 'cancel', operationId: 'b'.repeat(64) })).code === 409);
 check((await launchCall(undefined, 'GET')).body.management.scheduleChanges === false);
+state = { owner: 'owner', customerId: 'cus_owned', subscriptionId: null };
+const freeAccount = await launchCall(undefined, 'GET');
+check(freeAccount.body.state.status === 'associated' && freeAccount.body.management.portal === true);
+check(freeAccount.body.state.subscriptionId === null);
 associatedCustomer = null;
 check((await launchCall(portalCommand)).code === 503);
 console.log(`membership-account-routes: ${passed} passed, 0 failed`);
