@@ -217,9 +217,8 @@
 
     /* Bonus badge */
     .bonus-badge {
-      display: flex;
-      align-items: center;
-      gap: .5rem;
+      display: block;
+      line-height: 1.5;
       background: rgba(212,175,55,.08);
       border: 1px solid rgba(212,175,55,.25);
       border-radius: 10px;
@@ -279,7 +278,7 @@
     <!-- Sign In view -->
     <div class="auth-view active" id="viewSignIn">
       <div class="bonus-badge">
-        🎁 Sign in — get <strong>&nbsp;10 ID scans + 1 AI Grade</strong>&nbsp;on first login
+        Verified accounts receive <strong>10 ID credits + 1 Grade credit</strong> once. Credits never expire.
       </div>
       <div id="errSignIn" class="alert alert-error"></div>
 
@@ -310,7 +309,7 @@
     <!-- Sign Up view -->
     <div class="auth-view" id="viewSignUp">
       <div class="bonus-badge">
-        🎁 Sign up free — get <strong>&nbsp;10 ID scans + 1 AI Grade</strong>&nbsp;on us
+        Verify your free account to receive <strong>10 ID credits + 1 Grade credit</strong> once, separate from monthly credits.
       </div>
       <div id="errSignUp" class="alert alert-error"></div>
 
@@ -390,6 +389,11 @@
         return '/';
       }
     };
+    window._verificationReturnOrigin = function() {
+      return ['https://www.cardresell.org', 'https://cardresell.org',
+        'https://cardresell-membership-v2-preview.vercel.app'].includes(location.origin)
+        ? location.origin : null;
+    };
   </script>
 
   <!-- Firebase -->
@@ -453,28 +457,26 @@
 
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
-      try { await signInWithPopup(auth, provider); }
-      catch(e) { if (e.code !== 'auth/popup-closed-by-user') throw e; }
+      provider.setCustomParameters({ prompt: 'select_account' });
+      return signInWithPopup(auth, provider);
     };
     window._fbEmailSignIn  = (e, p) => signInWithEmailAndPassword(auth, e, p);
     window._fbEmailSignUp  = (e, p) => createUserWithEmailAndPassword(auth, e, p);
     window._fbResetPassword = (e)   => sendPasswordResetEmail(auth, e);
-    // Pass actionCodeSettings so the verification email includes a clickable
-    // "Continue" link that redirects back to cardresell.org/?verified=1 after
-    // Firebase completes verification. index.html has a ?verified=1 handler
-    // that forces token refresh + claims the signup bonus.
-    // NOTE: cardresell.org + www.cardresell.org must be on Firebase Auth's
-    // Authorized Domains list (Authentication → Settings → Authorized domains).
-    // On failure we fall back to the default link (still deliverable).
+    // Stay on the same approved deployment origin. Unknown deployment hosts
+    // use Firebase's default verification flow, never an implicit live return.
+    // Approved origins must also be allowed by Firebase Auth. Provider refusal
+    // retains the default-email fallback without weakening verification.
     window._fbSendVerification = async () => {
       if (!auth.currentUser) return;
-      const acs = {
-        url: 'https://www.cardresell.org/?verified=1',
+      const returnOrigin = window._verificationReturnOrigin();
+      const acs = returnOrigin ? {
+        url: returnOrigin + '/?verified=1',
         handleCodeInApp: false,
-      };
+      } : undefined;
       try {
         await sendEmailVerification(auth.currentUser, acs);
-        return { ok: true, withReturn: true };
+        return { ok: true, withReturn: !!acs };
       } catch (e) {
         try {
           await sendEmailVerification(auth.currentUser);
@@ -505,6 +507,10 @@
       // OR the URL has ?next=<something> indicating a deep-link redirect.
       const params = new URLSearchParams(location.search);
       const nextParam = params.get('next');
+      // Explicit recovery must wait for a new completed sign-in, even if the
+      // SDK restores an existing session. A pending popup/password action also
+      // waits for its credential and persistence check before navigation.
+      if (window._signInFlowPending || params.get('reauth') === '1') return;
       if (window._justSignedIn || nextParam) {
         const dest = window._safeSignInDestination(nextParam);
         window.location.replace(dest);
@@ -583,18 +589,29 @@
       try { sessionStorage.setItem('_fbJustSignedIn', String(Date.now())); } catch(e) {}
     }
 
+    async function _finishExplicitSignIn(credential) {
+      const user = credential && credential.user;
+      if (!user || window._fbAuth.currentUser !== user) throw new Error('Your account changed. Please sign in again.');
+      // A restored session or a canceled popup is not a completed recovery.
+      await user.getIdToken(true);
+      await _flushAuthToDisk();
+      if (window._fbAuth.currentUser !== user) throw new Error('Your account changed. Please sign in again.');
+      window._justSignedIn = true;
+      window.location.replace(window._safeSignInDestination(new URLSearchParams(location.search).get('next')));
+    }
+
     async function googleSignIn() {
+      if (window._signInFlowPending) return;
+      window._signInFlowPending = true;
       window._dbg('googleSignIn: clicked, _fbGoogleSignIn type=' + typeof window._fbGoogleSignIn);
       clearErr('errSignIn'); clearErr('errSignUp');
       try { await window._fbPersistenceReady; } catch(e) {}
-      window._justSignedIn = true;
+      window._justSignedIn = false;
       try {
         if (typeof window._fbGoogleSignIn !== 'function') throw new Error('module-not-loaded: _fbGoogleSignIn missing');
         window._dbg('googleSignIn: calling signInWithPopup');
-        await window._fbGoogleSignIn();
-        window._dbg('googleSignIn: popup resolved, flushing');
-        await _flushAuthToDisk();
-        window._dbg('googleSignIn: flushed, awaiting onAuthStateChanged redirect');
+        const credential = await window._fbGoogleSignIn();
+        await _finishExplicitSignIn(credential);
       }
       catch(e) {
         window._justSignedIn = false;
@@ -603,21 +620,25 @@
         showErr('errSignIn', fbMsg(e));
         showErr('errSignUp', fbMsg(e));
       }
+      finally { window._signInFlowPending = false; }
     }
 
     async function doSignIn() {
+      if (window._signInFlowPending) return;
       const email = document.getElementById('siEmail').value.trim();
       const pass  = document.getElementById('siPass').value;
       clearErr('errSignIn');
       if (!email || !pass) return showErr('errSignIn', 'Please enter your email and password.');
+      window._signInFlowPending = true;
       setLoading('btnSignIn', true, 'Signing in...');
       try { await window._fbPersistenceReady; } catch(e) {}
-      window._justSignedIn = true;
+      window._justSignedIn = false;
       try {
-        await window._fbEmailSignIn(email, pass);
-        await _flushAuthToDisk();
+        const credential = await window._fbEmailSignIn(email, pass);
+        await _finishExplicitSignIn(credential);
       }
       catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); setLoading('btnSignIn', false, 'Sign In'); }
+      finally { window._signInFlowPending = false; }
     }
 
     async function doSignUp() {
@@ -754,12 +775,17 @@
         'auth/too-many-requests': 'Too many attempts — try again later.',
         'auth/network-request-failed': 'Network error — check your connection.',
         'auth/popup-blocked': 'Pop-up blocked — please allow pop-ups and try again.',
+        'auth/popup-closed-by-user': 'Sign-in was canceled. Choose a sign-in method to try again.',
+        'auth/unauthorized-domain': 'Sign-in is not enabled for this hostname. Return to the normal CardResell site or report this hostname.',
       })[e.code] || e.message || 'Something went wrong.';
     }
 
     // Check URL for tab param
     const tab = new URLSearchParams(location.search).get('tab');
     if (tab === 'signup') switchTab('signup');
+    if (new URLSearchParams(location.search).get('reauth') === '1') {
+      showErr('errSignIn', 'Billing could not verify your previous sign-in. Sign in again below; your credits and subscription have not been changed by this page.');
+    }
   </script>
 
 </body>

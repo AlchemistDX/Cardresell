@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 
+async function main() {
 const INDEX = path.join(__dirname, '..', 'index.html');
 const SIGNIN = path.join(__dirname, '..', 'signin.html');
 const { readAppSource } = require('./_appsource.cjs');
@@ -328,6 +329,7 @@ if (signin) {
   }
   check('both completion paths call shared resolver', (signin.match(/const dest = window\._safeSignInDestination\(/g) || []).length === 2);
   check('no raw next fallback remains at navigation sinks', !/const dest = (?:nextParam|new URLSearchParams)/.test(signin));
+  await require('./_signin-recovery.cjs')(check, signin);
 }
 
 // ─── Summary ───
@@ -341,3 +343,5 @@ if (failures > 0) {
   console.log(`\n✅ Auth stack integrity verified`);
   process.exit(0);
 }
+}
+main().catch(error => { console.error(error); process.exit(1); });

@@ -24,10 +24,17 @@ class Element {
   focus() {}
 }
 const user = owner => ({ uid: owner, getIdToken: async () => 'synthetic_token_' + owner });
-function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false } = {}) {
+function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false,
+  storage = new Map(), href = 'https://synthetic.invalid/', storageBlocked = false, historyBlocked = false } = {}) {
   const body = new Element('body'), requests = [], navigations = [];
-  const window = { googleUser: initial, _waitForAuth: async () => {} };
-  const history = { state, replaceState(value) { this.state = value; } };
+  const window = { googleUser: initial, _waitForAuth: async () => {}, sessionStorage: {
+    getItem(key) { if(storageBlocked) throw Error('blocked'); return storage.get(key) || null; },
+    setItem(key,value) { if(storageBlocked) throw Error('blocked'); storage.set(key,value); },
+    removeItem(key) { if(storageBlocked) throw Error('blocked'); storage.delete(key); },
+  } };
+  const location = { href, assign: url => navigations.push(url) };
+  const history = { state, replaceState(value, _, url) { if(historyBlocked) throw Error('blocked');
+    this.state = value; if(url) location.href = new URL(url,location.href).href; } };
   const catalogue = suppliedCatalogue || { plans: [], purchaseEnabled: true, packs: [
     { packId: 'id_25', kind: 'id', credits: 25, amountCents: 299 },
     { packId: 'id_100', kind: 'id', credits: 100, amountCents: 999 },
@@ -36,20 +43,25 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
     json: async () => ({ status: 'checkout_ready', url: 'https://checkout.stripe.com/c/pay/cs_synthetic' }) });
   const sandbox = { window, history, document: { body, activeElement: new Element('button'), createElement: tag => new Element(tag) },
     Intl, crypto: webcrypto, Uint8Array, URL,
-    location: { href: 'https://synthetic.invalid/', assign: url => navigations.push(url) },
+    location,
     fetch: async (url, options = {}) => {
       if (url === '/api/membership-account') return onAccount ? onAccount(options)
         : { ok: false, status: 503, json: async () => ({ error: 'not_enabled' }) };
       if (url.includes('catalogue')) {
-        if (onCatalogue) await onCatalogue(options);
+        if (onCatalogue) { const custom = await onCatalogue(options); if (custom) return custom; }
         if (rejectAuth && options.headers?.Authorization) return { ok: false, status: 401, json: async () => ({ error: 'authentication_required' }) };
         return { ok: true, status: 200, json: async () => catalogue };
       }
       requests.push({ auth: options.headers.Authorization, request: JSON.parse(options.body) });
       return onCheckout ? await onCheckout(options, response) : response();
     } };
+  const fixtureFetch = sandbox.fetch;
+  sandbox.fetch = async (...args) => {
+    const result = await fixtureFetch(...args);
+    return { ...result, headers: result.headers || { get: () => 'application/json' } };
+  };
   vm.runInNewContext(source, sandbox);
-  return { window, history, requests, navigations,
+  return { window, history, requests, navigations, location, storage,
     open: () => window.openMembershipShop(),
     buttons: () => walk(body).filter(e => e.tag === 'button' && /ID credits/.test(e.textContent || '')),
     controls: () => walk(body).filter(e => e.tag === 'button'),
@@ -190,7 +202,86 @@ await t.section('rejected billing authentication has a recovery link, not silent
   t.check('401 explains rejected sign-in rather than successful pricing',
     /sign-in was not accepted for billing/.test(h.message()) && !/Membership pricing verified/.test(h.message()));
   t.check('401 retains safe existing sign-in route and sends no purchase',
-    h.links().some(x => x.textContent === 'Sign in again to verify billing' && x.href === '/signin?next=%2F%3Fshop%3D1') && h.requests.length === 0);
+    h.links().some(x => x.textContent === 'Sign in again to verify billing' && x.href.startsWith('/signin?reauth=1&next=')
+      && decodeURIComponent(x.href).includes('membership_recovery=')) && h.requests.length === 0);
+});
+await t.section('B02 reauthentication roundtrip retains owner-bound operation and return locator', async () => {
+  const storage = new Map();
+  const command = {action:'cancel',operationId:'f'.repeat(64)};
+  const first = setup({storage,state:{membershipCommands:{A:command}},href:'https://synthetic.invalid/?shop=1&session_id=cs_test_existing',
+    onCheckout:async()=>({ok:false,status:401,json:async()=>({})})});
+  await first.open();await first.buttons()[0].onclick();
+  const original = first.history.state.membershipPurchases.A.request;
+  const link = first.links().find(x=>x.textContent === 'Sign in again to verify billing');
+  t.check('recovery href is bound before any click, including new-tab navigation',decodeURIComponent(link.href).includes('membership_recovery='));
+  let prevented=false;link.onclick({preventDefault(){prevented=true;}});
+  const destination = new URL(link.href,'https://synthetic.invalid').searchParams.get('next');
+  const href='https://synthetic.invalid'+destination;
+  t.check('return locator survives sign-in destination',!prevented && destination.includes('session_id=cs_test_existing'));
+  const wrong=setup({initial:user('B'),storage,href});await wrong.open();
+  t.check('different account cannot restore or send original purchase',wrong.requests.length === 0 &&
+    !wrong.history.state.membershipPurchases && /original account/.test(wrong.message()));
+  t.check('wrong account preserves original handoff for later correct sign-in',storage.size > 0);
+  const correct=setup({storage,href});await correct.open();await correct.buttons()[0].onclick();
+  t.check('same owner after new history entry sends identical operation',correct.requests.length === 1 &&
+    JSON.stringify(correct.requests[0].request) === JSON.stringify(original));
+  t.check('restore commits history before handoff cleanup and keeps checkout locator',
+    correct.history.state.membershipPurchases.A.request.requestId === original.requestId &&
+    !correct.location.href.includes('membership_recovery') && correct.location.href.includes('session_id=cs_test_existing'));
+  t.check('pending subscription command retains exact identity across recovery',
+    JSON.stringify(correct.history.state.membershipCommands.A) === JSON.stringify(command));
+  const noStorage=setup({storageBlocked:true,onCheckout:async()=>({ok:false,status:401,json:async()=>({})})});
+  await noStorage.open();await noStorage.buttons()[0].onclick();
+  const blockedLink=noStorage.links().find(x=>x.textContent === 'Sign in again to verify billing');
+  let blocked=false;blockedLink.onclick({preventDefault(){blocked=true;}});
+  t.check('unavailable storage stops navigation and preserves original history',blocked && blockedLink.href === '#' &&
+    !!noStorage.history.state.membershipPurchases.A && /Keep this tab open/.test(noStorage.message()));
+  const handoff=setup({storage:new Map(),rejectAuth:true});await handoff.open();
+  const savedLink=handoff.links().find(x=>x.textContent === 'Sign in again to verify billing');
+  const savedHref='https://synthetic.invalid'+new URL(savedLink.href,'https://synthetic.invalid').searchParams.get('next');
+  const noHistory=setup({storage:handoff.storage,href:savedHref,historyBlocked:true});await noHistory.open();
+  t.check('unavailable history cannot clear handoff or enable purchases',handoff.storage.size > 0 && noHistory.buttons().length === 0 &&
+    /Keep this tab open/.test(noHistory.message()));
+  const lost=setup({href:savedHref});await lost.open();
+  t.check('missing handoff after reauthentication fails closed rather than issuing a new request',lost.requests.length === 0 &&
+    lost.buttons().length === 0 && /Keep this tab open/.test(lost.message()));
+});
+await t.section('B02 response classification preserves uncertain purchase identity', async () => {
+  for (const [name, response, expected] of [
+    ['HTML', { ok: true, status: 200, headers: { get: () => 'text/html' }, json: async () => { throw Error('private-body'); } }, /page instead of an API/],
+    ['redirect', { ok: true, status: 200, redirected: true, json: async () => ({}) }, /unexpected redirect/],
+    ['broken JSON', { ok: true, status: 200, json: async () => { throw Error('private-body'); } }, /unreadable response/],
+    ['null JSON', { ok: true, status: 200, json: async () => null }, /unreadable response/],
+    ['503', { ok: false, status: 503, json: async () => ({error:'private-body'}) }, /temporarily unavailable/],
+    ['401', { ok: false, status: 401, json: async () => ({error:'private-body'}) }, /sign-in was not accepted/],
+  ]) {
+    let fail = true;
+    const h = setup({onCheckout: async (_, done) => fail ? response : done()});
+    await h.open(); await h.buttons()[0].onclick();
+    const request = h.history.state.membershipPurchases.A.request;
+    t.check(`${name}: diagnostic is specific and excludes raw body`, expected.test(h.message()) && !h.message().includes('private-body'));
+    t.check(`${name}: no success or redirect assumed`, h.navigations.length === 0 && !!request);
+    if (name === '401') t.check('checkout 401 provides explicit reauthentication route', h.links().some(x=>x.href.includes('reauth=1')));
+    fail = false; await h.buttons()[0].onclick();
+    t.check(`${name}: user retry reuses exact operation`, h.requests.length === 2 &&
+      h.requests.every(x => x.request.requestId === request.requestId) && h.navigations.length === 1);
+  }
+  const network = setup({ onCheckout: async () => { throw Error('private-network-body'); } });
+  await network.open(); await network.buttons()[0].onclick();
+  t.check('network failure keeps purchase reference and sanitized message', /could not be reached/.test(network.message()) &&
+    !network.message().includes('private-network-body') && !!network.history.state.membershipPurchases.A);
+  const failedQuote = setup({ onCatalogue: async options => options.headers?.Authorization
+    ? {ok:true,status:200,headers:{get:()=> 'text/html'},json:async()=>({})} : null });
+  await failedQuote.open();
+  t.check('HTML authenticated quote falls back only to disabled public prices', failedQuote.buttons().length === 2 &&
+    failedQuote.buttons().every(b=>b.disabled) && /page instead of an API/.test(failedQuote.message()));
+  const failedAccount = setup({onAccount:async()=>({ok:true,status:200,headers:{get:()=> 'text/html'},json:async()=>({})})});
+  await failedAccount.open();
+  t.check('account response error is no longer silently swallowed', /page instead of an API/.test(failedAccount.message()));
+  const brokenToken = user('A'); brokenToken.getIdToken = async()=>{throw Error('private-token-body');};
+  const expired = setup({initial:brokenToken}); await expired.open();
+  t.check('failed SDK refresh offers reauthentication without exposing provider body', expired.links().some(x=>x.href.includes('reauth=1')) &&
+    !expired.message().includes('private-token-body') && expired.requests.length === 0);
 });
 await t.section('separate subscription navigation and seven exact pack selections', async () => {
   for (const plan of ['free', 'starter', 'casual', 'pro', 'business']) {
