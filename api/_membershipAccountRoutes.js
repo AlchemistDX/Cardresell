@@ -15,6 +15,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
   }
   const error = (res, e) => res.status(e.code === 'authentication_required' ? 401 : 503).json({
     error: e.code === 'authentication_required' ? e.code : 'membership_pending',
+    ...(e.code === 'authentication_required' && e.action === 'verify_email' ? { action: 'verify_email' } : {}),
     message: 'Unable to confirm the operation yet. Existing credits are preserved. Retry the same operation.',
   });
   const publicState = state => ({

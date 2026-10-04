@@ -116,7 +116,7 @@ export default async function handler(req, res) {
   // Require Firebase to have marked the email verified. If false, the user
   // hasn't clicked the link yet (or their token is stale — the frontend must
   // call user.getIdToken(true) AFTER the click to refresh the claim).
-  if (!tokenInfo.email_verified) {
+  if (tokenInfo.emailVerified !== true) {
     return res.status(400).json({
       error: 'Email not yet verified. Tap the link in your inbox, then try again.',
       code: 'not_verified',
@@ -127,13 +127,17 @@ export default async function handler(req, res) {
 
   // Set the verified-override flag with the confirmed email
   try {
-    await kvSet(`email_verified:${userSub}`, JSON.stringify({
+    const saved = await kvSet(`email_verified:${userSub}`, JSON.stringify({
       verifiedAt: new Date().toISOString(),
       email,
       via: 'firebase_link',
     }));
-    await kvSet(`verified_email:${userSub}`, email);
-  } catch(e) { /* non-fatal */ }
+    const result = await saved.json();
+    if (!saved.ok || result.error || result.result !== 'OK') throw new Error('verification_write_failed');
+  } catch {
+    return res.status(503).json({ error: 'Could not save verification. Try again.', code: 'verification_unavailable' });
+  }
+  try { await kvSet(`verified_email:${userSub}`, email); } catch { /* Optional email display cache. */ }
 
   // Bonus grant — same gates as /api/verify-confirm
   let bonusGranted = false;

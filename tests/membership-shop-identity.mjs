@@ -41,7 +41,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
       if (url === '/api/membership-account') return onAccount ? onAccount(options)
         : { ok: false, status: 503, json: async () => ({ error: 'not_enabled' }) };
       if (url.includes('catalogue')) {
-        if (onCatalogue) await onCatalogue(options);
+        if (onCatalogue) { const custom = await onCatalogue(options); if (custom) return custom; }
         if (rejectAuth && options.headers?.Authorization) return { ok: false, status: 401, json: async () => ({ error: 'authentication_required' }) };
         return { ok: true, status: 200, json: async () => catalogue };
       }
@@ -285,5 +285,26 @@ await t.section('confirmed Portal cancellation is not presented as another renew
   t.check('migration is not advertised over a cancellation', !h.message().includes('Casual transition'));
   t.check('no competing cancellation or change command offered', !h.controls().some(b => /Change to |Cancel at renewal/.test(b.textContent)));
   t.check('normal Stripe Portal remains available', h.controls().some(b => b.textContent === 'Manage billing in Stripe'));
+});
+await t.section('verified identity without email authority gets verification, never another sign-in', async () => {
+  const pending = { owner: 'A', request: { requestId: 'a'.repeat(64), kind: 'pack', selection: 'id_25' } };
+  const state = { membershipPurchases: { A: pending }, unrelated: 'keep' };
+  let opened = 0;
+  const h = setup({ state, onCatalogue: async options => options.headers?.Authorization
+    ? { ok: false, status: 401, json: async () => ({ error: 'authentication_required', action: 'verify_email' }) } : null });
+  h.window.openVerifyModal = () => { opened++; };
+  await h.open();
+  t.check('email verification explains signed-in state', /You are signed in/.test(h.message()));
+  t.check('no repeated sign-in action', !h.links().some(x => /Sign in again/.test(x.textContent)));
+  t.check('all purchase controls remain disabled', h.buttons().every(x => x.disabled));
+  const verify = h.controls().find(x => x.textContent === 'Verify email');
+  t.check('verification action present', !!verify);
+  verify.onclick();
+  t.check('normal verification opened without navigation or purchase', opened === 1 && !h.navigations.length && !h.requests.length);
+  t.check('pending purchase and unrelated history preserved', h.history.state === state && state.membershipPurchases.A === pending);
+  await h.open();
+  const stale = h.controls().find(x => x.textContent === 'Verify email');
+  h.window.googleUser = user('B'); stale.onclick();
+  t.check('stale account cannot launch verification', opened === 1);
 });
 t.done();

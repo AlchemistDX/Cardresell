@@ -1,3 +1,17 @@
+# Live-only profit readiness — October 4, 2026
+
+Owner direction: zero current users; prioritize the minimum reliable paid product and advertising readiness. All deployed acceptance uses www.cardresell.org. Preview is not a prerequisite or an owner action. Work from the current Production code and build with Production bindings.
+
+Current slice: repair Firebase email-claim field mismatch (`emailVerified`), require confirmed persistence before reporting verification success, and direct verified identities missing email authority to the existing in-tab Verify email flow. Preserve pending-operation history; no automatic email send, credit rewrite or authentication bypass. Production sign-in and camera fixes remain intact.
+
+Local verification: Firebase handler 10 cases, membership authentication 28 checks, storefront identity/recovery 129 checks passed. Focused membership gate passed all 37 invocations. Full regression gate passed all 73 slots (70 executed; three existing external/opt-in skips). These checks are synthetic and do not establish live email completion, charge acceptance or recognition accuracy.
+
+Next live acceptance: verify current assets and public/billing read-only routes, then existing owner sign-in, verification if required, and account visibility. Reuse accepted purchase evidence; no extra real charge is authorized by this code change. Remaining profit work: supported card recognition evidence, provider failure/cost accounting, and a small measured seller pilot before advertising scale.
+
+Rollback baseline: production deployment dpl_9Jp4RZbKqCx3chDpYs9VXpBq2keV, source 7520acb92685bfdaed64c746cf2dc012d3c82459. This direction supersedes earlier Preview-based acceptance instructions below.
+
+---
+
 # Photo capture reliability — October 4, 2026
 
 Published as `7520acb92685bfdaed64c746cf2dc012d3c82459` (local commit `921b4e7`; identical tree `1219393ceaecb28649a45fa7ef9a3840c515e1b4`). Production deployment `dpl_9Jp4RZbKqCx3chDpYs9VXpBq2keV` is READY, built with Production settings in 43 seconds.

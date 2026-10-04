@@ -7,6 +7,7 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
   onReject = reason => console.warn('MEMBERSHIP_AUTH_REJECTED', reason) } = {}) {
   return async token => {
     let reason = 'malformed_token';
+    let action;
     try {
       if (typeof token !== 'string' || token.length > 16384) throw new Error();
       const parts = token.split('.');
@@ -43,12 +44,16 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
       // Signature/project/expiry/subject checks have already succeeded. Honor
       // the site's preexisting server-owned verification for this exact UID.
       const saved = typeof resolveVerification === 'function' ? await resolveVerification(user.uid) : null;
-      if (saved?.verified !== true || saved.source !== 'stored_account_verification') throw new Error();
+      if (saved?.verified !== true || saved.source !== 'stored_account_verification') {
+        action = 'verify_email';
+        throw new Error();
+      }
       return { uid: user.uid, verified: true, email: saved.email || user.email,
         verificationSource: saved.source };
     } catch {
       try { onReject(reason); } catch { /* Diagnostics cannot change admission. */ }
-      throw Object.assign(new Error('authentication_required'), { code: 'authentication_required' });
+      throw Object.assign(new Error('authentication_required'), { code: 'authentication_required',
+        ...(action ? { action } : {}) });
     }
   };
 }
