@@ -1,6 +1,10 @@
 # Photo capture reliability — October 4, 2026
 
-Implemented and locally verified; publication/deployment status will be recorded after delivery.
+Published as `7520acb92685bfdaed64c746cf2dc012d3c82459` (local commit `921b4e7`; identical tree `1219393ceaecb28649a45fa7ef9a3840c515e1b4`). Production deployment `dpl_9Jp4RZbKqCx3chDpYs9VXpBq2keV` is READY, built with Production settings in 43 seconds.
+
+Post-deploy checks: live index, both new bundles and unchanged sign-in HTML match reviewed bytes exactly. Health, catalogue and read-only cutover status return 200; cutover identifies commit `7520acb`, purchasing enabled, billing not paused, database authorization accepted, fence installed and no mutation. No purchase or physical-camera acceptance was performed.
+
+The initial post-release error-log sample through 14:28:43 UTC contains Node url.parse deprecation warnings and an upstream eBay sold-search 403 on a route returning HTTP 200. This is not a clean-log claim, and the cause/pre-existing status is unconfirmed. Track it in the next provider reliability investigation; no provider request policy was changed here.
 
 - Single ID scan, grading front/back and edge capture now show short, task-specific photo instructions. No paid AI call powers this guidance.
 - Camera sessions discard late permission results, play completions and photo callbacks after cancel or replacement. Obsolete streams stop; teardown clears the video source. Double shutter taps produce one capture, with retry available after encoding failure.
@@ -8,7 +12,7 @@ Implemented and locally verified; publication/deployment status will be recorded
 - Rejection copy describes similarity rather than claiming card identity, removes the uncalibrated sharpness score from user instructions, and states that no credit was used at this pre-request stage. Rejected-photo controls and temporary preview URLs are cleaned up.
 - Actual index references new immutable core/UI assets; old assets retained unchanged. Authentication, billing routes, prices, ledger and recognition thresholds unchanged.
 
-Verification: full repository gate passed with 72 slots (69 executed, three existing explicitly skipped slots); decoder 10, retake 8 and camera lifecycle 11 cases passed. Browser fixture passed all four capture modes at 390×844, 844×390 and 1280×900, with visible controls, readable guidance and working Cancel. Test runtime: isolated Redis 7.4.2, Chromium 153. Initial runs failed because the local browser runtime was missing; restored runtime and reran the complete gate successfully.
+Verification: full repository gate passed with 72 slots (69 executed, three existing explicitly skipped slots); decoder 10, retake 8 and camera lifecycle 11 cases passed. Browser fixture passed all four capture modes at 390×844, 844×390 and 1280×900, with visible controls, readable guidance and working Cancel. Test runtime: isolated Redis 7.4.2, Chromium 153. Initial runs failed because the local browser runtime was missing; restored runtime and reran the complete gate successfully. The legacy syntax slot also referenced a former workspace path and initially skipped its two inputs internally; after restoring that test-only path, its eight inline script blocks passed with zero errors.
 
 Limits: browser fixtures use mocked camera permission/streams; physical iPhone capture, provider recognition quality, catalog coverage, failed-provider charge reconciliation and measured 90% accuracy are not established by this slice. Do not advertise an accuracy percentage from these results.
 
