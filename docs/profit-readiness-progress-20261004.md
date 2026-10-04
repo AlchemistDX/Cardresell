@@ -1,3 +1,11 @@
+## Sign-in navigation and repeat modal recovery, 2026-10-04 13:20 Eastern
+
+Owner reported Sign In returning directly home and Shop reopening on site entry. The sign-in observer auto-redirected persisted sessions whenever next was present, before any explicit new login, and could redirect before the login action completed its persistence flush. It now shows the existing account with Continue / Sign out and use another account; explicit successful Google/email actions navigate only after their persistence flush. Continue respects the bounded original destination.
+
+Shop and subscription query flags are one-shot navigation intent: consume them with history.replaceState while retaining unrelated parameters, URL hash, history state, pending operation keys and checkout session_id. A normal home visit or subsequent refresh no longer reopens the modal. Checkout return still opens once, and manual reopening retains its verification action.
+
+Validation: storefront/navigation suite 164 passed, auth integrity 96 passed, asset fingerprints 97 passed. New cases execute the shipped sign-in callback and both action functions with a held persistence promise, and exercise home/deep-link/reload behavior plus preserved checkout recovery data. No billing API, price, account ownership or credit ledger changes in this release. Live browser navigation acceptance follows Production deployment; authenticated user acceptance remains distinct.
+
 ## Secondary test-account admission follow-up, 2026-10-04 13:01 Eastern
 
 Owner screenshots and Production logs confirmed the last release still returned owner_not_allowed at 17:00–17:01Z, despite the verified badge. The pilot helper excluded saved site verification. Corrected admission accepts that existing proof only when its verified email and the cryptographically authenticated account email both exactly match the configured pilot email. Missing/timestamp-only/revoked proof, other UIDs, alternate emails and malformed tokens remain rejected. The exact Firebase UID still owns every customer and ledger operation.

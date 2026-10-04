@@ -502,20 +502,18 @@
         window._showVerifyScreen && window._showVerifyScreen(user.email);
         return;
       }
-      // Only auto-redirect if this tab explicitly initiated a sign-in
-      // (window._justSignedIn set by doSignIn / googleSignIn success paths)
-      // OR the URL has ?next=<something> indicating a deep-link redirect.
-      const params = new URLSearchParams(location.search);
-      const nextParam = params.get('next');
-      if (window._justSignedIn || nextParam) {
-        const dest = window._safeSignInDestination(nextParam);
-        window.location.replace(dest);
-        return;
-      }
+      // An existing session must never turn a sign-in link into a bounce.
+      // Explicit sign-in actions redirect only after their persistence flush.
+      if (window._justSignedIn) return;
       // Persisted session on cold /signin visit — show a friendly panel
       // instead of the sign-in form so the user isn't confused.
       window._showAlreadySignedIn && window._showAlreadySignedIn(user);
     });
+
+    window._continueToApp = function() {
+      const dest = window._safeSignInDestination(new URLSearchParams(location.search).get('next'));
+      window.location.replace(dest);
+    };
 
     // Helper: render a "You're already signed in" panel with Continue / Sign out.
     window._showAlreadySignedIn = function(user) {
@@ -537,8 +535,8 @@
         panel.innerHTML =
           '<div class="auth-title">You\u2019re signed in \u2705</div>' +
           '<div class="auth-sub" id="alreadyEmail" style="margin-bottom:1rem"></div>' +
-          '<button class="btn-primary" onclick="window.location.href=\'/\'">Continue to CardResell</button>' +
-          '<button class="btn-google" onclick="_signOutAndReset()" style="margin-top:.75rem">Sign out</button>';
+          '<button class="btn-primary" onclick="_continueToApp()">Continue to CardResell</button>' +
+          '<button class="btn-google" onclick="_signOutAndReset()" style="margin-top:.75rem">Sign out and use another account</button>';
         card.appendChild(panel);
       } else {
         panel.classList.add('active');
@@ -596,7 +594,7 @@
         await window._fbGoogleSignIn();
         window._dbg('googleSignIn: popup resolved, flushing');
         await _flushAuthToDisk();
-        window._dbg('googleSignIn: flushed, awaiting onAuthStateChanged redirect');
+        window._continueToApp();
       }
       catch(e) {
         window._justSignedIn = false;
@@ -618,6 +616,7 @@
       try {
         await window._fbEmailSignIn(email, pass);
         await _flushAuthToDisk();
+        window._continueToApp();
       }
       catch(e) { window._justSignedIn = false; showErr('errSignIn', fbMsg(e)); setLoading('btnSignIn', false, 'Sign In'); }
     }

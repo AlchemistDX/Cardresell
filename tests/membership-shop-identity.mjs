@@ -1,6 +1,7 @@
 // Actual storefront JS in an isolated minimal DOM. Synthetic auth/fetch only;
 // this is not a browser, Firebase acceptance, Stripe, or managed-service test.
 import vm from 'node:vm';
+import { parse } from 'acorn';
 import fs from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { harness } from './_assert.mjs';
@@ -24,10 +25,11 @@ class Element {
   focus() {}
 }
 const user = owner => ({ uid: owner, getIdToken: async () => 'synthetic_token_' + owner });
-function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false } = {}) {
+function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false, href = 'https://synthetic.invalid/' } = {}) {
   const body = new Element('body'), requests = [], navigations = [];
   const window = { googleUser: initial, _waitForAuth: async () => {} };
-  const history = { state, replaceState(value) { this.state = value; } };
+  const location = { href, assign: url => navigations.push(url) };
+  const history = { state, replaceState(value, unused, url) { this.state = value; if (url) location.href = new URL(url, location.href).href; } };
   const catalogue = suppliedCatalogue || { plans: [], purchaseEnabled: true, packs: [
     { packId: 'id_25', kind: 'id', credits: 25, amountCents: 299 },
     { packId: 'id_100', kind: 'id', credits: 100, amountCents: 999 },
@@ -36,7 +38,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
     json: async () => ({ status: 'checkout_ready', url: 'https://checkout.stripe.com/c/pay/cs_synthetic' }) });
   const sandbox = { window, history, document: { body, activeElement: new Element('button'), createElement: tag => new Element(tag) },
     Intl, crypto: webcrypto, Uint8Array, URL,
-    location: { href: 'https://synthetic.invalid/', assign: url => navigations.push(url) },
+    location,
     fetch: async (url, options = {}) => {
       if (url === '/api/membership-account') return onAccount ? onAccount(options)
         : { ok: false, status: 503, json: async () => ({ error: 'not_enabled' }) };
@@ -49,7 +51,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
       return onCheckout ? await onCheckout(options, response) : response();
     } };
   vm.runInNewContext(source, sandbox);
-  return { window, history, requests, navigations,
+  return { window, history, location, requests, navigations,
     open: () => window.openMembershipShop(),
     buttons: () => walk(body).filter(e => e.tag === 'button' && /ID credits/.test(e.textContent || '')),
     controls: () => walk(body).filter(e => e.tag === 'button'),
@@ -318,5 +320,61 @@ await t.section('billing access policy rejection does not send verified users th
     && !h.links().some(x => /signin/.test(x.href || '')));
   t.check('403 keeps purchases disabled and makes no account mutation', h.buttons().every(x => x.disabled)
     && h.requests.length === 0 && accountCalls === 0);
+});
+await t.section('shop navigation flags are consumed once without losing checkout recovery', async () => {
+  const plain = setup(); await flush();
+  t.check('ordinary homepage opens no shop', !plain.elements().some(x => x.tag === 'dialog'));
+  for (const query of ['shop=1', 'subscriptions=1', 'shop=1&subscriptions=1',
+    'membership_return=1&session_id=cs_fixture', 'membership_cancel=1']) {
+    const state = { membershipPurchases: { A: { operationId: 'kept', sessionId: 'cs_fixture' } }, unrelated: 17 };
+    const h = setup({ state, href: 'https://synthetic.invalid/?' + query + '&utm_source=fixture#account' });
+    await flush();
+    t.check(query + ' opens exactly one requested modal', h.elements().filter(x => x.tag === 'dialog' && x.open).length === 1);
+    const cleaned = new URL(h.location.href);
+    t.check(query + ' removes opening flags', ['shop', 'subscriptions', 'membership_return', 'membership_cancel'].every(k => !cleaned.searchParams.has(k)));
+    t.check(query + ' preserves history and unrelated URL data', h.history.state === state
+      && cleaned.searchParams.get('utm_source') === 'fixture' && cleaned.hash === '#account');
+    if (query.includes('session_id')) t.check('checkout session retained for verification', cleaned.searchParams.get('session_id') === 'cs_fixture');
+    h.controls().find(x => x.textContent === 'Close').onclick();
+    const reloaded = setup({ state: h.history.state, href: h.location.href }); await flush();
+    t.check(query + ' refresh does not reopen shop or send purchase', !reloaded.elements().some(x => x.tag === 'dialog') && reloaded.requests.length === 0);
+  }
+});
+await t.section('persisted sign-in stays on account choice; explicit sign-in waits for persistence', async () => {
+  const html = fs.readFileSync(new URL('../signin.html', import.meta.url), 'utf8');
+  const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)]
+    .filter(x => !x[1].includes('src=')).map(x => ({ source: x[2], ast: parse(x[2], { ecmaVersion: 'latest', sourceType: 'module' }) }));
+  const module = scripts.find(x => x.source.includes('onAuthStateChanged(auth,'));
+  const callback = module.ast.body.find(n => n.type === 'ExpressionStatement'
+    && n.expression.type === 'CallExpression' && n.expression.callee.name === 'onAuthStateChanged').expression.arguments[1];
+  const continuation = module.ast.body.find(n => n.type === 'ExpressionStatement'
+    && n.expression.type === 'AssignmentExpression' && n.expression.left.property?.name === '_continueToApp').expression.right;
+  const resolver = scripts.find(x => x.source.includes('window._safeSignInDestination ='));
+  for (const name of ['googleSignIn', 'doSignIn']) {
+    let panels = 0, verifies = 0;
+    const navigations = [], held = later();
+    const location = { origin: 'https://www.cardresell.org', search: '?next=%2F%3Fshop%3D1', replace: url => navigations.push(url) };
+    const window = { location, _dbg() {}, _showAlreadySignedIn: () => { panels++; }, _showVerifyScreen: () => { verifies++; } };
+    const context = { window, location, URL, URLSearchParams, document: { getElementById: () => ({ value: 'fixture' }) },
+      clearErr() {}, setLoading() {}, showErr() {}, fbMsg: e => e.message, _flushAuthToDisk: () => held.promise };
+    vm.runInNewContext(resolver.source, context);
+    window._continueToApp = vm.runInNewContext('(' + module.source.slice(continuation.start, continuation.end) + ')', context);
+    const onAuth = vm.runInNewContext('(' + module.source.slice(callback.start, callback.end) + ')', context);
+    onAuth({ emailVerified: true });
+    t.check(name + ': persisted session with next displays account choice without redirect', panels === 1 && navigations.length === 0);
+    window._justSignedUp = true; onAuth({ emailVerified: false }); window._justSignedUp = false;
+    t.check(name + ': unfinished signup stays on verification', verifies === 1 && navigations.length === 0);
+    const signIn = async () => onAuth({ emailVerified: true });
+    window._fbGoogleSignIn = signIn; window._fbEmailSignIn = signIn;
+    const script = scripts.find(x => x.ast.body.some(n => n.type === 'FunctionDeclaration' && n.id.name === name));
+    const fn = script.ast.body.find(n => n.type === 'FunctionDeclaration' && n.id.name === name);
+    const invoke = vm.runInNewContext('(' + script.source.slice(fn.start, fn.end) + ')', context);
+    const pending = invoke(); await flush();
+    t.check(name + ': observer cannot redirect before persistence completes', navigations.length === 0);
+    held.resolve(); await pending;
+    t.check(name + ': successful sign-in returns once to intended destination', navigations.length === 1 && navigations[0] === '/?shop=1');
+    location.search = '?next=https://attacker.invalid/'; window._continueToApp();
+    t.check(name + ': continue still rejects unsafe destinations', navigations[1] === '/');
+  }
 });
 t.done();
