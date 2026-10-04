@@ -1,3 +1,7 @@
+# Latest live acceptance — October 4, 2026, 16:11 UTC
+
+Owner used the secure browser sign-in prompt and chose Google. Live UI shows signed-in Will. Subscriptions returns generic billing 401. Production log for deployment dpl_EHAizvoHF4WtGZbqtJf4Sn6KQtez at 16:11:20 reports `MEMBERSHIP_AUTH_REJECTED owner_not_allowed`. This occurs after cryptographic identity and email authority have passed. The signed-in UID is not the reserved billing owner and Production is using owner-only admission. Do not repeat email verification or sign-in as a speculative fix. Do not rewrite owner bindings, migrate balances, or remove the audience gate to make this account pass. Establish with the owner whether this is the original purchasing account; then resolve the intended public launch separately from preservation of the original account. Public five-plan/seven-pack views are live and correct. No new charge was attempted.
+
 # Live-only profit readiness — October 4, 2026
 
 Owner direction: zero current users; prioritize the minimum reliable paid product and advertising readiness. All deployed acceptance uses www.cardresell.org. Preview is not a prerequisite or an owner action. Work from the current Production code and build with Production bindings.
