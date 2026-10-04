@@ -453,6 +453,8 @@
 
     window._fbGoogleSignIn = async () => {
       const provider = new GoogleAuthProvider();
+      // Let users switch Google accounts even when Google has an active session.
+      provider.setCustomParameters({ prompt: 'select_account' });
       try { await signInWithPopup(auth, provider); }
       catch(e) { if (e.code !== 'auth/popup-closed-by-user') throw e; }
     };
