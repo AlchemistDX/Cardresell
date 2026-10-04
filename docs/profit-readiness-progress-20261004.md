@@ -1,3 +1,20 @@
+# Production release verified — October 4, 2026
+
+This section supersedes the historical blockers below.
+
+- Published commit: `ccbe04757004104cfe7661f0acffe4c254516486` on `codex/profit-readiness`. Remote tree exactly matches the locally verified tree `06b5b3d98dce07b5aba9b122e73f456840ef851a`.
+- GitHub access fixed: owner approved connector installation 167822516, scoped to AlchemistDX/Cardresell only. Actual blob writes succeeded.
+- Production deployment: `dpl_RsDGG3A8GajJdcsiiDTcx87qoEdm`, built with Production settings through Vercel dashboard after explicit owner approval. READY; build approximately 40 seconds.
+- Live `www.cardresell.org` returned the exact reviewed index, new core bundle and unchanged sign-in HTML.
+- Health and public catalogue returned 200. Five plans/seven packs retain approved prices and permanent-credit wording.
+- Read-only cutover check reports the new commit, purchasing enabled, billing not paused, datastore authorization accepted and legacy fence installed. No data mutation was performed by that check.
+- Signed-out live Shop shows separate ID/Scan and Grade sections. Close remains visible at the bottom of the scrolling dialog. Authenticated sign-in/payment and physical iPhone acceptance were not rerun.
+- New deployment 5xx log query through 13:10 UTC returned no matches. This is a short post-deploy window, not proof of long-term error absence.
+- Rollback target remains prior live `dpl_2t4ofvn9xokcfHNT3VA7oJtRo4i9` (source `98320d2`). Do not use the older default main branch as the live baseline.
+- Outstanding: calibrated recognition/search accuracy, photo capture assistance, real subscription lifecycle acceptance and revenue/cost measurement. These deployment checks do not establish scanner accuracy or readiness for paid advertising.
+
+## Historical checkpoint
+
 # Profit-readiness implementation checkpoint
 
 ## Publication access — GitHub blocker resolved, deployment pending
