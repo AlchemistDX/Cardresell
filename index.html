@@ -2154,7 +2154,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <input type="file" id="bulkGradeInput" accept="image/jpeg,image/png,image/webp,image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <input type="file" id="bulkGradeCameraInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <!-- Scan status modal -->
-  <div id="scanOverlay" role="dialog" aria-modal="true" aria-label="Card scanner" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:1.5rem 1.5rem 2rem;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div id="scanOverlay" role="dialog" aria-modal="true" aria-label="Card scanner" tabindex="-1" style="display:none;position:fixed;inset:0;background:#101010;color:#fff;z-index:200;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:max(1rem,env(safe-area-inset-top)) max(1rem,env(safe-area-inset-right)) max(2rem,env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left));overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch">
+    <button type="button" onclick="cancelScan()" aria-label="Close scanner" style="position:sticky;top:0;align-self:flex-end;z-index:3;flex-shrink:0;min-height:44px;padding:.55rem 1rem;border:1px solid #666;border-radius:8px;background:#202020;color:#fff;font-weight:700">Close</button>
     <!-- Preview image -->
     <div style="display:flex;gap:.75rem;align-items:flex-start;justify-content:center">
       <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,160px);text-align:center">
@@ -2173,7 +2174,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div id="scanGradeCTA">
       <div class="sgc-label">&#127942; Get It Graded</div>
       <div class="sgc-headline" id="scanGradeCTAHeadline">Worth grading? Submit now.</div>
-      <div class="sgc-sub">Official grades unlock 2–5× higher resale value.</div>
+      <div class="sgc-sub">Compare expected resale value with grading fees before submitting.</div>
       <!-- AI Grading Estimate CTA -->
       <button onclick="window._openGradeAfterScan=true;cancelScan()" style="width:100%;margin-bottom:.6rem;padding:.65rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:800;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">&#11088; Ai Grading Estimate &mdash; Know before you submit</button>
       <div class="sgc-btns" id="scanGradeCTABtns">
@@ -3996,7 +3997,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.9a7b3598.js"></script>
+<script defer src="/js/core.a6bac3ff.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
