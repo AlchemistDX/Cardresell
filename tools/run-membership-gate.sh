@@ -9,7 +9,7 @@ for suite in membership-environment membership-bootstrap membership-customer mem
   membership-account-routes membership-fulfillment membership-paid-enrollment \
   membership-consumption membership-ledger membership-payments membership-bindings \
   membership-stripe membership-checkout membership-checkout-stripe \
-  membership-purchase-routes membership-shop-identity membership-routes \
+  membership-purchase-routes membership-venue-access membership-shop-identity membership-routes \
   membership-scan-intent launch-membership-config test-registry test-scan \
   webhook-p0-offline id-confirmation-atomic entitlements-2026-09-04 sol-remediation-2026-09-04
 do

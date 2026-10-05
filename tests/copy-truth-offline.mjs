@@ -342,12 +342,12 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'blurred ranking rows go to checkout, not the wall');
 
   // The CTA number must be what the TARGET tier unlocks, not what is locked.
-  ok(/See \$\{_targetUnlockCount\} more venue/.test(idx),
-     'CTA counts what the target tier actually unlocks');
+  ok(/Compare current plans/.test(idx),
+     'venue CTA directs to current plan comparison instead of retired tier pricing');
   ok(!/See \$\{_lockedCount\} more venue/.test(idx),
      'CTA does not count all locked venues');
-  ok(/_beyondCount > 0 \? ` · \+\$\{_beyondCount\} more on Pro Max`/.test(idx),
-     'venues beyond the target tier are disclosed, not implied as included');
+  ok(/_beyondCount > 0 \? ' · More venues available; compare current plan details.'/.test(idx),
+     'venues beyond the target bundle are disclosed without retired plan names');
 
   // Hand-computed from the tier sets, independently of the page's own math:
   // Free sees 2, Pro sees 9, Pro Max sees 15. A Free user has 13 locked, of
@@ -469,8 +469,8 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'homepage feature blurb no longer promises COMC/Fanatics on Free');
   ok(/eBay, TCGplayer, Whatnot &amp; more/.test(idx),
      'homepage feature blurb names venues Free actually sees');
-  ok(/Unlock 13 more marketplaces &mdash; 7 with Pro, 6 more with Pro Max/.test(idx),
-     'the unlock strip splits the 13 into 7 Pro + 6 Pro Max');
+  ok(/Compare current monthly allowances and credit-pack discounts/.test(idx),
+     'home upsell refers to the current catalogue rather than retired tier bundles');
 
   // Issue 4 - Ultimate removed from every user-facing surface
   ok(!/<div class="plan" id="ultimate">/.test(pr2), 'no Ultimate plan card on /pricing');
@@ -489,7 +489,7 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   ok(!/emailing <a href="mailto:will@cardresell\.org">will@cardresell\.org<\/a>/.test(pr2) ||
      /billing problems, not the cancel button/.test(pr2),
      'FAQ no longer offers email as an equal cancel path');
-  ok(/open the profile menu.*Manage billing/.test(pr2.replace(/\s+/g,' ')),
+  ok(/Open Settings.*Manage billing/.test(pr2.replace(/\s+/g,' ')),
      'FAQ tells users where the Manage billing button is');
   ok(/Manage billing/.test(idx) && /openBillingPortal/.test(idx),
      'the profile popover button reads "Manage billing" and calls the portal');

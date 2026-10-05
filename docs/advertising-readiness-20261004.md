@@ -33,3 +33,11 @@ Same paid Starter invoice in_1UN1kGFW2YZoedIZk3pugoJH has invoice.payment_succee
 4. Finish mobile conversion flow, conversion/cost measurement, provider reliability and limited public admission before advertising scale.
 
 No additional owner purchase is needed. Do not claim end-of-period expiry, future renewal, plan switching, all-tier discounts or advertising readiness from this acceptance.
+
+## Follow-up — October 5, 2026
+
+Both events for the paid Starter invoice now report pending_webhooks=0. A fresh live reload retains 53 ID / 5 Grade; no duplicate allowance appeared. Dashboard sign-in is no longer needed for this retry acceptance.
+
+This release adds a server-owned marketplace comparison bundle separate from billing amounts and bulk grading: Free/Starter 2 (eBay + TCGplayer), Casual up to 9, Pro/Business up to 15. Legacy Pro retains 9; legacy Pro Max/Ultimate retain 15. Availability varies by card game and selected selling venues. The browser consumes the server's bundle without reinterpreting new plan names as old ones, and drops mismatched identity/plan snapshots. Current plan labels, Shop disclosures and generated public pricing agree. Listing/storage rollout and bulk-grade capability rollout are unchanged and remain separate checks.
+
+Validation: 32 new current/legacy venue checks; catalogue 52, Shop identity 164, normal membership routes 71, asset fingerprints 99, auth integrity 96, entitlement regression 78, copy truth 224. All 38 focused membership gate invocations passed across the final run and one targeted rerun: ID-confirmation initially could not write its historical output path, then completed 365/0 after restoring that scratch directory. Test registry passes 12/0, now also registering the two existing scan recovery suites. No further real purchase was made. Production acceptance follows publication.
