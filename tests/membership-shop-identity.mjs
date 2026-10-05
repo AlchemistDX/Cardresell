@@ -25,10 +25,10 @@ class Element {
   focus() {}
 }
 const user = owner => ({ uid: owner, getIdToken: async () => 'synthetic_token_' + owner });
-function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false, href = 'https://synthetic.invalid/' } = {}) {
+function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, loadCredits, creditElements = {}, rejectAuth = false, href = 'https://synthetic.invalid/' } = {}) {
   const body = new Element('body'), banner = new Element('div'), requests = [], navigations = [], events = [];
   body.append(banner);
-  const window = { googleUser: initial, _waitForAuth: async () => {}, trackEvent: (name, props) => events.push({ name, props }) };
+  const window = { loadSettingsScanCredits: loadCredits, googleUser: initial, _waitForAuth: async () => {}, trackEvent: (name, props) => events.push({ name, props }) };
   const location = { href, assign: url => navigations.push(url) };
   const history = { state, replaceState(value, unused, url) { this.state = value; if (url) location.href = new URL(url, location.href).href; } };
   const catalogue = suppliedCatalogue || { plans: [], purchaseEnabled: true, packs: [
@@ -37,7 +37,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
   ] };
   const response = () => ({ ok: true, status: 200,
     json: async () => ({ status: 'checkout_ready', url: 'https://checkout.stripe.com/c/pay/cs_synthetic' }) });
-  const sandbox = { window, history, document: { body, getElementById: id => id === 'membershipAccountStatus' ? banner : null, activeElement: new Element('button'), createElement: tag => new Element(tag) },
+  const sandbox = { window, history, document: { body, getElementById: id => id === 'membershipAccountStatus' ? banner : creditElements[id] || null, activeElement: new Element('button'), createElement: tag => new Element(tag) },
     Intl, crypto: webcrypto, Uint8Array, URL, AbortController, setTimeout, clearTimeout,
     location,
     fetch: async (url, options = {}) => {
@@ -434,9 +434,36 @@ await t.section('automatic verified account setup', async () => {
   }});
   t.check('existing paid account uses read-only check', (await paid.window.ensureMembershipAccount()).status === 'ready' && paidPosts === 0);
   let unverifiedCalls = 0;
-  const u = setup({ onAccount: async () => { unverifiedCalls++; return response(ready); } });
+  const u = setup({ onAccount: async () => { unverifiedCalls++; return response({ error: 'authentication_required', action: 'verify_email' }, 401); } });
   await u.window.ensureMembershipAccount();
-  t.check('unverified identity never starts billing setup', unverifiedCalls === 0);
+  t.check('unverified identity is checked by server without association', unverifiedCalls === 1);
+  t.check('verification requirement offers visible email and Google actions', u.controls().some(b => b.textContent === 'Verify email') && u.controls().some(b => b.textContent === 'Sign in with Google'));
+  let verifiedClicks = 0, googleClicks = 0;
+  u.window.openVerifyModal = () => { verifiedClicks++; };
+  u.window._fbGoogleSignIn = () => { googleClicks++; };
+  u.controls().find(b => b.textContent === 'Verify email').onclick();
+  u.controls().find(b => b.textContent === 'Sign in with Google').onclick();
+  t.check('verification controls invoke normal sign-in and verification', verifiedClicks === 1 && googleClicks === 1);
+  u.window.googleUser = user('B');
+  u.controls().find(b => b.textContent === 'Sign in with Google').onclick();
+  t.check('stale verification controls cannot sign in another session', googleClicks === 1);
+  let savedPosts = 0;
+  const saved = setup({ initial: { ...user('A'), emailVerified: false }, onAccount: async o => {
+    if (o.method === 'POST') { savedPosts++; return response({ status: 'associated' }); }
+    return response(savedPosts ? ready : { state: { status: 'not_associated' } });
+  }});
+  t.check('server-owned verification permits setup despite stale Firebase hint', (await saved.window.ensureMembershipAccount()).status === 'ready' && savedPosts === 1);
+  const counts = Object.fromEntries(['settingsScanCount', 'settingsScanSub', 'idScanCount', 'idScanSub'].map(id => [id, new Element('div')]));
+  const hints = setup({ creditElements: counts,
+    loadCredits: async () => { counts.settingsScanCount.textContent = counts.idScanCount.textContent = 'Unavailable'; },
+    onAccount: async () => response({ error: 'authentication_required', action: 'verify_email' }, 401) });
+  await hints.window.ensureMembershipAccount(); await hints.window.loadSettingsScanCredits();
+  t.check('unverified credit display points to verification instead of Shop', counts.settingsScanCount.textContent === 'Verify email' && /verification options/.test(counts.idScanSub.textContent));
+  const totals = setup({ creditElements: counts,
+    loadCredits: async () => { counts.settingsScanCount.textContent = '2'; counts.idScanCount.textContent = '15'; },
+    onAccount: async () => response(ready) });
+  await totals.window.ensureMembershipAccount(); await totals.window.loadSettingsScanCredits();
+  t.check('credit recovery hints never replace confirmed balances', counts.settingsScanCount.textContent === '2' && counts.idScanCount.textContent === '15');
   for (const status of [401, 403, 503]) {
     let calls = 0;
     const denied = setup({ initial: verified('A'), onAccount: async () => {

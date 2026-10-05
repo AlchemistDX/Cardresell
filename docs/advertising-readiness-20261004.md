@@ -80,3 +80,12 @@ Production pilot configuration was repaired after fixed-category diagnostics ide
 This follow-up starts normal server account association automatically after verified sign-in and after email verification is observed. It first reads account state, associates only missing/pending customers, and checks balances again before reporting readiness. Existing paid accounts take a read-only path. Concurrent triggers share a promise; identity changes invalidate work; interrupted requests expose an inline retry below the header. No Shop modal is opened by automatic setup. The existing server authentication, pilot eligibility, identity bindings and idempotent grant logic are unchanged. Public admission is still pilot-only.
 
 Validation before publication: storefront identity/recovery 195 checks, auth integrity 96, fingerprints 99, account routes 27, purchase routes 52, verification-send regression passed. The additional Redis-backed enrollment flow suite could not start because redis-server is absent in this execution environment; no server enrollment code changed. Automatic first-sign-in acceptance must still be confirmed on the live site with a fresh eligible account; existing-account refresh cannot prove that first-run mutation.
+
+
+## Verification-state recovery — October 5, 2026, 12:34 EDT
+
+The user's Safari screenshot for willsep23 shows the unverified banner and unavailable balances. It does not prove that Google sign-in completed; the earlier email/password session may have been restored. No membership-account request appeared in the scoped Production logs for the preceding 15 minutes. Automatic first-sign-in acceptance is still outstanding.
+
+Review found the new browser helper skipped its server check when the local Firebase emailVerified hint was false. The follow-up checks every authenticated identity with the existing server authenticator; no association is sent unless that check succeeds. This honors existing server-owned verification without trusting a provider name or changing authentication policy. A server verify_email response now exposes Verify email and Sign in with Google beside the header. Settings replaces the obsolete Open Shop instruction with the relevant verification/setup recovery, preserving all confirmed numeric balances. Server-verified completion through the older email flow resumes setup on the next credit refresh.
+
+Validation: storefront identity and recovery 201/0, auth integrity 96/0, fingerprints 99/0. Server authentication/enrollment, pilot admission, customer binding and grant logic are unchanged.
