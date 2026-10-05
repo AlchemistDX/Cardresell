@@ -278,7 +278,7 @@ check('_tsRenderInto helper defined',                            INDEX.includes(
 check('_tsGetToken helper defined',                              INDEX.includes("window._tsGetToken = function _tsGetToken"));
 check('Turnstile error callback handles challenge failures',     INDEX.includes("'error-callback': function(code)"));
 check('Turnstile failure shows browser recovery guidance',       INDEX.includes('Security check could not finish in this browser'));
-check('Claim waits for a valid Turnstile token',                 INDEX.includes("_tsRequireToken('verifyTurnstile')"));
+check('Claim waits for a valid Turnstile token',                 INDEX.includes("requireTurnstile('_verifyFirebaseLinkDone', 'verifyTurnstile')"));
 check('Turnstile div mounted in claim modal',                    INDEX.includes("id=\"verifyTurnstile\""));
 check('Claim POST sends turnstileToken',                         INDEX.includes("body: JSON.stringify({ turnstileToken })"));
 
