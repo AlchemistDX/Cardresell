@@ -51,7 +51,7 @@ try {
   // Exercise the real shipped OpenAI attempt function, with only its network
   // boundary replaced. Each paid fallback must retain its own usage record.
   const scan = readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
-  const source = scan.slice(scan.indexOf('    async function tryModel('), scan.indexOf("    let modelUsed = 'gpt-5'"));
+  const source = scan.slice(scan.indexOf('    async function tryModel('), scan.indexOf('    const primaryModel = gradeModelPrimary('));
   const run = new Function('observeProviderAttempt', 'callModel', 'isDeepGrade', 'isGradeMode', 'visionContent',
     source + '; return tryModel;');
   for (const outcome of ['success', 'empty', 'parse', 'http', 'network', 'bad_json']) {

@@ -1,5 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
+import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { observeProviderAttempt } from './_providerUsage.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
@@ -1637,7 +1638,7 @@ Respond ONLY with valid JSON, no explanation:
     // it errors (org tier not enabled, unknown-param rejection, etc.)
     // fall back to gpt-4o so identify never hard-fails on a model change.
     async function callModel(modelId) {
-      const isGpt5 = modelId.startsWith('gpt-5');
+      const isGpt5 = isReasoningModel(modelId);
       const body = {
         model: modelId,
         messages: [{ role: 'user', content: visionContent }],
@@ -1699,12 +1700,13 @@ Respond ONLY with valid JSON, no explanation:
       });
     }
 
-    let modelUsed = 'gpt-5';
-    let attempt = await tryModel('gpt-5');
+    const primaryModel = gradeModelPrimary(process.env.GRADE_MODEL_PRIMARY);
+    let modelUsed = primaryModel;
+    let attempt = await tryModel(primaryModel);
     if (!attempt.ok) {
-      console.warn('gpt-5 attempt failed, falling back to gpt-4o:', attempt.reason, attempt.status || '');
-      modelUsed = 'gpt-4o';
-      attempt = await tryModel('gpt-4o');
+      console.warn(primaryModel + ' attempt failed, falling back to ' + GRADE_FALLBACK_MODEL + ':', attempt.reason, attempt.status || '');
+      modelUsed = GRADE_FALLBACK_MODEL;
+      attempt = await tryModel(GRADE_FALLBACK_MODEL);
     }
 
     if (!attempt.ok) {

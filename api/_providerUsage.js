@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 const modes = new Set(['identify', 'grade', 'deep_grade']);
 const operations = new Set(['tcg_id', 'sport_id', 'card_grade', 'chat_completion']);
-const models = new Set(['gpt-5', 'gpt-4o']);
+const models = new Set(['gpt-5', 'gpt-4o', 'gpt-6.1-sol', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-luna']);
 const reasons = new Set(['http', 'empty', 'parse', 'parse_error', 'network', 'network_error',
   'timeout', 'no_records', 'no_card_detected', 'no_match', 'low_confidence', 'empty_grades',
   'missing_input', 'missing_token', 'missing_image']);
