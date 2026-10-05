@@ -34,6 +34,10 @@ const ALLOWED = new Set([
   // Upgrade funnel
   'pricing_modal_open', 'checkout_attempt', 'checkout_success', 'checkout_cancel',
   'cross_tcg_auto_switch', 'cross_tcg_auto_switch_declined',
+  // Current membership storefront. These are best-effort funnel observations,
+  // not authoritative transaction/revenue totals. Return requires server verification.
+  'membership_shop_open', 'membership_checkout_attempt', 'membership_checkout_redirect',
+  'membership_checkout_pending', 'membership_checkout_failed', 'membership_return_verified',
   // Auth
   'signup_bonus', 'sign_in', 'sign_out',
   // Collection & flips

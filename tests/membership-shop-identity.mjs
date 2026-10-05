@@ -26,8 +26,8 @@ class Element {
 }
 const user = owner => ({ uid: owner, getIdToken: async () => 'synthetic_token_' + owner });
 function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false, href = 'https://synthetic.invalid/' } = {}) {
-  const body = new Element('body'), requests = [], navigations = [];
-  const window = { googleUser: initial, _waitForAuth: async () => {} };
+  const body = new Element('body'), requests = [], navigations = [], events = [];
+  const window = { googleUser: initial, _waitForAuth: async () => {}, trackEvent: (name, props) => events.push({ name, props }) };
   const location = { href, assign: url => navigations.push(url) };
   const history = { state, replaceState(value, unused, url) { this.state = value; if (url) location.href = new URL(url, location.href).href; } };
   const catalogue = suppliedCatalogue || { plans: [], purchaseEnabled: true, packs: [
@@ -51,7 +51,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
       return onCheckout ? await onCheckout(options, response) : response();
     } };
   vm.runInNewContext(source, sandbox);
-  return { window, history, location, requests, navigations,
+  return { window, history, location, requests, navigations, events,
     open: () => window.openMembershipShop(),
     buttons: () => walk(body).filter(e => e.tag === 'button' && /ID credits/.test(e.textContent || '')),
     controls: () => walk(body).filter(e => e.tag === 'button'),
@@ -375,6 +375,36 @@ await t.section('persisted sign-in stays on account choice; explicit sign-in wai
     t.check(name + ': successful sign-in returns once to intended destination', navigations.length === 1 && navigations[0] === '/?shop=1');
     location.search = '?next=https://attacker.invalid/'; window._continueToApp();
     t.check(name + ': continue still rejects unsafe destinations', navigations[1] === '/');
+  }
+});
+await t.section('membership funnel signals cannot invent payment success or break checkout', async () => {
+  const h = setup(); await h.open(); await h.buttons()[0].onclick();
+  t.check('successful shop render and checkout redirect produce distinct signals',
+    h.events.map(x => x.name).join(',') === 'membership_shop_open,membership_checkout_attempt,membership_checkout_redirect');
+  t.check('checkout redirect alone does not report a verified return', !h.events.some(x => x.name === 'membership_return_verified'));
+  t.check('checkout telemetry only includes public selection and kind',
+    JSON.stringify(h.events[1].props) === JSON.stringify({ plan: 'id_25', trigger: 'pack' }));
+  const pending = setup({ onCheckout: async () => ({ ok: true, status: 202, json: async () => ({ status: 'recovery_pending' }) }) });
+  await pending.open(); await pending.buttons()[0].onclick();
+  t.check('pending checkout is not a redirect or conversion', pending.navigations.length === 0
+    && pending.events.at(-1).name === 'membership_checkout_pending');
+  const denied = setup({ onCheckout: async () => ({ ok: false, status: 503, json: async () => ({ error: 'checkout_unavailable' }) }) });
+  await denied.open(); await denied.buttons()[0].onclick();
+  t.check('failed checkout is measured without leaking server errors', denied.events.at(-1).name === 'membership_checkout_failed'
+    && !JSON.stringify(denied.events).includes('checkout_unavailable'));
+  const broken = setup(); broken.window.trackEvent = () => { throw new Error('analytics unavailable'); };
+  await broken.open(); await broken.buttons()[0].onclick();
+  t.check('analytics failure cannot stop secure checkout', broken.navigations.length === 1);
+  const returnAccount = async () => ({ ok: true, status: 200, json: async () => ({ state: { status: 'not_associated' } }) });
+  for (const status of ['pending', 'expired', 'fulfilled']) {
+    const r = setup({ href: 'https://synthetic.invalid/?membership_return=1&session_id=cs_synthetic',
+      onAccount: returnAccount, onCheckout: async () => ({ ok: true, status: 200, json: async () => ({ status }) }) });
+    await flush(); await flush();
+    t.check(status + ': URL never declares a paid conversion', !r.events.some(x => x.name === 'membership_return_verified'));
+    const verify = r.controls().find(b => b.textContent === 'Verify returned checkout');
+    await verify.onclick(); await verify.onclick();
+    t.check(status + ': only fulfilled server result emits one return observation',
+      r.events.filter(x => x.name === 'membership_return_verified').length === (status === 'fulfilled' ? 1 : 0));
   }
 });
 t.done();
