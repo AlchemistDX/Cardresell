@@ -1732,6 +1732,22 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         return (m && m.getAttribute('content') || '').trim();
       }
       window._tsSiteKey = _tsSiteKey;
+      window._tsStates = window._tsStates || {};
+      function _tsErrorElement(elId) {
+        return document.getElementById(elId === 'verifyTurnstile' ? 'verifyLinkErr' : 'authVerifyError');
+      }
+      function _tsShowError(elId, message) {
+        const err = _tsErrorElement(elId);
+        if (!err) return;
+        err.textContent = message;
+        err.style.display = '';
+      }
+      function _tsClearError(elId) {
+        const err = _tsErrorElement(elId);
+        if (!err) return;
+        err.textContent = '';
+        err.style.display = 'none';
+      }
       window._tsRenderInto = function _tsRenderInto(elId) {
         const key = _tsSiteKey();
         if (!key) return; // Not configured yet — no widget rendered.
@@ -1742,8 +1758,30 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         const attempt = () => {
           if (window.turnstile && typeof window.turnstile.render === 'function') {
             try {
-              const id = window.turnstile.render(el, { sitekey: key, size: 'flexible' });
+              const id = window.turnstile.render(el, {
+                sitekey: key,
+                size: 'flexible',
+                callback: function(token) {
+                  window._tsStates[elId] = token ? 'ready' : 'waiting';
+                  _tsClearError(elId);
+                },
+                'expired-callback': function() {
+                  window._tsStates[elId] = 'expired';
+                  _tsShowError(elId, 'Security check expired. Tap claim again to retry.');
+                },
+                'timeout-callback': function() {
+                  window._tsStates[elId] = 'timeout';
+                  _tsShowError(elId, 'Security check timed out. Tap claim again to retry.');
+                },
+                'error-callback': function(code) {
+                  window._tsStates[elId] = 'error';
+                  console.warn('[turnstile] challenge failed', String(code || 'unknown'));
+                  _tsShowError(elId, 'Security check could not finish in this browser. Tap claim to retry, or use Safari/Chrome without a VPN or blocking extension.');
+                  return true;
+                }
+              });
               window._tsWidgets[elId] = id;
+              window._tsStates[elId] = 'waiting';
             } catch(e) { /* already rendered or bad key — ignore */ }
             return;
           }
@@ -1760,11 +1798,21 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         } catch(e) {}
         return '';
       };
+      window._tsRequireToken = function _tsRequireToken(elId) {
+        if (!_tsSiteKey()) return true;
+        if (window._tsGetToken(elId)) return true;
+        _tsShowError(elId, window._tsStates[elId] === 'error'
+          ? 'Security check could not finish in this browser. Tap claim to retry, or use Safari/Chrome without a VPN or blocking extension.'
+          : 'Please wait for the security check to finish, then tap claim again.');
+        try { window._tsReset(elId); } catch(e) {}
+        return false;
+      };
       window._tsReset = function _tsReset(elId) {
         try {
           const id = window._tsWidgets[elId];
           if (id && window.turnstile && typeof window.turnstile.reset === 'function') {
             window.turnstile.reset(id);
+            window._tsStates[elId] = 'waiting';
           }
         } catch(e) {}
       };
@@ -3997,7 +4045,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.6c9a6939.js"></script>
+<script defer src="/js/core.29b79ac1.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4049,7 +4097,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 }
 </style>
 <script defer src="/js/membership-shop.e910cd18.js"></script>
-<script defer src="/js/ui.cc8ad52e.js"></script>
+<script defer src="/js/ui.03eaf7a4.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.c34785b6.js"></script>
 
