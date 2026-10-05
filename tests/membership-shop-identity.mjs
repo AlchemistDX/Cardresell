@@ -26,7 +26,8 @@ class Element {
 }
 const user = owner => ({ uid: owner, getIdToken: async () => 'synthetic_token_' + owner });
 function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAccount, suppliedCatalogue, rejectAuth = false, href = 'https://synthetic.invalid/' } = {}) {
-  const body = new Element('body'), requests = [], navigations = [], events = [];
+  const body = new Element('body'), banner = new Element('div'), requests = [], navigations = [], events = [];
+  body.append(banner);
   const window = { googleUser: initial, _waitForAuth: async () => {}, trackEvent: (name, props) => events.push({ name, props }) };
   const location = { href, assign: url => navigations.push(url) };
   const history = { state, replaceState(value, unused, url) { this.state = value; if (url) location.href = new URL(url, location.href).href; } };
@@ -36,8 +37,8 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
   ] };
   const response = () => ({ ok: true, status: 200,
     json: async () => ({ status: 'checkout_ready', url: 'https://checkout.stripe.com/c/pay/cs_synthetic' }) });
-  const sandbox = { window, history, document: { body, activeElement: new Element('button'), createElement: tag => new Element(tag) },
-    Intl, crypto: webcrypto, Uint8Array, URL,
+  const sandbox = { window, history, document: { body, getElementById: id => id === 'membershipAccountStatus' ? banner : null, activeElement: new Element('button'), createElement: tag => new Element(tag) },
+    Intl, crypto: webcrypto, Uint8Array, URL, AbortController, setTimeout, clearTimeout,
     location,
     fetch: async (url, options = {}) => {
       if (url === '/api/membership-account') return onAccount ? onAccount(options)
@@ -51,7 +52,7 @@ function setup({ initial = user('A'), state = {}, onCheckout, onCatalogue, onAcc
       return onCheckout ? await onCheckout(options, response) : response();
     } };
   vm.runInNewContext(source, sandbox);
-  return { window, history, location, requests, navigations, events,
+  return { window, history, location, requests, banner, navigations, events,
     open: () => window.openMembershipShop(),
     buttons: () => walk(body).filter(e => e.tag === 'button' && /ID credits/.test(e.textContent || '')),
     controls: () => walk(body).filter(e => e.tag === 'button'),
@@ -407,4 +408,78 @@ await t.section('membership funnel signals cannot invent payment success or brea
       r.events.filter(x => x.name === 'membership_return_verified').length === (status === 'fulfilled' ? 1 : 0));
   }
 });
+await t.section('automatic verified account setup', async () => {
+  const verified = owner => ({ ...user(owner), emailVerified: true });
+  const response = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
+  const ready = { state: { status: 'associated' }, creditsAvailable: true };
+  const held = later(); let reads = 0, posts = 0, refreshes = 0;
+  const h = setup({ initial: verified('A'), onAccount: async options => {
+    if (options.method === 'POST') { posts++; await held.promise; return response({ status: 'associated' }); }
+    return response(++reads === 1 ? { state: { status: 'not_associated' }, creditsAvailable: false } : ready);
+  }});
+  h.window.checkProStatus = () => { refreshes++; };
+  const first = h.window.ensureMembershipAccount();
+  const second = h.window.ensureMembershipAccount();
+  await flush();
+  t.check('duplicate auth triggers share one setup and association', first === second && posts === 1);
+  t.check('setup progress is visible without opening Shop', /Getting your account/.test(h.banner.textContent) && !h.elements().some(e => e.tag === 'dialog'));
+  held.resolve(); const result = await first;
+  t.check('read-after-write is required before ready', result.status === 'ready' && reads === 2 && refreshes === 1 && h.banner.hidden);
+  await h.window.ensureMembershipAccount();
+  t.check('ready identity does not repeatedly enroll or refresh', posts === 1 && reads === 2);
+  let paidPosts = 0;
+  const paid = setup({ initial: verified('P'), onAccount: async o => {
+    if (o.method === 'POST') paidPosts++;
+    return response({ ...ready, state: { status: 'active', subscriptionId: 'existing_paid' } });
+  }});
+  t.check('existing paid account uses read-only check', (await paid.window.ensureMembershipAccount()).status === 'ready' && paidPosts === 0);
+  let unverifiedCalls = 0;
+  const u = setup({ onAccount: async () => { unverifiedCalls++; return response(ready); } });
+  await u.window.ensureMembershipAccount();
+  t.check('unverified identity never starts billing setup', unverifiedCalls === 0);
+  for (const status of [401, 403, 503]) {
+    let calls = 0;
+    const denied = setup({ initial: verified('A'), onAccount: async () => {
+      calls++; return response({ error: status === 403 ? 'membership_access_restricted' : 'authentication_required' }, status);
+    }});
+    const failed = await denied.window.ensureMembershipAccount();
+    t.check(status + ': failed authorization/read cannot trigger association', calls === 1 && failed.status === 'pending');
+    t.check(status + ': visible explanation, restriction has no pointless retry', !denied.banner.hidden && denied.controls().some(b => b.textContent === 'Retry account setup') === (status !== 403));
+  }
+  let transientReads = 0, transientPosts = 0;
+  const retry = setup({ initial: verified('A'), onAccount: async o => {
+    if (o.method === 'POST') { transientPosts++; return response({ status: 'associated' }); }
+    return ++transientReads === 1 ? response({}, 503) : response(ready);
+  }});
+  await retry.window.ensureMembershipAccount();
+  await retry.controls().find(b => b.textContent === 'Retry account setup').onclick();
+  await flush();
+  t.check('visible retry recovers without creating an existing customer', transientReads === 2 && transientPosts === 0 && retry.banner.hidden);
+  const switching = later(); let switchedPosts = 0;
+  const switched = setup({ initial: verified('A'), onAccount: async o => {
+    if (o.method === 'POST') switchedPosts++;
+    await switching.promise; return response({ state: { status: 'not_associated' } });
+  }});
+  const pending = switched.window.ensureMembershipAccount(); await flush();
+  switched.window.googleUser = verified('B'); switched.window.resetMembershipAccountSetup();
+  switching.resolve(); await pending;
+  t.check('account switch cannot associate from stale read or restore stale banner', switchedPosts === 0 && switched.banner.hidden);
+  let associated = false, lostPosts = 0;
+  const lost = setup({ initial: verified('A'), onAccount: async o => {
+    if (o.method === 'POST') { lostPosts++; associated = true; throw new Error('connection lost after commit'); }
+    return response(associated ? ready : { state: { status: 'not_associated' } });
+  }});
+  await lost.window.ensureMembershipAccount();
+  t.check('lost association response recovers by reading committed state', (await lost.window.ensureMembershipAccount()).status === 'ready' && lostPosts === 1);
+  const missingCredits = setup({ initial: verified('A'), onAccount: async () => response({ ...ready, creditsAvailable: false }) });
+  t.check('associated customer without verified balances remains retryable', (await missingCredits.window.ensureMembershipAccount()).status === 'pending' && !missingCredits.banner.hidden);
+  const partial = setup({ initial: verified('A'), onAccount: async o => response(o.method === 'POST'
+    ? { status: 'customer_pending' } : { state: { status: 'customer_pending' } }) });
+  t.check('202/pending customer is never reported ready', (await partial.window.ensureMembershipAccount()).status === 'pending' && !partial.banner.hidden);
+});
+const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const authPath = html.match(/src="\/js\/(auth\.[a-f0-9]{8}\.js)"/)[1];
+const authSource = fs.readFileSync(new URL('../js/' + authPath, import.meta.url), 'utf8');
+t.check('shipped sign-in and verification completion await automatic setup', (authSource.match(/await window\.ensureMembershipAccount\?\.\(\)/g) || []).length === 2);
+t.check('shipped sign-out clears setup and banner', /window\.googleUser = null;\s+window\.resetMembershipAccountSetup\?\.\(\)/.test(authSource));
 t.done();

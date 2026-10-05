@@ -71,3 +71,12 @@ The recovery follow-up keeps Turnstile and the server-side fail-closed check int
 ## Email delivery correction — October 5, 2026
 
 The user reports no verification email received at the fresh test address. Code review found `_fbSendVerification` resolved `{ok:false}` on provider errors while callers treated any resolution as success. The auth helper now rejects send failures, exposes a safe error on signup, and only retries without the return URL for continue-URL errors. The signup view no longer claims an email was sent unconditionally. Resend remains configured in code with its test sender; broad recipient delivery is not accepted. Firebase acceptance does not establish inbox delivery. Live fresh-account verification and one-time credits remain blocked.
+
+
+## Fresh account and automatic setup — October 5, 2026
+
+Production pilot configuration was repaired after fixed-category diagnostics identified invalid serialized runtime configuration. The verified Google account willsep205@gmail.com then completed manual account association on Production. User screenshots show 15 ID / 2 Grade, and the user confirms this balance persists after refresh. These totals match the 5/1 monthly allowance plus the one-time 10/1 welcome allocation. This supersedes the earlier fresh-account blocker for Google sign-in; email/password inbox delivery remains unaccepted.
+
+This follow-up starts normal server account association automatically after verified sign-in and after email verification is observed. It first reads account state, associates only missing/pending customers, and checks balances again before reporting readiness. Existing paid accounts take a read-only path. Concurrent triggers share a promise; identity changes invalidate work; interrupted requests expose an inline retry below the header. No Shop modal is opened by automatic setup. The existing server authentication, pilot eligibility, identity bindings and idempotent grant logic are unchanged. Public admission is still pilot-only.
+
+Validation before publication: storefront identity/recovery 195 checks, auth integrity 96, fingerprints 99, account routes 27, purchase routes 52, verification-send regression passed. The additional Redis-backed enrollment flow suite could not start because redis-server is absent in this execution environment; no server enrollment code changed. Automatic first-sign-in acceptance must still be confirmed on the live site with a fresh eligible account; existing-account refresh cannot prove that first-run mutation.

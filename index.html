@@ -1977,6 +1977,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </div>
 </header>
 
+<div id="membershipAccountStatus" class="membership-account-status" role="status" aria-live="polite" hidden></div>
+
 <!-- SETTINGS PANEL -->
 <div class="settings-panel" id="settingsPanel">
   <!-- AI SCANNER — unified section -->
@@ -4095,11 +4097,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   .membership-plan-badge:empty { display:none; }
   .hdr #getProBtn { font-size:.7rem; padding-inline:.5rem; }
 }
+
+.membership-account-status:not([hidden]) { position:relative; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0; padding:14px 16px; border:1px solid var(--gold,#d4af37); border-radius:12px; background:var(--surface,#171717); color:var(--text,#fafafa); font-size:.875rem; line-height:1.5; }
+.membership-account-status button { min-height:44px; padding:10px 16px; border:1px solid var(--gold,#d4af37); border-radius:8px; background:var(--surface-2,#252525); color:inherit; font:inherit; cursor:pointer; }
 </style>
-<script defer src="/js/membership-shop.e910cd18.js"></script>
+<script defer src="/js/membership-shop.3f1ee568.js"></script>
 <script defer src="/js/ui.cc8ad52e.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
-<script type="module" src="/js/auth.9bb5ed98.js"></script>
+<script type="module" src="/js/auth.af8211aa.js"></script>
 <script>
   // Keep both legacy and Firebase-signup claim buttons client-side fail-closed.
   // Their implementations live in deferred scripts, so wrap them once those
