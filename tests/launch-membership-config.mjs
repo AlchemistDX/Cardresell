@@ -15,7 +15,7 @@ const expected = {
   starter: [499, 25, 5, 0, 25, 100, 500000000],
   casual: [999, 50, 15, 10, 100, 300, 2000000000],
   pro: [1999, 250, 40, 15, 500, 1500, 10000000000],
-  business: [4999, 1000, 100, 25, 2000, 6000, 50000000000],
+  business: [4999, 750, 100, 25, 2000, 6000, 50000000000],
 };
 equal(Object.keys(LAUNCH_PLANS), Object.keys(expected));
 for (const [name, row] of Object.entries(expected)) {

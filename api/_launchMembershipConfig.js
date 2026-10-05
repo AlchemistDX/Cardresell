@@ -16,7 +16,7 @@ export const LAUNCH_PLANS = Object.freeze({
   starter: plan(499, 25, 5, 0, 25, 100, 500_000_000),
   casual: plan(999, 50, 15, 10, 100, 300, 2_000_000_000),
   pro: plan(1999, 250, 40, 15, 500, 1500, 10_000_000_000, true),
-  business: plan(4999, 1000, 100, 25, 2000, 6000, 50_000_000_000, true),
+  business: plan(4999, 750, 100, 25, 2000, 6000, 50_000_000_000, true),
 });
 
 const pack = (kind, credits, basePriceCents) =>

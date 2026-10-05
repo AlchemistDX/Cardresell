@@ -297,7 +297,7 @@ await t.section('paid renewal concurrency with carryforward consumption and resp
 await t.section('every paid plan allowance and authority corruption', async () => {
   const now = Number((await redis(['TIME']))[0]);
   for (const [plan, cents, id, grade] of [['starter', 499, 25, 5], ['casual', 999, 50, 15],
-    ['pro', 1999, 250, 40], ['business', 4999, 1000, 100]]) {
+    ['pro', 1999, 250, 40], ['business', 4999, 750, 100]]) {
     await reset('paid');
     await grantMembership(redis, 'period', { owner, invoiceId: `in_${plan}`, subscriptionId: 'sub_localPeriod',
       plan, periodStart: now - 100, periodEnd: now + 100, currency: 'usd', amountCents: cents, paid: true });

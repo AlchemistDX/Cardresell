@@ -11,7 +11,7 @@ const invoke = async (handler, method, body, headers = {}) => {
 for (const [plan, discount] of [['free',0],['starter',0],['casual',10],['pro',15],['business',25]]) {
   const c = publicMembershipCatalogue(plan);
   check(c.plans.map(p => p.monthlyPriceCents), [0,499,999,1999,4999]);
-  check(c.plans.map(p => [p.idCredits,p.gradeCredits]), [[5,1],[25,5],[50,15],[250,40],[1000,100]]);
+  check(c.plans.map(p => [p.idCredits,p.gradeCredits]), [[5,1],[25,5],[50,15],[250,40],[750,100]]);
   check(c.creditsExpire, false);
   check(c.packs.length, 7);
   check(c.packs.every(p => p.discountPercent === discount

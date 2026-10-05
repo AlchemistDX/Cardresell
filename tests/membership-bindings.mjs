@@ -472,7 +472,7 @@ await t.section('Scope and frozen dependencies', async () => {
   const expected = {
     '../api/_membershipLedger.js': 'e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb',
     '../api/_membershipPayments.js': 'a3d820ec5b1738aec378a65163df86c5aadae10a0c853080446631d977d43848',
-    '../api/_launchMembershipConfig.js': 'a5b4cd0ff0c59849b2d7192598f6d0f824f7e1ad0d81b0906df7a34efe80893b',
+    '../api/_launchMembershipConfig.js': '65f941e6c3ca537fda1bee1c1bcb81079fae34815341df8105c0783ea77a5272',
     '../api/_idBilling.js': '795235399c1ccef5175c172a3c8166622980f12afee37e714bb7e15a22fa77ad',
   };
   for (const [file, digest] of Object.entries(expected)) t.check(`Frozen ${file}`, sha(readFileSync(new URL(file, import.meta.url))) === digest);

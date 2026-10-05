@@ -16,7 +16,7 @@ Some requested paths remain incomplete, not merely untested: executable legacy-o
 | Starter | $4.99 | 25 | 5 | None |
 | Casual | $9.99 | 50 | 15 | 10% |
 | Pro | $19.99 | 250 | 40 | 15% |
-| Business | $49.99 | 1,000 | 100 | 25% |
+| Business | $49.99 | 750 | 100 | 25% |
 
 Free verification separately awards a one-time 10 ID + 1 Grade welcome bonus. Included allocations remain spendable after their issuance period; oldest included allocations are consumed first, then welcome, then purchased credits. Refunds restore the exact source allocations. Cancellation or failed renewal does not expire existing credits.
 

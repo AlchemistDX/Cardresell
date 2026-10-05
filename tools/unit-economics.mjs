@@ -67,7 +67,7 @@ export function model() {
       net_per_credit: r4(net / n), variable_cost_per_credit_low: r4(unitLow), variable_cost_per_credit_high: r4(unitHigh),
       margin_pct_at_high_cost: Math.round((1 - unitHigh * n / net) * 100) });
   }
-  const plans = [['starter', 499, 25, 5], ['casual', 999, 50, 15], ['pro', 1999, 250, 40], ['business', 4999, 1000, 100]];
+  const plans = [['starter', 499, 25, 5], ['casual', 999, 50, 15], ['pro', 1999, 250, 40], ['business', 4999, 750, 100]];
   const planRows = plans.map(([plan, cents, id, grade]) => {
     const net = netSub(cents);
     const full = id * cost.high.id_scan + grade * Math.max(cost.high.quick_grade, cost.high.deep_grade / 2);
