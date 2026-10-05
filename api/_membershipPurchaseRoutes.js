@@ -2,6 +2,7 @@
 import { LAUNCH_PLANS, LAUNCH_PACKS, LAUNCH_WELCOME_CREDITS, quoteLaunchPack } from './_launchMembershipConfig.js';
 
 import { membershipVenueAccess } from './_membershipVenuePolicy.js';
+import { reportMembershipFailure } from './_membershipDiagnostics.js';
 
 export function publicMembershipCatalogue(plan = 'free') {
   if (!Object.hasOwn(LAUNCH_PLANS, plan)) throw new Error('membership_context_unavailable');
@@ -39,6 +40,7 @@ export function createMembershipPurchaseRoutes({ authenticate, resolveContext, c
         return res.status(200).json({ ...publicMembershipCatalogue(context.plan),
           purchaseEnabled, newSubscriptionAllowed: purchaseEnabled && context.newSubscriptionAllowed === true });
       } catch (e) {
+        reportMembershipFailure('catalogue_context', e);
         const denied = ['authentication_required', 'membership_access_restricted'].includes(e.code);
         return res.status(e.code === 'authentication_required' ? 401 : e.code === 'membership_access_restricted' ? 403 : 503).json({
           error: denied ? e.code : 'membership_context_unavailable',

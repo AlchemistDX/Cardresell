@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { readMembershipWebhookBody } from './_membershipStripe.js';
+import { reportMembershipFailure } from './_membershipDiagnostics.js';
 const fresh = () => randomBytes(32).toString('hex');
 const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v)
   && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
@@ -93,7 +94,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
         const confirmed = final.command?.operationId === body.operationId && final.command.phase === 'confirmed';
         return res.status(confirmed ? 200 : 202).json({ status: confirmed ? 'confirmed' : 'pending',
           state: publicState(final) });
-      } catch (e) { return error(res, e); }
+      } catch (e) { reportMembershipFailure('account_operation', e); return error(res, e); }
     },
     async checkoutReturn(req, res) {
       res.setHeader('Cache-Control', 'private, no-store');

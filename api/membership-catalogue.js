@@ -1,5 +1,6 @@
 import { publicMembershipCatalogue } from './_membershipPurchaseRoutes.js';
 import { membershipPurchaseRuntime } from './_membershipPurchaseRuntime.js';
+import { reportMembershipFailure } from './_membershipDiagnostics.js';
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
@@ -7,5 +8,5 @@ export default async function handler(req, res) {
     ...publicMembershipCatalogue(), purchaseEnabled: false,
   });
   try { return await (await membershipPurchaseRuntime()).catalogue(req, res); }
-  catch { return res.status(503).json({ error: 'membership_purchase_not_enabled' }); }
+  catch (e) { reportMembershipFailure('catalogue_runtime', e); return res.status(503).json({ error: 'membership_purchase_not_enabled' }); }
 }
