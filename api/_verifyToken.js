@@ -2,6 +2,7 @@
 // Shared Firebase ID token verifier for all API routes.
 // Firebase tokens are JWTs signed by Google — we verify using Google's public keys.
 // This is the lightweight approach that works in Vercel Edge/Serverless without the Admin SDK.
+import { readGoogleProviderVerification } from './_googleProviderVerification.js';
 
 const FIREBASE_PROJECT_ID = 'cardresell-e0329';
 const GOOGLE_OAUTH_CLIENT_ID = '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com';
@@ -78,8 +79,8 @@ async function verifyFirebaseToken(idToken) {
   // Apple sign-in requires 2FA + phone/payment on file at Apple's login screen, and
   // Apple's private-relay email means users often can't easily check that inbox.
   // We trust Apple's OAuth handshake as sufficient identity proof and treat those
-  // users as email-verified. Google is NOT auto-trusted here (fake Gmail signups are
-  // easy) — Google users still verify via the emailed link.
+  // users as email-verified. Google recovery below requires a current Google
+  // session and a server-confirmed Gmail provider identity for this exact UID.
   const identities = payload.firebase?.identities || {};
   const appleVerified = provider === 'apple.com' || !!identities['apple.com'];
 
@@ -95,11 +96,18 @@ async function verifyFirebaseToken(idToken) {
     claimEmail = idEmails.find(e => typeof e === 'string' && e.includes('@')) || '';
   }
 
+  let googleVerification = null;
+  if (provider === 'google.com' && payload.email_verified !== true) {
+    try { googleVerification = await readGoogleProviderVerification(idToken, payload); }
+    catch { console.warn('GOOGLE_PROVIDER_VERIFICATION_UNAVAILABLE'); }
+  }
+  if (googleVerification) claimEmail = googleVerification.email;
+
   return {
     uid:   payload.sub,
     email: claimEmail,
     name:  payload.name  || '',
-    emailVerified: payload.email_verified === true || appleVerified,
+    emailVerified: payload.email_verified === true || appleVerified || googleVerification?.emailVerified === true,
     provider,
   };
 }
