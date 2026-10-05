@@ -23,7 +23,7 @@ const ADMIN_KEY = process.env.ANALYTICS_ADMIN_KEY || '';
 // This prevents malicious floods of arbitrary event names.
 const ALLOWED = new Set([
   // Funnel — top of funnel
-  'page_view', 'search_results', 'search_zero_results',
+  'telemetry_check', 'page_view', 'search_results', 'search_zero_results',
   'example_card_tap', 'card_selected',
   // Scan & grade
   'scan_started', 'scan_completed', 'id_scan_completed', 'scan_miss', 'scan_refund',
@@ -45,7 +45,10 @@ const ALLOWED = new Set([
 ]);
 
 // Only allowlisted prop keys/values get bucketed to prevent unbounded key growth.
-const ALLOWED_PROP_KEYS = new Set(['plan', 'tier', 'trigger', 'game', 'source', 'psa']);
+const ALLOWED_PROP_KEYS = new Set(['plan', 'tier', 'trigger', 'game', 'source', 'psa', 'campaign']);
+
+const CAMPAIGNS = ['direct', 'shop_qr', 'youtube', 'discord', 'google_ads', 'meta_ads', 'reddit', 'organic_search', 'referral', 'other_campaign', 'qa'];
+const FUNNEL = ['page_view', 'membership_shop_open', 'membership_checkout_attempt', 'membership_checkout_redirect', 'membership_return_verified'];
 
 async function kv(cmd, ...args) {
   const path = [cmd, ...args].map(a => encodeURIComponent(String(a))).join('/');
@@ -53,6 +56,7 @@ async function kv(cmd, ...args) {
     headers: { Authorization: `Bearer ${KV_TOKEN}` }
   });
   const j = await res.json().catch(() => ({}));
+  if (!res.ok || j.error || !Object.hasOwn(j, 'result')) throw Error('event_store_unavailable');
   return j.result;
 }
 
@@ -73,6 +77,7 @@ function sanitizeProps(props) {
   for (const k of Object.keys(props)) {
     if (!ALLOWED_PROP_KEYS.has(k)) continue;
     const v = props[k];
+    if (k === 'campaign') { out[k] = CAMPAIGNS.includes(v) ? v : 'other_campaign'; continue; }
     if (v === null || v === undefined) continue;
     // Coerce to short string. Bucket numbers into rough tiers.
     let s = String(v).slice(0, 40).toLowerCase().replace(/[^a-z0-9_\-\.]/g, '_');
@@ -97,7 +102,8 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const key = String(req.query.admin || '');
     if (!ADMIN_KEY || key !== ADMIN_KEY) return res.status(403).json({ error: 'Forbidden' });
-    const windowHours = Math.min(24 * 30, Math.max(1, parseInt(req.query.window || '168', 10)));
+    const requested = parseInt(req.query.window || '168', 10);
+    const windowHours = Number.isFinite(requested) ? Math.min(24 * 30, Math.max(1, requested)) : 168;
     const days = Math.ceil(windowHours / 24);
     const now = Date.now();
     const dates = [];
@@ -114,7 +120,27 @@ export default async function handler(req, res) {
         if (v && Number(v) > 0) rows[n][d] = Number(v);
       }
     }
-    return res.status(200).json({ window_hours: windowHours, days_covered: days, events: rows, tracked_names: names });
+    // Optional bounded breakdown. Counts are browser observations, not revenue
+    // or unique customers. QA is explicit so synthetic checks can be excluded.
+    let campaigns;
+    if (req.query.breakdown === 'campaign') {
+      campaigns = Object.fromEntries(CAMPAIGNS.map(c => [c, Object.fromEntries(FUNNEL.map(n => [n, 0]))]));
+      const buckets = CAMPAIGNS.flatMap(c => FUNNEL.flatMap(n => dates.map(d => ({ c, n, key: `ev:count:${d}:${n}:campaign=${c}` }))));
+      try {
+        for (let i = 0; i < buckets.length; i += 500) {
+          const part = buckets.slice(i, i + 500);
+          const response = await fetch(`${KV_URL}/pipeline`, { method: 'POST',
+            headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(part.map(b => ['GET', b.key])) });
+          const values = await response.json();
+          if (!response.ok || !Array.isArray(values) || values.length !== part.length
+            || values.some(v => v.error || !Object.hasOwn(v, 'result'))) throw Error('event_store_unavailable');
+          part.forEach((b, j) => { campaigns[b.c][b.n] += Number(values[j].result) || 0; });
+        }
+      } catch { return res.status(503).json({ error: 'analytics_unavailable' }); }
+    }
+    return res.status(200).json({ window_hours: windowHours, days_covered: days, events: rows, tracked_names: names,
+      ...(campaigns ? { campaigns, measurement: 'observed_events_not_unique_customers_or_revenue' } : {}) });
   }
 
   // POST = log event
@@ -148,9 +174,9 @@ export default async function handler(req, res) {
     await kv('ltrim', `ev:recent:${name}`, 0, 99);
     await kv('expire', `ev:recent:${name}`, INCR_TTL);
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, recorded: true });
   } catch (e) {
     // Never break the client. Always OK.
-    return res.status(200).json({ ok: true, err: 1 });
+    return res.status(200).json({ ok: true, recorded: false, err: 1 });
   }
 }

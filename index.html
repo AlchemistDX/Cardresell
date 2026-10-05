@@ -1879,10 +1879,54 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         try { localStorage.setItem(SESS_KEY, JSON.stringify({ id: id, t: Date.now() })); } catch (e) {}
         return id;
       }
+      // Last non-direct channel, retained locally for 30 days. Fixed labels only:
+      // never store URLs, referrers, UTM text, email addresses or advertising IDs.
+      var campaignLabels = ['direct', 'shop_qr', 'youtube', 'discord', 'google_ads', 'meta_ads', 'reddit', 'organic_search', 'referral', 'other_campaign', 'qa'];
+      function acquisitionCampaign() {
+        var campaign = 'direct', tagged = false, now = Date.now();
+        try {
+          var params = new URLSearchParams(location.search);
+          if (params.has('cr_campaign')) {
+            var supplied = params.get('cr_campaign');
+            campaign = campaignLabels.includes(supplied) ? supplied : 'other_campaign';
+            tagged = true;
+          } else if (params.has('utm_source') || params.has('utm_campaign')) {
+            var source = (params.get('utm_source') || '').toLowerCase();
+            var medium = (params.get('utm_medium') || '').toLowerCase();
+            var sources = { cardshop: 'shop_qr', youtube: 'youtube', discord: 'discord', reddit: 'reddit' };
+            campaign = source === 'google' ? (['cpc', 'ppc', 'paid_search'].includes(medium) ? 'google_ads' : 'organic_search')
+              : ['facebook', 'instagram', 'meta'].includes(source) ? (['cpc', 'ppc', 'paid_social'].includes(medium) ? 'meta_ads' : 'referral')
+              : (Object.prototype.hasOwnProperty.call(sources, source) ? sources[source] : 'other_campaign');
+            tagged = true;
+          } else if (document.referrer) {
+            var ref = new URL(document.referrer);
+            if (!['cardresell.org', 'www.cardresell.org'].includes(ref.hostname)) {
+              if (['www.google.com', 'google.com', 'www.bing.com', 'bing.com', 'duckduckgo.com'].includes(ref.hostname)) campaign = 'organic_search';
+              else if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(ref.hostname)) campaign = 'youtube';
+              else if (['discord.com', 'discord.gg'].includes(ref.hostname)) campaign = 'discord';
+              else if (['reddit.com', 'www.reddit.com', 'old.reddit.com'].includes(ref.hostname)) campaign = 'reddit';
+              // Auth/payment returns are navigation within the purchase journey.
+              else if (!['accounts.google.com', 'cardresell-e0329.firebaseapp.com', 'checkout.stripe.com', 'billing.stripe.com'].includes(ref.hostname)) campaign = 'referral';
+            }
+          }
+        } catch (_) {}
+        try {
+          if (!tagged && campaign === 'direct') {
+            var saved = JSON.parse(localStorage.getItem('cr_acquisition_v1') || 'null');
+            if (saved && campaignLabels.includes(saved.campaign) && Number.isFinite(saved.at)
+              && saved.at <= now && now - saved.at < 30 * 86400000) return saved.campaign;
+          }
+          localStorage.setItem('cr_acquisition_v1', JSON.stringify({ campaign: campaign, at: now }));
+        } catch (_) {}
+        return campaign;
+      }
+      var acquisition = acquisitionCampaign();
       var sid = null;
       try { sid = sessionId(); } catch (e) {}
 
       window.trackEvent = function trackEvent(name, props) {
+        // A caller cannot replace the acquisition channel with event-source text.
+        props = { ...(props && typeof props === 'object' ? props : {}), campaign: acquisition };
         try {
           if (typeof window.va === 'function') {
             window.va('event', { name: name, ...(props && typeof props === 'object' ? props : {}) });
@@ -1892,8 +1936,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         try {
           if (navigator.sendBeacon) {
             var blob = new Blob([JSON.stringify({ name: name, props: props || {}, session_id: sid })], { type: 'application/json' });
-            navigator.sendBeacon('/api/events', blob);
-          } else {
+            if (navigator.sendBeacon('/api/events', blob)) return;
+          }
+          {
             fetch('/api/events', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1904,14 +1949,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         } catch (e) {}
       };
 
-      // Fire one page_view per pageload so we have a top-of-funnel denominator.
+      // One observed entry per tab session/channel; these are not unique people.
+      var wasFired = false;
       try {
-        var wasFired = sessionStorage.getItem('cr_pv_fired');
-        if (!wasFired) {
-          sessionStorage.setItem('cr_pv_fired', '1');
-          setTimeout(function() { window.trackEvent('page_view'); }, 200);
-        }
+        wasFired = sessionStorage.getItem('cr_pv_fired:' + acquisition);
+        if (!wasFired) sessionStorage.setItem('cr_pv_fired:' + acquisition, '1');
       } catch (e) {}
+      if (!wasFired) setTimeout(function() { window.trackEvent('page_view'); }, 200);
     })();
   </script>
 </head>

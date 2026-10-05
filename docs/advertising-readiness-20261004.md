@@ -1,14 +1,12 @@
-# Current checkpoint — October 5, 2026
+# Current checkpoint — October 5, 2026, 16:50 Eastern
 
-Roughly 75% of the bounded advertising-readiness effort, not the complete master plan. This section supersedes historical pending deployment and webhook notes below.
+Roughly 80% of the bounded advertising-readiness effort, a qualitative estimate, not the complete master plan. Public advertising is not yet ready: public admission, email/password delivery, and provider cost/reliability acceptance remain open.
 
-- Live source 1f2c260e95f25d1e42ea316873b34a8c63d84f84; Production dpl_2S1rpBae3f2iC5iw4VLQrJz22XxH READY. Browser loaded membership-shop.e910cd18.js and rendered all five plans.
-- Both paid-invoice events delivered; last authenticated balance 53 ID / 5 Grade, with cancellation scheduled at the paid-through boundary.
-- Current/legacy marketplace access mapping implemented, tested and live. Starter's two unlocked venues and current CASUAL/PRO upgrade badges accepted live.
-- Funnel update: 176 Shop identity/telemetry checks, 99 asset checks and 224 copy checks pass. Production /api/events POSTs returned 200; no 5xx in the short post-deploy query. This does not independently prove counter persistence or accurate revenue measurement.
-- The browser restarted during deployment; final storefront acceptance was signed out. Do not claim a fresh authenticated balance check for the telemetry-only deploy.
-- Next owner-dependent acceptance: a genuinely new CardResell account and verified email, admitted through the normal pilot path. Do not merge, reset or rebind either existing owner account, and do not ask for another purchase. User must select an accessible, unused email and complete its verification normally.
-- Still outstanding: acquisition attribution, provider cost and reliability evidence, and limited public admission. Listing/storage and bulk-grade capability rollouts remain separate and are not advertised as included operational benefits.
+- Google onboarding accepted on Production dpl_GF6UXwwpK7ju9oX96z5SyyiT4CwU, source a7fade9f1d21b82dfee7533a3885caadda7814c1. User screenshot IMG_4458(1) at 16:49 shows cartoonclipscentral23@gmail.com verified, 15 ID / 2 Grade, and no setup warning. The requested path was refresh then Settings without Shop. Correlated live logs at 20:49:43–44Z show GET account 200 → POST account 200 → GET account 200. This establishes successful automatic first association on the new account. Repeat-refresh non-duplication for this account is not independently established yet; willsep205's earlier refresh was accepted.
+- Paid pack, Starter subscription, duplicate webhook delivery and scheduled cancellation were accepted earlier on willsep200 with 53 ID / 5 Grade retained. Original willsep202 bindings remain unchanged.
+- Current/legacy marketplace access mapping is live. Listing/storage and bulk-grade rollouts remain separate and are not advertised as operational benefits.
+- Acquisition channel tracking is implemented in the follow-up below. Treat client checkout observations as funnel signals, never authoritative transaction/revenue totals. Production persistence acceptance follows deployment.
+- Next blockers: normal email/password verification delivery, provider cost/reliability measurement, and limited public admission. Google onboarding success does not establish non-Gmail or email/password acceptance.
 
 ---
 
@@ -108,3 +106,12 @@ User screenshot IMG_4457 still shows verification-required after Google sign-in.
 The shared verifier now supplements an absent/false primary verification flag only for a current, signature-verified Google session. It calls Firebase accounts.lookup using that same token, requires exactly the signed Firebase UID, an enabled account, an unrevoked issued-at, and exactly one Google provider whose rawId matches the signed Google identity. Only that provider's Gmail address is accepted, and any present primary/token email must match. Google is authoritative for Gmail according to https://firebase.google.com/docs/auth/users#verified_email_addresses and https://developers.google.com/identity/gsi/web/guides/verify-google-id-token. Non-Gmail, merely linked Google identities, password/custom sessions, ambiguous records and lookup failures do not gain verification. No Firebase profile or verification override is written; the verified identity retains its original UID. Existing automatic setup and pro-status receive the server-confirmed result. No credit amounts, billing bindings, pilot scope, or anti-bot configuration changed.
 
 Validation: new provider-verification suite 32/0, including real RSA signature and membership integration; membership authentication 34/0; storefront identity 201/0; auth integrity 96/0. Live acceptance remains pending: refresh the current Google session and inspect Settings directly, without opening Shop. Expected fresh account entitlement remains 15 ID / 2 Grade with no repeated welcome grant on refresh. Deployment alone is not evidence of account completion.
+
+
+## Acquisition tracking follow-up — October 5, 2026
+
+The homepage now captures a fixed channel label from cr_campaign, recognized UTM source/medium values or recognized referral domains. It retains the last non-direct channel locally for up to 30 days, including sign-in/payment returns. Unknown values become other_campaign; raw UTM text, URLs, referrers and ad-click IDs are not stored as attribution. Fixed labels: direct, shop_qr, youtube, discord, google_ads, meta_ads, reddit, organic_search, referral, other_campaign, qa. cr_campaign=shop_qr is the simple shop-card/QR campaign tag. Existing source properties remain event context and cannot override the channel.
+
+Funnel events carry the channel into /api/events. Page entry is once per tab session/channel, not a unique-customer measure. Storage-disabled clients still attempt the event, and sendBeacon refusal falls back to fetch. The endpoint accepts only the fixed channel labels and offers an admin-protected breakdown=campaign over the existing window; the report explicitly identifies counts as observed events rather than people or revenue. Existing unauthenticated analytics remains untrusted, best-effort telemetry. No payment or credit authority depends on it.
+
+Storage HTTP/Redis errors now prevent a recorded:true response. A dedicated telemetry_check event with campaign=qa allows a live persistence acknowledgment without contaminating the checkout or real acquisition funnel. This is not proof of cross-device attribution or Stripe revenue attribution. Validation: acquisition tracking 23/0, including persistence failure, safe fixed labels, auth/payment return continuity, caller override rejection, blocked storage and admin report protection.
