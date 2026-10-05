@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CardResell — See the highest net payout across 15 venues, after fees</title>
-  <meta name="description" content="Find out what your Pokémon, MTG, Yu-Gi-Oh!, Lorcana or One Piece card is really worth — and the best marketplace to sell it on. Free tier ranks eBay and TCGplayer by net payout after 2026 fees. Pro adds Whatnot, Poshmark, Mercari, Cardmarket, Mana Pool, Cardsphere &amp; CardNexus. Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk." />
+  <meta name="description" content="Find out what your Pokémon, MTG, Yu-Gi-Oh!, Lorcana or One Piece card is really worth — and the best marketplace to sell it on. Free tier ranks eBay and TCGplayer by net payout after 2026 fees. Compare estimated fees and review current monthly plans and scan credit packs." />
   <link rel="canonical" href="https://www.cardresell.org/">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -1960,46 +1960,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </button>
     </div>
 
-    <!-- Grader Credits buy — right under balances -->
     <div id="gradeCreditsBuy" style="margin-bottom:.5rem">
-      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy Grader Credits</div>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button onclick="startGradeScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold-text);font-weight:800">$5.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.60/scan</div>
-        </button>
-        <button onclick="startGradeScanCheckout('25')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
-          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>25 scans</div><div style="color:var(--gold-text);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 13%</div>
-        </button>
-        <button onclick="startGradeScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
-          <div>50 scans</div><div style="color:var(--gold-text);font-weight:800">$22.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 23%</div>
-        </button>
-      </div>
+      <button type="button" onclick="openMembershipShop('shop')" style="width:100%;padding:.6rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-md)">Buy ID or Grade credit packs</button>
     </div>
-
-    <!-- Divider -->
-    <div style="height:1px;background:var(--border);margin:.6rem 0"></div>
-
-    <!-- ID Credits buy -->
     <div id="idCreditsBuy" style="margin-bottom:.5rem">
-      <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.4rem">Buy ID Scanner Credits</div>
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button onclick="startIdScanCheckout('10')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>10 scans</div><div style="color:var(--gold-text);font-weight:800">$1.99</div><div style="font-size:.55rem;color:var(--text-muted);margin-top:.15rem">$0.20/scan</div>
-        </button>
-        <button onclick="startIdScanCheckout('50')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--gold-border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-border)'">
-          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">POPULAR</div>
-          <div>50 scans</div><div style="color:var(--gold-text);font-weight:800">$7.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 20%</div>
-        </button>
-        <button onclick="startIdScanCheckout('100')" style="flex:1;min-width:0;padding:.42rem .5rem;background:var(--surface-2);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.72rem;font-weight:700;cursor:pointer;transition:border-color .15s;text-align:center;position:relative" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#c47a00,#f59e0b);color:#000;font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:99px;white-space:nowrap">BEST VALUE</div>
-          <div>100 scans</div><div style="color:var(--gold-text);font-weight:800">$12.99</div><div style="font-size:.55rem;color:#4ade80;font-weight:700;margin-top:.15rem">Save 35%</div>
-        </button>
-      </div>
+      <button type="button" onclick="openMembershipShop('subscriptions')" style="width:100%;padding:.6rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-md)">Compare monthly subscriptions</button>
     </div>
-
-    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">💡 Pro includes <strong style="color:var(--text)">15 Grader + 30 ID scans/mo</strong> &amp; 10% off top-ups. Paid credits never expire.</div>
+    <div style="font-size:.68rem;color:var(--text-muted);line-height:1.5">See current prices, monthly allowances and eligible discounts before checkout. Issued credits never expire.</div>
   </div>
   <!-- ── VERIFIED EMAIL ── -->
   <div id="verifiedEmailSection" style="display:none;margin-top:.5rem">
@@ -2083,7 +2050,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
   <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
   <h1 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h1>
-  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Pro adds Whatnot, Poshmark, Mercari, Mana Pool, Cardsphere, Cardmarket &amp; CardNexus. Pro Max unlocks COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk.</div>
+  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
 </div>
 
 <!-- SOCIAL PROOF BAR + Try-an-example CTA -->
@@ -2164,10 +2131,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
        only lands with Pro Max on an MTG card. -->
   <div id="promoBanner" class="promo-banner">
     <div class="promo-banner-text">
-      <span>&#11088; Unlock 13 more marketplaces &mdash; 7 with Pro, 6 more with Pro Max</span> &mdash; Pro adds Poshmark, Whatnot, Mercari, Cardmarket, CardNexus (+ Mana Pool &amp; Cardsphere for MTG). Pro Max adds COMC, Fanatics Collect, Card Kingdom, CoolStuffInc, SCG &amp; TCG Bulk.<br>
-      <span style="font-size:.73rem;color:var(--text-muted)">Pro &mdash; $9.99/mo &middot; Cancel anytime</span>
+      <span>&#11088; Need more ID or Grade credits?</span><br>
+      <span style="font-size:.73rem;color:var(--text-muted)">Compare current monthly allowances and credit-pack discounts.</span>
     </div>
-    <button class="promo-banner-cta" onclick="openPricingModal('banner')">See Pro</button>
+    <button class="promo-banner-cta" onclick="openPricingModal('banner')">Compare plans</button>
     <button class="promo-banner-close" onclick="dismissPromoBanner()" title="Dismiss">&times;</button>
   </div>
   <!-- Camera scan overlay -->
@@ -3174,10 +3141,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div class="scan-gate-divider">or</div>
       <div class="scan-gate-opt" onclick="handleScanOption('pro')" id="scanGateProOpt" style="margin-top:.1rem">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 15 grade + 30 ID scans/mo</div>
-          <div class="scan-gate-opt-desc">+ Full fee breakdown &amp; unlimited flip tracking</div>
+          <div class="scan-gate-opt-name">&#11088; Compare monthly subscriptions</div>
+          <div class="scan-gate-opt-desc">Review current allowances and eligible pack discounts</div>
         </div>
-        <div class="scan-gate-opt-price">$9.99/mo</div>
+        <div class="scan-gate-opt-price">See plans</div>
       </div>
     </div>
     <!-- Identify scan option (shown only in identify mode) -->
@@ -3187,14 +3154,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <div class="scan-gate-opt-name" id="scanGateOptName">Buy ID Scanner Credits</div>
           <div class="scan-gate-opt-desc" id="scanGateOptDesc">Card name &middot; Set &middot; Live prices</div>
         </div>
-        <div class="scan-gate-opt-price" id="scanGateOptPrice">from $1.00</div>
+        <div class="scan-gate-opt-price" id="scanGateOptPrice">See packs</div>
       </div>
       <div class="scan-gate-opt" onclick="handleScanOption('pro')">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name">&#11088; Get Pro &mdash; 15 grade + 30 ID scans/mo</div>
-          <div class="scan-gate-opt-desc">+ Full fee breakdown &amp; unlimited flip tracking</div>
+          <div class="scan-gate-opt-name">&#11088; Compare monthly subscriptions</div>
+          <div class="scan-gate-opt-desc">Review current allowances and eligible pack discounts</div>
         </div>
-        <div class="scan-gate-opt-price">$9.99/mo</div>
+        <div class="scan-gate-opt-price">See plans</div>
       </div>
     </div>
     <button class="scan-gate-cancel" onclick="closeScanGate()">Maybe later</button>
@@ -4029,7 +3996,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.1e2d6406.js"></script>
+<script defer src="/js/core.9a7b3598.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
