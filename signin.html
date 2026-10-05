@@ -451,13 +451,24 @@
     // it as a safety no-op.
     window._fbPersistenceReady = Promise.resolve();
 
-    window._fbGoogleSignIn = async () => {
+    async function completeGoogleSignIn() {
       const provider = new GoogleAuthProvider();
-      // Let users switch Google accounts even when Google has an active session.
       provider.setCustomParameters({ prompt: 'select_account' });
-      try { await signInWithPopup(auth, provider); }
-      catch(e) { if (e.code !== 'auth/popup-closed-by-user') throw e; }
-    };
+      const result = await signInWithPopup(auth, provider);
+      const user = result?.user;
+      const current = () => user && auth.currentUser?.uid === user.uid;
+      const incomplete = () => Object.assign(new Error('Google sign-in did not finish. Please try again.'), { code: 'auth/google-sign-in-incomplete' });
+      if (!current() || result.providerId !== 'google.com') throw incomplete();
+      // A successful OAuth popup can update an existing UID without another
+      // auth-state callback. Reload the profile and refresh the signed token.
+      await user.reload();
+      if (!current()) throw incomplete();
+      const fresh = await user.getIdTokenResult(true);
+      if (!current() || fresh.signInProvider !== 'google.com') throw incomplete();
+      return result;
+    }
+    // Let the caller handle every failure, including a closed popup.
+    window._fbGoogleSignIn = completeGoogleSignIn;
     window._fbEmailSignIn  = (e, p) => signInWithEmailAndPassword(auth, e, p);
     window._fbEmailSignUp  = (e, p) => createUserWithEmailAndPassword(auth, e, p);
     window._fbResetPassword = (e)   => sendPasswordResetEmail(auth, e);
@@ -755,6 +766,9 @@
         'auth/too-many-requests': 'Too many attempts — try again later.',
         'auth/network-request-failed': 'Network error — check your connection.',
         'auth/popup-blocked': 'Pop-up blocked — please allow pop-ups and try again.',
+        'auth/popup-closed-by-user': 'Google sign-in was closed before completion. Please try again.',
+        'auth/cancelled-popup-request': 'Another Google sign-in is in progress. Finish that window first.',
+        'auth/google-sign-in-incomplete': 'Google sign-in did not finish. Please try again.',
       })[e.code] || e.message || 'Something went wrong.';
     }
 

@@ -39,7 +39,9 @@ export function createMembershipAuthenticator({ verify = verifyFirebaseToken, no
       }
       reason = 'subject_mismatch';
       if (user?.uid !== claims.sub) throw new Error();
-      reason = 'email_not_verified';
+      // Fixed provider categories only; never log identity or token contents.
+      reason = user?.provider === 'google.com' ? 'email_not_verified_google'
+        : user?.provider === 'password' ? 'email_not_verified_password' : 'email_not_verified_other';
       if (user.emailVerified === true) return { uid: user.uid, verified: true, email: user.email };
       // Signature/project/expiry/subject checks have already succeeded. Honor
       // the site's preexisting server-owned verification for this exact UID.

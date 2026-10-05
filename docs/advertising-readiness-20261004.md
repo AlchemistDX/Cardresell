@@ -89,3 +89,14 @@ The user's Safari screenshot for willsep23 shows the unverified banner and unava
 Review found the new browser helper skipped its server check when the local Firebase emailVerified hint was false. The follow-up checks every authenticated identity with the existing server authenticator; no association is sent unless that check succeeds. This honors existing server-owned verification without trusting a provider name or changing authentication policy. A server verify_email response now exposes Verify email and Sign in with Google beside the header. Settings replaces the obsolete Open Shop instruction with the relevant verification/setup recovery, preserving all confirmed numeric balances. Server-verified completion through the older email flow resumes setup on the next credit refresh.
 
 Validation: storefront identity and recovery 201/0, auth integrity 96/0, fingerprints 99/0. Server authentication/enrollment, pilot admission, customer binding and grant logic are unchanged.
+
+
+## Google sign-in recovery — October 5, 2026
+
+User confirms cartoonclipscentral23 used Sign in with Google. Production requests at 18:08:15Z, 18:08:17Z and 18:08:35Z returned membership-account 401 with MEMBERSHIP_AUTH_REJECTED email_not_verified. This establishes the server rejection category, but the old diagnostic did not identify the signed-in provider. Do not infer that the user chose password sign-in.
+
+Review identified independent recovery faults: the home Google helper swallowed popup errors, and /signin swallowed popup-closed-by-user then proceeded to flush/redirect the previous session. Both helpers now require a Google UserCredential for the current UID, reload its profile, and force a signed-token refresh with the Google sign-in provider before continuing. Home reloads through the normal auth/account setup path so same-UID sign-ins cannot depend solely on an auth-state callback. Home exposes safe popup/network errors; /signin cancellation reaches its existing visible error path and never redirects. Account-switch races stop completion.
+
+Server rejection diagnostics distinguish fixed google/password/other provider categories after signature verification. No email, UID, token, provider payload or raw error is logged. Verification, pilot admission, credits and customer binding policy are unchanged. Actual first-login acceptance remains pending until the user completes the updated live Google flow.
+
+Validation: Google recovery 38/0, membership authentication 34/0, auth integrity 96/0, asset fingerprints 99/0, storefront identity 201/0, deep links 187/0, verification-email send regression passed.
