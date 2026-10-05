@@ -1,6 +1,7 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
+import { observeProviderAttempt } from './_providerUsage.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
 import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingFailure, claimIdRetry,
   membershipRouteMode, membershipBilling, publishMembershipScan, membershipBalances } from './_membershipRouteBilling.js';
@@ -1669,42 +1670,45 @@ Respond ONLY with valid JSON, no explanation:
     //   (2) empty message content (gpt-5 can burn all tokens on reasoning)
     //   (3) JSON parse failure (model returned prose instead of JSON)
     async function tryModel(modelId) {
-      const r = await callModel(modelId);
-      if (!r.ok) {
-        const errText = await r.text().catch(() => '');
-        return { ok: false, reason: 'http', status: r.status, errText: errText.slice(0, 300) };
-      }
-      const j = await r.json();
-      const content = j.choices?.[0]?.message?.content || '';
-      const finishReason = j.choices?.[0]?.finish_reason || '';
-      if (!content.trim()) {
-        return { ok: false, reason: 'empty', finish_reason: finishReason, usage: j.usage };
-      }
-      try {
-        const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        // Handle cases where model wrapped JSON in extra text: find first {...} block.
-        const jsonStart = cleaned.indexOf('{');
-        const jsonEnd = cleaned.lastIndexOf('}');
-        const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? cleaned.slice(jsonStart, jsonEnd + 1) : cleaned;
-        return { ok: true, cardInfo: JSON.parse(jsonStr), raw: content };
-      } catch(e) {
-        return { ok: false, reason: 'parse', raw: content.slice(0, 500) };
-      }
+      return observeProviderAttempt({ provider: 'openai', operation: 'chat_completion',
+        model: modelId, mode: isDeepGrade ? 'deep_grade' : isGradeMode ? 'grade' : 'identify',
+        inputImages: visionContent.filter(item => item.type === 'image_url').length }, async observe => {
+        const r = await callModel(modelId);
+        observe({ status: r.status });
+        if (!r.ok) {
+          const errText = await r.text().catch(() => '');
+          return { ok: false, reason: 'http', status: r.status, errText: errText.slice(0, 300) };
+        }
+        const j = await r.json();
+        observe({ usage: j.usage });
+        const content = j.choices?.[0]?.message?.content || '';
+        const finishReason = j.choices?.[0]?.finish_reason || '';
+        if (!content.trim()) {
+          return { ok: false, reason: 'empty', finish_reason: finishReason, usage: j.usage };
+        }
+        try {
+          const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          // Handle cases where model wrapped JSON in extra text: find first {...} block.
+          const jsonStart = cleaned.indexOf('{');
+          const jsonEnd = cleaned.lastIndexOf('}');
+          const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? cleaned.slice(jsonStart, jsonEnd + 1) : cleaned;
+          return { ok: true, cardInfo: JSON.parse(jsonStr), raw: content };
+        } catch(e) {
+          return { ok: false, reason: 'parse', raw: content.slice(0, 500) };
+        }
+      });
     }
 
     let modelUsed = 'gpt-5';
     let attempt = await tryModel('gpt-5');
     if (!attempt.ok) {
-      console.warn('gpt-5 attempt failed, falling back to gpt-4o:', attempt.reason,
-                   attempt.reason === 'http' ? `${attempt.status} ${attempt.errText}` :
-                   attempt.reason === 'empty' ? `finish=${attempt.finish_reason} usage=${JSON.stringify(attempt.usage)}` :
-                   attempt.raw);
+      console.warn('gpt-5 attempt failed, falling back to gpt-4o:', attempt.reason, attempt.status || '');
       modelUsed = 'gpt-4o';
       attempt = await tryModel('gpt-4o');
     }
 
     if (!attempt.ok) {
-      console.error('Both models failed:', attempt);
+      console.error('Both models failed:', attempt.reason, attempt.status || '');
       await refundCredits();
       if (attempt.reason === 'parse') {
         return res.status(502).json({ error: 'Could not identify this card. Try a clearer photo. Credits refunded.' });
@@ -1739,9 +1743,9 @@ Respond ONLY with valid JSON, no explanation:
     // cards it can't read; Ximilar returns the actual card.
     if (isGradeMode && ximilarToken && imageBase64) {
       const t0 = Date.now();
-      let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg');
+      let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg', isDeepGrade ? 'deep_grade' : 'grade');
       if (!xim.ok && (xim.reason === 'no_match' || xim.reason === 'no_card_detected')) {
-        const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport');
+        const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport', isDeepGrade ? 'deep_grade' : 'grade');
         if (ximSport.ok) xim = ximSport;
       }
       console.log('[scan] ximilar (grade-mode ident) took', Date.now() - t0, 'ms ok=', xim.ok, 'reason=', xim.reason);
@@ -2158,7 +2162,7 @@ Respond ONLY with valid JSON, no explanation:
         try {
           const t0 = Date.now();
           const imgs = backBase64 ? [imageBase64, backBase64] : [imageBase64];
-          const xg = await gradeWithXimilar(imgs, mimeType || 'image/jpeg', ximilarToken);
+          const xg = await gradeWithXimilar(imgs, mimeType || 'image/jpeg', ximilarToken, isDeepGrade ? 'deep_grade' : 'grade');
           console.log('[scan] ximilar-grader took', Date.now() - t0, 'ms ok=', xg.ok, 'reason=', xg.reason);
           // Ximilar's grader returns holder detection on the card object.
           // Some responses expose it as record.card[0].holder or record.holder.

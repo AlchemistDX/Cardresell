@@ -1,3 +1,4 @@
+import { observeProviderAttempt } from './_providerUsage.js';
 // _ximilar_grade.js — Ximilar Card Grader wrapper (sync endpoint).
 //
 // Purpose: get pixel-measured centering + per-corner + per-edge + surface
@@ -42,10 +43,15 @@
  *     raw: <full ximilar response>
  *   }
  */
-export async function gradeWithXimilar(imagesBase64, mime, apiToken) {
+export async function gradeWithXimilar(imagesBase64, mime, apiToken, mode = 'grade') {
   if (!apiToken) return { ok: false, reason: 'missing_token' };
   const imgs = Array.isArray(imagesBase64) ? imagesBase64 : [imagesBase64];
   if (!imgs.length || !imgs[0]) return { ok: false, reason: 'missing_image' };
+  return observeProviderAttempt({ provider: 'ximilar', operation: 'card_grade', mode, inputImages: Math.min(imgs.length, 2) },
+    observe => grade(imgs, apiToken, observe));
+}
+
+async function grade(imgs, apiToken, observe) {
 
   // Ximilar sync grader limit: max 2 records (front + back)
   const records = imgs.slice(0, 2).map((b64, idx) => ({
@@ -73,6 +79,7 @@ export async function gradeWithXimilar(imagesBase64, mime, apiToken) {
     clearTimeout(timeoutId);
   }
 
+  observe({ status: resp.status });
   if (!resp.ok) {
     return { ok: false, reason: `http_${resp.status}`, error: await resp.text().catch(() => '') };
   }

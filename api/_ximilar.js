@@ -1,3 +1,4 @@
+import { observeProviderAttempt } from './_providerUsage.js';
 // _ximilar.js — Ximilar Collectibles Recognition wrapper.
 //
 // Purpose-built purpose: return a cardInfo-shaped object (same fields as
@@ -31,8 +32,13 @@ const DIST_GAP_FOR_SINGLE = 0.15; // 2nd must be at least this far from 1st for 
  * @param {string} apiToken     Ximilar API token (from env)
  * @param {'tcg'|'sport'} kind  which endpoint to hit
  */
-export async function identifyWithXimilar(imageBase64, mime, apiToken, kind = 'tcg') {
+export async function identifyWithXimilar(imageBase64, mime, apiToken, kind = 'tcg', mode = 'identify') {
   if (!apiToken || !imageBase64) return { ok: false, reason: 'missing_input' };
+  return observeProviderAttempt({ provider: 'ximilar', operation: kind === 'sport' ? 'sport_id' : 'tcg_id', mode, inputImages: 1 },
+    observe => identify(imageBase64, mime, apiToken, kind, observe));
+}
+
+async function identify(imageBase64, mime, apiToken, kind, observe) {
 
   const url = kind === 'sport'
     ? 'https://api.ximilar.com/collectibles/v2/sport_id'
@@ -58,15 +64,16 @@ export async function identifyWithXimilar(imageBase64, mime, apiToken, kind = 't
       signal: ac.signal,
     });
   } catch (e) {
-    console.warn('[ximilar] fetch failed:', e.message);
+    console.warn('[ximilar] fetch failed:', e.name === 'AbortError' ? 'timeout' : 'network');
     return { ok: false, reason: 'network', error: e.message };
   } finally {
     clearTimeout(timeoutId);
   }
 
+  observe({ status: resp.status });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
-    console.warn('[ximilar] non-2xx:', resp.status, errText.slice(0, 300));
+    console.warn('[ximilar] non-2xx:', resp.status);
     return { ok: false, reason: 'http', status: resp.status, errText: errText.slice(0, 300) };
   }
 
