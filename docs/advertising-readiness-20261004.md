@@ -1,3 +1,17 @@
+# Current checkpoint — October 5, 2026
+
+Roughly 75% of the bounded advertising-readiness effort, not the complete master plan. This section supersedes historical pending deployment and webhook notes below.
+
+- Live source 1f2c260e95f25d1e42ea316873b34a8c63d84f84; Production dpl_2S1rpBae3f2iC5iw4VLQrJz22XxH READY. Browser loaded membership-shop.e910cd18.js and rendered all five plans.
+- Both paid-invoice events delivered; last authenticated balance 53 ID / 5 Grade, with cancellation scheduled at the paid-through boundary.
+- Current/legacy marketplace access mapping implemented, tested and live. Starter's two unlocked venues and current CASUAL/PRO upgrade badges accepted live.
+- Funnel update: 176 Shop identity/telemetry checks, 99 asset checks and 224 copy checks pass. Production /api/events POSTs returned 200; no 5xx in the short post-deploy query. This does not independently prove counter persistence or accurate revenue measurement.
+- The browser restarted during deployment; final storefront acceptance was signed out. Do not claim a fresh authenticated balance check for the telemetry-only deploy.
+- Next owner-dependent acceptance: a genuinely new CardResell account and verified email, admitted through the normal pilot path. Do not merge, reset or rebind either existing owner account, and do not ask for another purchase. User must select an accessible, unused email and complete its verification normally.
+- Still outstanding: acquisition attribution, provider cost and reliability evidence, and limited public admission. Listing/storage and bulk-grade capability rollouts remain separate and are not advertised as included operational benefits.
+
+---
+
 # Advertising-readiness checkpoint — 2026-10-04 23:25 Eastern
 
 ## Scope and estimate
