@@ -5,6 +5,7 @@ import * as legacy from './_idBilling.js';
 import { createMembershipConsumption, MembershipConsumptionError } from './_membershipConsumption.js';
 import { membershipRedis, membershipRouteMode } from './_membershipLegacyFence.js';
 import { grantMembership } from './_membershipLedger.js';
+import { withWelcomeDailyCap, clearWelcomeDeferral } from './_welcomeDailyCap.js';
 import { createMembershipFreeIssuance } from './_membershipFreeIssuance.js';
 export { newIdReceipt, candidateHash, idBillingFailure } from './_idBilling.js';
 export { membershipRouteMode } from './_membershipLegacyFence.js';
@@ -58,7 +59,8 @@ export async function membershipWelcome(owner, email) {
   // from a NEW welcome award for the normal UI, in the same Redis operation.
   // Its Lua body and financial writes are not modified.
   let replayed;
-  const result = await grantMembership(async command => {
+  const result = await grantMembership(async prepared => {
+    const command = withWelcomeDailyCap(prepared, { owner });
     const script = "local prior=redis.call('EXISTS',KEYS[1])\nlocal function grant()\n"
       + command[1] + '\nend\nlocal response=grant()\nreturn {prior,response}';
     const raw = await membershipRedis([command[0], script, ...command.slice(2)]);
@@ -66,6 +68,7 @@ export async function membershipWelcome(owner, email) {
     replayed = raw[0] === 1;
     return raw[1];
   }, 'welcome', { owner, email, verified: true });
+  await clearWelcomeDeferral(membershipRedis, owner, result);
   return { ...result, newlyGranted: result.granted && !replayed };
 }
 export async function membershipBalances(owner) {

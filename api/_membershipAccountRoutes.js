@@ -6,7 +6,7 @@ const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v)
   && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 export function createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment,
-  commands, balances, portal, bootstrap, scheduleChanges = true }) {
+  commands, balances, portal, bootstrap, retryWelcome, scheduleChanges = true }) {
   async function owner(req) {
     const token = req.headers?.authorization?.match(/^Bearer (.+)$/)?.[1];
     if (!token) fail('authentication_required');
@@ -45,6 +45,9 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
           const customer = await customers.get(uid);
           const state = customer?.state === 'bound' ? await lifecycle.get({ owner: uid })
             : { status: customer ? 'customer_pending' : 'not_associated' };
+          // A welcome award deferred by the daily cap is retried here; failures
+          // never block the read and existing balances are untouched.
+          if (typeof retryWelcome === 'function') { try { await retryWelcome(uid, identity); } catch {} }
           let credits = null;
           try { credits = await balances(uid); } catch {}
           return res.status(200).json({ state: publicState(state), credits, creditsAvailable: credits !== null, creditsExpire: false,

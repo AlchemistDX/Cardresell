@@ -3,6 +3,7 @@
 // creation occurs until this function completes.
 import { grantMembership } from './_membershipLedger.js';
 import { membershipEnrollmentKey } from './_membershipConsumption.js';
+import { withWelcomeDailyCap, clearWelcomeDeferral } from './_welcomeDailyCap.js';
 
 export function createMembershipEnrollmentFlow({ execute, provision, bootstrap, issueFree }) {
   return async (owner, identity) => {
@@ -16,7 +17,9 @@ export function createMembershipEnrollmentFlow({ execute, provision, bootstrap, 
     const free = await issueFree(owner);
     if (free.status === 'paid') return { status: 'paid_preserved' };
     if (!['issued', 'replayed'].includes(free.status)) throw Error('free_baseline_required');
-    const welcome = await grantMembership(async command => {
+    const welcome = await grantMembership(async prepared => {
+      // Daily new-award circuit breaker wraps the unchanged ledger command.
+      const command = withWelcomeDailyCap(prepared, { owner });
       // Validate current authority atomically with the unchanged grant script.
       // A concurrent paid transition or fence failure cannot mint a late award.
       const count = command[2];
@@ -33,6 +36,8 @@ end
         ...command.slice(3, 3 + count), 'membership:launch-v2:legacy_fence',
         membershipEnrollmentKey(owner), ...command.slice(3 + count)]);
     }, 'welcome', { owner, email: identity.email, verified: true });
-    return { status: 'free_ready', monthly: free.status, welcome: welcome.granted };
+    await clearWelcomeDeferral(execute, owner, welcome);
+    return { status: 'free_ready', monthly: free.status, welcome: welcome.granted,
+      ...(welcome.deferred === true ? { welcomeDeferred: true } : {}) };
   };
 }

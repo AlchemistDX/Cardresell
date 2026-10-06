@@ -24,6 +24,7 @@ import { createMembershipBootstrap, membershipBootstrapAuditKey } from './_membe
 import { membershipEnvironment } from './_membershipEnvironment.js';
 import { createMembershipEnrollmentProvisioner } from './_membershipEnrollmentProvisioner.js';
 import { createMembershipEnrollmentFlow } from './_membershipEnrollmentFlow.js';
+import { hasWelcomeDeferral } from './_welcomeDailyCap.js';
 import { readOwnerImport } from './_membershipOwnerImport.js';
 import { createMembershipOwnerMigration } from './_membershipOwnerMigration.js';
 import { createMembershipOwnerLifecycle } from './_membershipOwnerLifecycle.js';
@@ -195,5 +196,8 @@ export async function membershipPurchaseRuntime() {
   const purchases = createMembershipPurchaseRoutes({ authenticate, resolveContext, controller, purchaseEnabled });
   return { ...purchases,
     ...createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment, commands,
-      balances: membershipBalances, portal: customerStripe.createPortal, bootstrap, scheduleChanges: false }) };
+      balances: membershipBalances, portal: customerStripe.createPortal, bootstrap, scheduleChanges: false,
+      retryWelcome: async (owner, identity) => {
+        if (await hasWelcomeDeferral(membershipRedis, owner)) await bootstrap(owner, identity);
+      } }) };
 }

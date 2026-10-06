@@ -194,7 +194,7 @@ export default async function handler(req, res) {
           const grant = await membershipWelcome(userSub, email);
           return res.status(200).json({ ok: true, verified: true, email,
             bonusGranted: grant.newlyGranted, welcomeRecorded: grant.granted,
-            bonusReason: grant.newlyGranted ? '' : 'already-claimed',
+            bonusReason: grant.newlyGranted ? '' : (grant.deferred === true ? 'welcome-deferred' : 'already-claimed'),
             billing_version: 'launch-v2' });
         }
       } catch {
