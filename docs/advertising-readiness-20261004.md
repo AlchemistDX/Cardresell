@@ -3,7 +3,7 @@
 Roughly 85% of the bounded advertising-readiness effort, a qualitative estimate, not the complete master plan. The increase rests on live acceptance evidence (below), not on deployed instrumentation. Public advertising is still not ready: public admission is pilot-only and email/password verification delivery is unaccepted.
 
 Closed since the Oct 5 checkpoint (all Production, live accounts):
-- Provider measurement accepted live for every paid operation: ID (Ximilar tcg_id ~1.7–1.9 s, incl. a low-confidence miss with refund), Quick Grade (gpt-6.1-sol, ~$0.016–0.017 OpenAI, 14–17 s), Deep Grade (gpt-6.1-sol ~$0.025 + Ximilar async grader, ~37 s). Ximilar billed credits are not reported by the API and stay unknown, not zero; reconcile with the Ximilar invoice.
+- Provider measurement accepted live for every paid operation: ID (Ximilar tcg_id ~1.7–1.9 s, incl. a low-confidence miss with refund), Quick Grade (gpt-6.1-sol, ~$0.016–0.017 OpenAI; latency not recorded), Deep Grade (gpt-6.1-sol ~$0.025 + Ximilar async grader, ~37 s). Ximilar billed credits are not reported by the API and stay unknown, not zero; reconcile with the Ximilar invoice.
 - Deep Grade CV was broken: Ximilar retired the sync grader endpoint. Migrated to the async job API; live result shows CV-verified (dpl_Dk5KUHsraiJsJoG3MrrTJEF1Hq3t onward).
 - Grading honesty: poor visibility/plastic lowers confidence, not the grade; labels and limiting factor follow the final grade; "Measured" only for CV values. Discrimination check passed live (clean vs crumpled/bent cards: 9 vs 2, 7 vs 3). Not calibration.
 - Wrong grading-upside price (name-only PriceCharting match) fixed; name-only TCG matches no longer "exact".
