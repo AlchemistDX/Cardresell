@@ -1,6 +1,7 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
+import { limitingFactorContradicts } from './_limitingFactor.js';
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { observeProviderAttempt } from './_providerUsage.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
@@ -2432,29 +2433,19 @@ Respond ONLY with valid JSON, no explanation:
       // boring-but-true than something confidently wrong.
       let reconciledLimitingFactor = cardInfo.limiting_factor || '';
       {
-        const lf = String(reconciledLimitingFactor).toLowerCase();
-        // Look for a grade number the prose is claiming, in patterns like
-        //   "caps at PSA 6" / "psa 6 centering" / "projects as a 7" / "a psa 8"
-        const claim = lf.match(/caps at psa\s*(\d{1,2})/i)
-                   || lf.match(/psa\s*(\d{1,2})\s*centering/i)
-                   || lf.match(/projects?\s+as\s+(?:a\s+)?psa\s*(\d{1,2})/i)
-                   || lf.match(/\ba\s+psa\s*(\d{1,2})\b/i);
-        const claimedGrade = claim ? parseInt(claim[1], 10) : null;
         const worstAxis = (() => {
           const a = parseRatio(finalCenteringLR);
           const b = parseRatio(finalCenteringTB);
           return (a != null && b != null) ? Math.max(a, b) : (a ?? b);
         })();
         const truCeil = centeringCeilingFromRatio(worstAxis);
-        // Prose is lying if:
-        //  • It names a grade that's LOWER than what the numbers support, OR
-        //  • It contradicts our final psa_estimate by more than 1 grade.
-        const proseIsLying =
-          (claimedGrade != null && truCeil != null && claimedGrade < truCeil) ||
-          (claimedGrade != null && psaEstimate != null && Math.abs(claimedGrade - psaEstimate) >= 2);
+        // Prose is lying if a CENTERING-attributed cap is below the measured
+        // centering ceiling, or any claimed grade is 2+ away from psa_estimate.
+        // Defect-driven caps (creases, whitening, dents) keep the model's text.
+        const { contradicts: proseIsLying, claimedGrade } =
+          limitingFactorContradicts(reconciledLimitingFactor, { centeringCeiling: truCeil, psaEstimate });
         if (proseIsLying) {
           console.warn('[scan] limiting_factor prose contradicts measured centering — rewriting:', {
-            model_said: reconciledLimitingFactor,
             claimed_grade: claimedGrade,
             measured_ceiling: truCeil,
             psa_estimate: psaEstimate,
