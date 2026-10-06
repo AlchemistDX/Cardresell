@@ -13,3 +13,9 @@ Source plan: CardResell-Scan-Accuracy-and-Photo-Assistant-Plan-2026-10-06.
 
 - Grading photos are compressed to a 1000 px long edge in the client; ID uses 1200 px. Raising this blindly risks the Vercel 4.5 MB request body limit (Deep Grade sends up to 6 images as base64 JSON). Proper fix = direct private upload of originals (expiring), then server-side delivery renditions. Ximilar recommends ≥2000 px short side for grading.
 - Deep Grade still bills normally when the CV step fails and GPT pillars are used. Policy decision needed (partial refund or explicit "CV unavailable" disclosure).
+
+## Live Deep Grade acceptance (2026-10-06 16:17–16:22Z, willsep202, Seize the Spoils SOS #129)
+
+- Ximilar async grader worked live: `card_grade deep_grade success http=201` in 37.4 s (second scan), result rendered "CV-VERIFIED". GPT (gpt-6.1-sol) 14.7 s, 9,523 prompt / 559 completion tokens (~$0.025 at list). Ximilar identify 1.7 s.
+- Fresh card → PSA 7 (Ximilar T/B 66/34 centering ceiling); bent card → PSA 3. Same card measured T/B 66/34 then 60/40 across the two sessions: centering from angled 1000 px phone photos is noisy; do not market it as precise.
+- Bugs found and fixed: grade label stayed "Mint" on a server-lowered PSA 7; limiting factor still explained the model's pre-correction grade; grading-upside priced a name-only PriceCharting match (Secret Lair foil #2556, $4.97) instead of SOS #129 (~$0.40) because it ignored the grade response's set/number; "View PSA 1 price" on a PSA 3. Server now refuses to call a name-only TCG match "exact product match" (cache v10).

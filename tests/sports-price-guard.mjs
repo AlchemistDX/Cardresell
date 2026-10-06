@@ -135,7 +135,7 @@ const hostChecks = [
   // current version AND that every superseded one is absent, so the check
   // still catches a missing bump but survives a legitimate one.
   ['cache key bumped past v6',
-   /const cacheKey = `v9\|/.test(src) && !/const cacheKey = `v[1-8]\|/.test(src)],
+   /const cacheKey = `v10\|/.test(src) && !/const cacheKey = `v[1-9]\|/.test(src)],
   ['parallel is part of the cache key',
    /const cacheKey = `v\d+\|[^`]*\$\{parallel\}/.test(src)],
   // The identity guard reaches the response path at all.

@@ -2,6 +2,15 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
 import { limitingFactorContradicts } from './_limitingFactor.js';
+// PSA's published label for each whole grade. The label must follow the FINAL
+// server grade, not the model's pre-correction grade ("Mint" on a PSA 7).
+const PSA_GRADE_LABELS = { 10: 'Gem Mint', 9: 'Mint', 8: 'Near Mint-Mint', 7: 'Near Mint', 6: 'Excellent-Mint',
+  5: 'Excellent', 4: 'Very Good-Excellent', 3: 'Very Good', 2: 'Good', 1: 'Poor' };
+function gradeLabelFor(grade) {
+  if (grade == null || grade === '') return '';
+  const n = Math.floor(Number(grade));
+  return Number.isFinite(n) ? (PSA_GRADE_LABELS[Math.max(1, Math.min(10, n))] || '') : '';
+}
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { observeProviderAttempt } from './_providerUsage.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
@@ -2445,8 +2454,15 @@ Respond ONLY with valid JSON, no explanation:
         // Prose is lying if a CENTERING-attributed cap is below the measured
         // centering ceiling, or any claimed grade is 2+ away from psa_estimate.
         // Defect-driven caps (creases, whitening, dents) keep the model's text.
-        const { contradicts: proseIsLying, claimedGrade } =
+        const { contradicts: proseContradicts, claimedGrade } =
           limitingFactorContradicts(reconciledLimitingFactor, { centeringCeiling: truCeil, psaEstimate });
+        // 2026-10-06: when the server's centering ceiling lowered the model's
+        // grade (e.g. Ximilar T/B 66/34 -> PSA 7 while the model said 9), the
+        // model's prose explains the OLD grade. Say what actually limited it.
+        const modelPsa = clampSub(cardInfo.psa_estimate) == null ? null : Math.round(clampSub(cardInfo.psa_estimate));
+        const centeringLowered = modelPsa != null && psaEstimate != null && truCeil != null
+          && psaEstimate === truCeil && modelPsa > psaEstimate;
+        const proseIsLying = proseContradicts || centeringLowered;
         // Only Ximilar's CV output is a pixel measurement; GPT values are estimates.
         const centeringWord = cvSource === 'ximilar' ? 'Measured' : 'Estimated';
         if (proseIsLying) {
@@ -2543,7 +2559,7 @@ Respond ONLY with valid JSON, no explanation:
         psa_estimate:      psaEstimate ?? cardInfo.psa_estimate ?? null,
         psa_distribution:  distArray,
         limiting_factor:   reconciledLimitingFactor,
-        grade_label:       cardInfo.grade_label   || '',
+        grade_label:       gradeLabelFor(psaEstimate ?? cardInfo.psa_estimate) || cardInfo.grade_label || '',
         grade_notes:       cardInfo.grade_notes   || reconciledLimitingFactor || '',
 
         // Eye appeal (new PSA-aligned judgment layer)

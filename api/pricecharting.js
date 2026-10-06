@@ -513,7 +513,8 @@ export default async function handler(req, res) {
   // changes do not invalidate KV on their own -- the key must move with them.
   // v8 (2026-09-04): identity guard changes WHICH product may be priced, so
   // every v7 entry that admitted a mismatched card must be invalidated.
-  const cacheKey = `v9|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
+  // v10 (2026-10-06): name-only TCG matches are no longer 'exact product match'.
+  const cacheKey = `v10|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
@@ -857,9 +858,14 @@ export default async function handler(req, res) {
       if (prices[k] != null) { picked = prices[k]; pickedKey = k; break; }
     }
 
+    // 2026-10-06: a TCG name alone does not identify a printing (reprints,
+    // Secret Lair, promos share names). Only a matched collector number, an
+    // explicit pcid, or the sports facet path counts as an exact match.
+    const printingConfirmed = !!pcid || game === 'sports' || !!number;
     const { confidence, confidenceScore, confidenceReasons } = confidenceForPc({
-      hasExactMatch: true, priceFound: picked != null, gameMatches: gameOk,
+      hasExactMatch: printingConfirmed, priceFound: picked != null, gameMatches: gameOk,
     });
+    if (!printingConfirmed && picked != null) confidenceReasons.push('printing not confirmed (no collector number)');
 
     if (picked == null) {
       const data = {
@@ -886,7 +892,7 @@ export default async function handler(req, res) {
       // does not list the card.
       source: game === 'sports' ? 'sportscardspro' : 'pricecharting',
       productId: pc.id, productName: pc['product-name'],
-      consoleName: pc['console-name'], matchedPriceKey: pickedKey,
+      consoleName: pc['console-name'], matchedPriceKey: pickedKey, printingConfirmed,
       parallel: pcParallelOf(pc['product-name']),
       url: `https://www.pricecharting.com/game/${encodeURIComponent(pc.id)}`,
       prices, // all grade tiers, so the client can render "Raw $12 · PSA 9 $45 · PSA 10 $180"
