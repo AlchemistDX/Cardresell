@@ -42,6 +42,9 @@ try {
   assert.equal(observations.at(-1).operation, 'sport_id');
   assert.equal(observations.at(-1).mode, 'grade');
   assert.equal(observations.at(-1).outcome, 'success');
+  // Grading is an async job (sync endpoint retired); a job already DONE at submit needs no poll.
+  globalThis.fetch = async url => ({ ok: true, status: 200, json: async () => (String(url).includes('/account/v2/request/')
+    ? { id: 'job-fixture-0001', status: 'DONE', response: { records: [{ grades: { final: 9, corners: 9 } }] } } : {}) });
   assert.equal((await gradeWithXimilar(['front', 'back', 'ignored'], 'image/jpeg', 'fixture', 'deep_grade')).grades.final, 9);
   assert.equal(observations.at(-1).input_images, 2);
   assert.equal(observations.at(-1).mode, 'deep_grade');

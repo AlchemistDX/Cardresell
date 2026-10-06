@@ -1153,7 +1153,7 @@ export default async function handler(req, res) {
         scan_id: scanId,
         identified: false,
         confidence: 'low',
-        image_quality: 'ok',
+        image_quality: 'unknown',
         glare_regions: [],
         retake_hint: 'We couldn\u2019t identify this card. It may be a custom/proxy card, out-of-focus, or a very new release. Try a sharper photo with the full card visible.',
         card_name: '',
@@ -1301,7 +1301,7 @@ export default async function handler(req, res) {
           ...confirmation,
           success: true, mode: 'identify', needsPicker: true,
           confidence: 'medium', candidates: cleanCandidates,
-          image_quality: 'ok', glare_regions: [], retake_hint: '',
+          image_quality: 'unknown', glare_regions: [], retake_hint: '',
           card_name: cardInfo.card_name, card_number: cardInfo.card_number,
           set_name: cardInfo.set_name, set_code: cardInfo.set_code,
           grounded: true, grounded_id: cardInfo.grounded_id || cardInfo._grounded_id,
@@ -1324,7 +1324,7 @@ export default async function handler(req, res) {
             id_receipt: idContext.receipt,
             card_name: cardInfo.card_name, card_number: cardInfo.card_number,
             set_name: cardInfo.set_name, confidence: idConfNorm,
-            image_quality: 'ok', created_at: Date.now(), source: 'ximilar',
+            image_quality: 'unknown', created_at: Date.now(), source: 'ximilar',
           };
           if (membershipV2) await publishMembershipScan(billingContext, record);
           else await setKVWithTTL(kvUrl, kvToken, `scan:${scanId}`, JSON.stringify(record), 3600);
@@ -1335,7 +1335,7 @@ export default async function handler(req, res) {
       const finalConfNorm = cardInfo.confidence || idConfNorm;
       return res.status(200).json({
         success: true, mode: 'identify', scan_id: scanId,
-        confidence: finalConfNorm, image_quality: 'ok',
+        confidence: finalConfNorm, image_quality: 'unknown',
         glare_regions: [], retake_hint: '',
         card_name: cardInfo.card_name, card_number: cardInfo.card_number,
         set_name: cardInfo.set_name, set_code: cardInfo.set_code,
@@ -1402,18 +1402,20 @@ card. If you undergrade, they miss a real PSA 10 payday. Either error
 costs them money. They do not want to be flattered. They want the truth.
 
 Brutal honesty > polite hedging. If you cannot see the corners because
-of holder glare, say so and CAP the grade — do NOT hand out a Gem Mint
-verdict on a card whose corners you cannot inspect. If the photos are
-blurry, sleeved, glared, or otherwise compromised, your confidence MUST
-be "low" and your psa_estimate MUST reflect the WORST-case reasonable
-interpretation of what you can see, not the best-case.
+of holder glare, say so — do NOT hand out a Gem Mint verdict on a card
+whose corners you cannot inspect. If the photos are blurry, sleeved,
+glared, or otherwise compromised, your confidence MUST be "low", name the
+region you cannot inspect, and ask for a retake of that photo.
+CANNOT INSPECT IS NOT DAMAGE: grade only from defects you actually see.
+A blurry or glared corner is "not verifiable", never "worn". Never invent
+whitening, chipping or scratches to fill a region you could not see.
 
 BEFORE grading, understand these realities:
-- PSA 10 (Gem Mint) is rare (~5–10% of modern submissions) but NOT impossible. Do not artificially demote a card that meets the published thresholds AND you can fully inspect.
+- PSA 10 (Gem Mint) is uncommon but NOT impossible. Do not artificially demote a card that meets the published thresholds AND you can fully inspect.
 - Be STRICT but ACCURATE. Under-grading a card that meets PSA 10 criteria under clear photos is just as wrong as over-grading a damaged one.
 - Use the OFFICIAL PSA centering thresholds below. Do NOT invent stricter thresholds. 55/45 front is the PSA 10 threshold — not a defect.
 - Modern cards are graded MORE strictly than vintage (pre-1980). Vintage tolerates print defects, factory miscuts, and wax staining that would sink a modern card.
-- If the image quality is poor or you cannot clearly see the card, lower confidence AND lower the grade — do not just add a note.
+- If the image quality is poor or you cannot clearly see the card, lower confidence and say which photo to retake — do not lower the grade for defects you cannot see, and do not just add a note.
 
 ═══ THROUGH-PLASTIC PENALTY (mandatory) ═══
 If the card is in a sleeve, toploader, top-loader, one-touch, magnetic
@@ -1422,9 +1424,10 @@ BGS/SGC/TAG) — in other words, if you can see plastic between the
 camera and the card:
   • confidence MUST be "low" (never "medium", never "high")
   • "holder_glare" OR "reflective_sleeve" MUST appear in confidence_drivers
-  • psa_estimate is CAPPED at 8 unless the card is in a fresh raw pack pull
-    quality state clearly visible through the plastic AND you can rule out
-    corner whitening / edge chipping / surface scratches
+  • psa_estimate reflects only defects you can actually SEE through the
+    plastic; it may NOT be 10 (Gem Mint cannot be verified through plastic).
+    Do not lower it for regions the plastic hides — those are "not
+    verifiable" and belong in limiting_factor, not in the grade
   • If it's a SLAB (rigid case with printed label): psa_estimate reflects
     what YOU can see raw — do NOT trust the printed grade on the label;
     it's not what the user is asking about
@@ -1461,9 +1464,9 @@ camera and the card:
   psa_estimate=10. Those two must always agree.
 
 ═══ PSA 10 CALIBRATION (do not swing to the other extreme) ═══
-Being brutally honest ≠ defaulting to 8. PSA 10 is rare but real —
-approximately 5–10% of modern submissions grade a 10, higher on
-popular pack-fresh chase cards. A raw card that passes ALL of the
+Being brutally honest ≠ defaulting to 8. PSA 10 is uncommon but real.
+Do not use an assumed population rate as evidence for or against a 10;
+grade the card in the photos. A raw card that passes ALL of the
 following SHOULD be a PSA 10 candidate:
   • 55/45 or better on BOTH axes
   • four perfectly sharp corners under close inspection
@@ -2142,7 +2145,7 @@ Respond ONLY with valid JSON, no explanation:
         !!(cardInfo?.slabbed    === true);
 
       // ── COST GATE ──
-      // Ximilar /card-grader/v2/grade = 100 credits ≈ $0.109 per call on the
+      // Ximilar card-grader async job (endpoint grade) = 100 credits ≈ $0.109 per call on the
       // 100k plan. At $0.10/credit user pricing:
       //   Quick Grade (1 credit) → -9% margin (LOSES money)
       //   Deep Grade  (2 credits) → +46% margin
@@ -2353,13 +2356,13 @@ Respond ONLY with valid JSON, no explanation:
         confidence = 'low';
         // Force worth_grading to false — through plastic is not actionable.
         cardInfo.worth_grading = false;
-        // Cap psa_estimate at 8 (Excellent-Mint) — anything higher is
-        // dishonest when we can't see the card cleanly.
-        if (psaEstimate != null && psaEstimate > 8) {
-          console.warn('[scan] through-plastic cap applied to psa_estimate:', {
-            was: psaEstimate, capped: 8,
-          });
-          psaEstimate = 8;
+        // 2026-10-06: plastic hides evidence; it is not evidence of damage.
+        // Gem Mint cannot be verified through plastic, so 10 is not allowed,
+        // but a 9 is no longer forced down to 8. Confidence stays low and
+        // worth_grading false (re-scan raw before paying fees).
+        if (psaEstimate != null && psaEstimate > 9) {
+          console.warn('[scan] through-plastic: Gem Mint unverifiable, psa_estimate 10 -> 9');
+          psaEstimate = 9;
         }
         // Force grade_label consistency with the cap.
         if (psaEstimate != null && psaEstimate < 10 && cardInfo.grade_label === 'Gem Mint') {
@@ -2444,6 +2447,8 @@ Respond ONLY with valid JSON, no explanation:
         // Defect-driven caps (creases, whitening, dents) keep the model's text.
         const { contradicts: proseIsLying, claimedGrade } =
           limitingFactorContradicts(reconciledLimitingFactor, { centeringCeiling: truCeil, psaEstimate });
+        // Only Ximilar's CV output is a pixel measurement; GPT values are estimates.
+        const centeringWord = cvSource === 'ximilar' ? 'Measured' : 'Estimated';
         if (proseIsLying) {
           console.warn('[scan] limiting_factor prose contradicts measured centering — rewriting:', {
             claimed_grade: claimedGrade,
@@ -2452,11 +2457,11 @@ Respond ONLY with valid JSON, no explanation:
             lr: finalCenteringLR, tb: finalCenteringTB,
           });
           if (psaEstimate === 10) {
-            reconciledLimitingFactor = `Measured centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) qualifies for PSA 10. Corners, edges, and surface show no observable defects in the photos provided.`;
+            reconciledLimitingFactor = `${centeringWord} centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) qualifies for PSA 10. Corners, edges, and surface show no observable defects in the photos provided.`;
           } else if (psaEstimate != null && truCeil != null && psaEstimate === truCeil) {
-            reconciledLimitingFactor = `Measured centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) caps the front-centering grade at PSA ${truCeil}. The next grade up would require tighter centering.`;
+            reconciledLimitingFactor = `${centeringWord} centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) caps the front-centering grade at PSA ${truCeil}. The next grade up would require tighter centering.`;
           } else if (psaEstimate != null) {
-            reconciledLimitingFactor = `Measured centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) allows up to PSA ${truCeil ?? psaEstimate}. Final estimate is PSA ${psaEstimate} — review the pillar notes for the specific defect blocking a higher grade.`;
+            reconciledLimitingFactor = `${centeringWord} centering (${finalCenteringLR || '?'} L/R, ${finalCenteringTB || '?'} T/B) allows up to PSA ${truCeil ?? psaEstimate}. Final estimate is PSA ${psaEstimate} — review the pillar notes for the specific defect blocking a higher grade.`;
           }
         }
       }
@@ -2556,6 +2561,7 @@ Respond ONLY with valid JSON, no explanation:
         confidence,
         confidence_drivers: confidenceDrivers,
         cv_source:     cvSource,     // 'ximilar' or 'gpt'
+        centering_source: cvSource === 'ximilar' ? 'measured' : 'model_estimated',
         cv_grader:     cvGrader,     // { condition, final, corners[], edges[] } when ximilar succeeded
         // Grading standard disclosure — aligned to OFFICIAL PSA thresholds now.
         grading_standard: cvSource === 'ximilar'
@@ -2613,7 +2619,7 @@ Respond ONLY with valid JSON, no explanation:
         needsPicker:  true,
         confidence:   idConfNorm,
         candidates:   cleanCandidates,
-        image_quality: cardInfo.image_quality || 'ok',
+        image_quality: cardInfo.image_quality || 'unknown',
         glare_regions: Array.isArray(cardInfo.glare_regions) ? cardInfo.glare_regions : [],
         retake_hint:   cardInfo.retake_hint || '',
         // Also include the top guess for UI convenience.
@@ -2651,7 +2657,7 @@ Respond ONLY with valid JSON, no explanation:
           card_number:    cardInfo.card_number || '',
           set_name:       cardInfo.set_name    || '',
           confidence:     idConfNorm || 'high',
-          image_quality:  cardInfo.image_quality || 'ok',
+          image_quality:  cardInfo.image_quality || 'unknown',
           created_at:     Date.now(),
         };
         // 1-hour TTL: refunds must happen within the same session
@@ -2664,7 +2670,7 @@ Respond ONLY with valid JSON, no explanation:
       mode:        'identify',
       scan_id:     scanId,
       confidence:  idConfNorm || 'high',
-      image_quality: cardInfo.image_quality || 'ok',
+      image_quality: cardInfo.image_quality || 'unknown',
       glare_regions: Array.isArray(cardInfo.glare_regions) ? cardInfo.glare_regions : [],
       retake_hint:   cardInfo.retake_hint || '',
       card_name:   cardInfo.card_name   || '',

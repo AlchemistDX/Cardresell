@@ -1,12 +1,12 @@
 import { observeProviderAttempt } from './_providerUsage.js';
-// _ximilar_grade.js — Ximilar Card Grader wrapper (sync endpoint).
+// _ximilar_grade.js — Ximilar Card Grader wrapper (async job API).
 //
 // Purpose: get pixel-measured centering + per-corner + per-edge + surface
 // grades from Ximilar's purpose-built AI grader. This replaces GPT-5's
 // eyeball-estimated pillar scores with real computer-vision measurements.
 //
-// Endpoint (sync, no polling required):
-//   POST https://api.ximilar.com/card-grader/v2/grade
+// Endpoint (async job; the old sync card-grader/v2/grade is retired):
+//   POST https://api.ximilar.com/account/v2/request/  then  GET .../request/<id>
 //
 // Docs: https://docs.ximilar.com/collectibles/card-grading
 // Auth: Authorization: Token <api_key>
@@ -24,7 +24,7 @@ import { observeProviderAttempt } from './_providerUsage.js';
 // average (70% front / 30% back).
 
 /**
- * Grade a card via Ximilar's sync grader.
+ * Grade a card via Ximilar's asynchronous grading job.
  * @param {string|string[]} imagesBase64  one image or [front, back] as base64 (no data: prefix)
  * @param {string} mime                    'image/jpeg' etc
  * @param {string} apiToken                Ximilar API token
@@ -51,43 +51,87 @@ export async function gradeWithXimilar(imagesBase64, mime, apiToken, mode = 'gra
     observe => grade(imgs, apiToken, observe));
 }
 
-async function grade(imgs, apiToken, observe) {
+// Ximilar retired the synchronous card-grader endpoints; grading is now an
+// asynchronous job: POST /account/v2/request/ (type card-grader, endpoint
+// grade, <=2 records) then GET /account/v2/request/<id> until DONE.
+// Docs: https://docs.ximilar.com/collectibles/card-grading (checked 2026-10-06).
+//
+// One end-to-end budget bounds submit + every poll, including body reads.
+// The job is submitted exactly once per call: a lost/ambiguous submit is NOT
+// retried (that could pay for a second job). Polls never resubmit.
+export const XIMILAR_ASYNC_SUBMIT_URL = 'https://api.ximilar.com/account/v2/request/';
+const DEFAULT_BUDGET_MS = 55000;
+const REQUEST_TIMEOUT_MS = 12000;
+const FIRST_POLL_DELAY_MS = 6000;
+const POLL_INTERVAL_MS = 2500;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // Ximilar sync grader limit: max 2 records (front + back)
-  const records = imgs.slice(0, 2).map((b64, idx) => ({
-    _base64: b64,
-    side: idx === 0 ? 'front' : 'back',
-  }));
-
-  const url = 'https://api.ximilar.com/card-grader/v2/grade';
-  let resp, timeoutId;
+async function timedJson(url, init, msLeft, fetchImpl) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), Math.max(1, Math.min(REQUEST_TIMEOUT_MS, msLeft)));
   try {
-    const ac = new AbortController();
-    timeoutId = setTimeout(() => ac.abort(), 30000); // grader is slower than ID (~3-8s)
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${apiToken}`,
-      },
-      body: JSON.stringify({ records }),
-      signal: ac.signal,
-    });
-  } catch(e) {
-    return { ok: false, reason: e.name === 'AbortError' ? 'timeout' : 'network_error', error: e.message };
-  } finally {
-    clearTimeout(timeoutId);
+    const resp = await fetchImpl(url, { ...init, signal: ac.signal });
+    let data = null, parseError = false;
+    try { data = await resp.json(); } catch (e) {
+      // A body that stalls past the deadline is a timeout, not a bad payload.
+      if (ac.signal.aborted) throw Object.assign(new Error('body timeout'), { name: 'AbortError' });
+      parseError = true;
+    }
+    return { status: resp.status, ok: resp.ok, data, parseError };
+  } finally { clearTimeout(t); }
+}
+
+export async function gradeAsync(imgs, apiToken, observe = () => {}, opts = {}) {
+  const fetchImpl = opts.fetch || fetch;
+  const now = opts.now || Date.now;
+  const wait = opts.sleep || sleep;
+  const deadline = now() + (opts.budgetMs || DEFAULT_BUDGET_MS);
+  const left = () => deadline - now();
+  const headers = { 'Content-Type': 'application/json', 'Authorization': `Token ${apiToken}` };
+  const records = imgs.slice(0, 2).map((b64, idx) => ({ _base64: b64, Side: idx === 0 ? 'Front' : 'Back' }));
+
+  let submitted;
+  try {
+    submitted = await timedJson(XIMILAR_ASYNC_SUBMIT_URL, { method: 'POST', headers,
+      body: JSON.stringify({ type: 'card-grader', endpoint: 'grade', records }) }, left(), fetchImpl);
+  } catch (e) {
+    // Ambiguous: Ximilar may have accepted the job. Do not resubmit.
+    return { ok: false, reason: e?.name === 'AbortError' ? 'submit_timeout_ambiguous' : 'network_error' };
   }
-
-  observe({ status: resp.status });
-  if (!resp.ok) {
-    return { ok: false, reason: `http_${resp.status}`, error: await resp.text().catch(() => '') };
+  observe({ status: submitted.status });
+  if (!submitted.ok) return { ok: false, reason: `http_${submitted.status}` };
+  const jobId = submitted.data?.id;
+  if (submitted.parseError || typeof jobId !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(jobId)) {
+    return { ok: false, reason: 'submit_malformed' };
   }
+  console.log('[scan] ximilar-grader job submitted', jobId);
 
-  let data;
-  try { data = await resp.json(); }
-  catch(e) { return { ok: false, reason: 'parse_error', error: e.message }; }
+  let status = submitted.data?.status || 'CREATED', job = submitted.data, polls = 0;
+  if (status !== 'DONE') await wait(Math.min(FIRST_POLL_DELAY_MS, Math.max(0, left() - 1000)));
+  while (status !== 'DONE') {
+    if (!['CREATED', 'PROCESSING', 'PENDING', 'QUEUED'].includes(status)) {
+      return { ok: false, reason: 'job_failed', jobId, jobStatus: String(status).slice(0, 24) };
+    }
+    if (left() < 1500) return { ok: false, reason: 'job_timeout', jobId, polls };
+    polls++;
+    let polled;
+    try {
+      polled = await timedJson(XIMILAR_ASYNC_SUBMIT_URL + encodeURIComponent(jobId), { method: 'GET', headers }, left(), fetchImpl);
+    } catch { polled = null; } // transient poll failure: keep polling within budget
+    if (polled?.ok && !polled.parseError && polled.data) { job = polled.data; status = job.status; }
+    else if (polled && [401, 403, 404].includes(polled.status)) return { ok: false, reason: `poll_http_${polled.status}`, jobId };
+    if (status !== 'DONE') await wait(Math.min(POLL_INTERVAL_MS, Math.max(0, left() - 1000)));
+  }
+  const data = job?.response;
+  return { ...parseGradeResponse(data), jobId, polls };
+}
 
+async function grade(imgs, apiToken, observe) {
+  return gradeAsync(imgs, apiToken, observe);
+}
+
+// Record shape is unchanged from the documented grade endpoint example.
+export function parseGradeResponse(data) {
   const rec = data?.records?.[0];
   if (!rec || rec._status?.code >= 400) {
     return { ok: false, reason: 'no_card_detected', raw: data };
