@@ -15,6 +15,12 @@ const pg = js.match(/const psaGrade = ([^;]+);/)[1];
 const f = new Function('psa', `return ${pg};`);
 check('PSA 3 button says 3', f(3) === 3);
 check('PSA 9.5 stays 9, 10 stays 10, junk -> 1', f(9.5) === 9 && f(10) === 10 && f(undefined) === 1 && f(12) === 10);
+check('client reports actual server charge, including 0', js.includes('Number.isInteger(data.creditsUsed) ? data.creditsUsed : (isDeep ? 2 : 1)'));
+check('client labels CV-unavailable Deep Grade as a Quick Grade result', js.includes("const cvDowngraded = isDeep && data.cv_downgraded === true;")
+  && js.includes('QUICK GRADE RESULT \\u00B7 DEEP CV UNAVAILABLE'));
+check('CV badge claims only that the step completed', js.includes('CV-VERIFIED \\u00B7 COMPUTER-VISION STEP COMPLETED')
+  && !js.includes('PIXEL-MEASURED GRADING') && js.includes('not a guarantee of the grade'));
+check('Deep Grade picker discloses the fallback billing', idx.includes("if that step can't finish, it's billed as a Quick Grade (1 credit)") && !idx.includes('edge dings Quick misses'));
 const pc = readFileSync(new URL('../api/pricecharting.js', import.meta.url), 'utf8');
 check('server: name-only TCG not exact match', pc.includes("const printingConfirmed = !!pcid || game === 'sports' || !!number;")
   && pc.includes('hasExactMatch: printingConfirmed'));

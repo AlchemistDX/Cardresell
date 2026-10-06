@@ -135,7 +135,13 @@ await t.section('normal Grade and deep Grade use versioned debit, publication an
     t.check('Grade authority published with explicit mode', gradeRecord.mode === 'grade' && gradeRecord.consumed_amount === 1);
     await redis(['SET', `scans:${UID}:paid_left`, '2']);
     const photos = { imageBase64: 'A'.repeat(9000), backBase64: 'B'.repeat(9000), topEdgeBase64: 'C'.repeat(9000), bottomEdgeBase64: 'D'.repeat(9000) };
+    // A completed CV step is what Deep Grade's second credit pays for.
+    process.env.ENABLE_XIMILAR_GRADER = 'deep_only';
+    globalThis.__XIMILAR_GRADE = async () => ({ ok: true, grades: { centering: 9, corners: 9, edges: 9, surface: 9,
+      final: 9, condition: 'Mint' }, cv: {} });
     const deep = await h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos });
+    delete globalThis.__XIMILAR_GRADE; delete process.env.ENABLE_XIMILAR_GRADER;
+    t.check('CV-completed deep Grade is not downgraded', deep.payload.cv_downgraded === false && deep.payload.cv_source === 'ximilar');
     t.check('normal deep Grade costs two purchased without monthly rollover', deep.statusCode === 200 && deep.payload.creditsUsed === 2
       && await redis(['GET', `scans:${UID}:paid_left`]) === '0');
     const callsBefore = providerCalls;
@@ -181,6 +187,66 @@ await t.section('normal Grade and deep Grade use versioned debit, publication an
       paidBulk.statusCode === 200 && paidBulk.payload.creditsUsed === 1
       && await redis(['GET', `scans:${UID}:paid_left`]) === '0');
   } finally { finish(h); }
+});
+
+await t.section('Deep Grade without completed CV is billed as Quick; no assessment refunds both', async () => {
+  const h = billingHarness({ balance: 0 });
+  const localFetch = globalThis.fetch;
+  try {
+    await seed();
+    process.env.OPENAI_API_KEY = 'local-placeholder-not-a-credential';
+    process.env.ENABLE_XIMILAR_GRADER = 'deep_only';
+    let gptOk = true;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).startsWith('https://api.openai.com/')) {
+        if (!gptOk) return new Response('upstream', { status: 500 });
+        return Response.json({ choices: [{ message: { content: JSON.stringify({
+          card_name: 'Synthetic Grade', centering: '55/45 L/R, 50/50 T/B', corners: 'Near Mint', edges: 'Mint',
+          surface: 'Mint', psa_estimate: 9, grade_label: 'Mint', grade_notes: 'Synthetic', worth_grading: true,
+          subgrades: { centering: 9, corners: 8.5, edges: 9.5, surface: 9.5 }, confidence: 'high',
+        }) } }] });
+      }
+      return localFetch(input, init);
+    };
+    const photos = { imageBase64: 'A'.repeat(9000), backBase64: 'B'.repeat(9000), topEdgeBase64: 'C'.repeat(9000), bottomEdgeBase64: 'D'.repeat(9000) };
+    // Exhaust monthly grade so only purchased credits move.
+    await h.scan(exact(), { mode: 'grade', backBase64: 'back' });
+    await redis(['SET', `scans:${UID}:paid_left`, '2']);
+    globalThis.__XIMILAR_GRADE = async () => ({ ok: false, reason: 'timeout' });
+    const before = await balance('grade');
+    const down = await h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos });
+    t.check('CV failure still delivers the assessment', down.statusCode === 200 && down.payload.mode === 'grade');
+    t.check('CV failure is labelled downgraded, not CV-verified', down.payload.cv_downgraded === true && down.payload.cv_source === 'gpt');
+    t.check('CV failure charges exactly one credit and reports one refunded',
+      down.payload.creditsUsed === 1 && down.payload.credits_refunded === 1
+      && await redis(['GET', `scans:${UID}:paid_left`]) === '1', JSON.stringify({ u: down.payload.creditsUsed, p: await redis(['GET', `scans:${UID}:paid_left`]) }));
+    const after = await balance('grade');
+    t.check('no other bucket moved', after.monthly === before.monthly && after.welcome === before.welcome);
+    const journals = await Promise.all((await redis(['KEYS', membershipReceiptKey('0'.repeat(64)).replace(/0{64}$/, '*')]))
+      .map(async k => JSON.parse(await redis(['GET', k]))));
+    const deepOps = journals.filter(j => j && j.mode === 'grade' && j.cost === 2);
+    const quickOps = journals.filter(j => j && j.mode === 'grade' && j.cost === 1 && j.scan === down.payload.analysis_id);
+    t.check('2-credit operation refunded exactly once', deepOps.length === 1 && deepOps[0].state === 'refunded');
+    t.check('replacement 1-credit operation debited', quickOps.length === 1 && quickOps[0].state === 'debited');
+    // Flag off: Deep Grade cannot run CV at all, so it is also a Quick equivalent.
+    delete process.env.ENABLE_XIMILAR_GRADER; delete globalThis.__XIMILAR_GRADE;
+    await redis(['SET', `scans:${UID}:paid_left`, '2']);
+    const off = await h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos });
+    t.check('CV unavailable by configuration is never billed as Deep', off.statusCode === 200 && off.payload.cv_downgraded === true
+      && off.payload.creditsUsed === 1 && await redis(['GET', `scans:${UID}:paid_left`]) === '1');
+    // No usable assessment: both credits come back.
+    process.env.ENABLE_XIMILAR_GRADER = 'deep_only';
+    globalThis.__XIMILAR_GRADE = async () => ({ ok: false, reason: 'timeout' });
+    gptOk = false;
+    await redis(['SET', `scans:${UID}:paid_left`, '2']);
+    const failed = await h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos });
+    t.check('no usable assessment refunds both credits', failed.statusCode >= 400
+      && await redis(['GET', `scans:${UID}:paid_left`]) === '2', String(failed.statusCode));
+  } finally {
+    globalThis.fetch = localFetch;
+    delete globalThis.__XIMILAR_GRADE; delete process.env.ENABLE_XIMILAR_GRADER;
+    finish(h);
+  }
 });
 
 await t.section('normal welcome and authenticated read-only balances', async () => {

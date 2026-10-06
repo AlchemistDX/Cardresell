@@ -112,6 +112,17 @@ process.env.STRIPE_SECRET_KEY   = ''; // avoid Stripe fallback path
 // fixtures predate that and mocked OpenAI for identify. The token is only a
 // presence check here; the HTTP call itself is mocked below.
 process.env.XIMILAR_API_TOKEN   = 'mock-ximilar';
+// Deep Grade's CV step is on, as in Production (deep_only). The async grading
+// job below completes unless a test swaps xgradeHandler; a Deep Grade whose CV
+// step does not complete is billed as a Quick Grade (2026-10-06 policy).
+process.env.ENABLE_XIMILAR_GRADER = 'deep_only';
+const cvRecord = { _status: { code: 200 }, grades: { corners: 10, edges: 10, surface: 10, centering: 10, final: 10, condition: 'Gem Mint' },
+  corners: [], edges: [], card: [{ centering: { 'left/right': '55/45', 'top/bottom': '50/50' } }] };
+const xgradeDone = (u, o) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(
+  (o?.method || 'GET') === 'POST' ? { id: 'job-test-0001', status: 'CREATED' }
+    : { id: 'job-test-0001', status: 'DONE', response: { records: [cvRecord] } }) });
+const xgradeFail = () => Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
+let xgradeHandler = xgradeDone;
 
 // Global fetch mock — routed based on URL host
 let currentKV = null;
@@ -167,6 +178,7 @@ function installMocks(kv, openaiFn, ximilarFn = goodXimilar()) {
     // signer's key is the ONLY substitution; the verification itself is real.
     if (signer.isJwksUrl(u))                    return Promise.resolve(signer.jwksResponse());
     if (u.startsWith(process.env.KV_REST_API_URL)) return currentKV.handleRequest(u, options);
+    if (u.includes('ximilar.com/account/v2/request')) return xgradeHandler(u, options);
     if (u.includes('ximilar.com'))              return ximilarHandler(u, options);
     if (u.includes('openai.com'))               return openaiHandler(u, options);
     if (u.includes('stripe.com'))               return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}), text: () => Promise.resolve('') });
@@ -709,6 +721,21 @@ await test('confidence: GPT says low, 6 photos → keeps low (no forced upgrade)
   await handler(req, res);
   restoreFetch();
   assert(res.body.confidence === 'low', 'low preserved even with 6 photos');
+});
+
+await test('legacy deep grade, CV job fails — billed as Quick: 1 credit, flagged downgraded', async () => {
+  const kv = new MockKV({ 'scans:user123:paid_left': '5' });
+  installMocks(kv, goodOpenAI('grade'));
+  xgradeHandler = xgradeFail;
+  try {
+    const req = makeReq(bodyFor({ mode: 'grade', deepGrade: true, hasBack: true, hasEdges: true }), goodToken);
+    const res = makeRes();
+    await handler(req, res);
+    assert(res.statusCode === 200, 'want 200 got ' + res.statusCode);
+    assert(res.body.cv_downgraded === true && res.body.cv_source === 'gpt', 'flagged downgraded');
+    assert(res.body.creditsUsed === 1 && res.body.credits_refunded === 1, 'creditsUsed=1 refunded=1');
+    assert(kv.getInt('scans:user123:paid_left') === 4, `paid_left want 4 got ${kv.getInt('scans:user123:paid_left')}`);
+  } finally { xgradeHandler = xgradeDone; restoreFetch(); }
 });
 
 await test('OpenAI omits subgrades entirely — response has null sub-grades', async () => {

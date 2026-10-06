@@ -884,6 +884,11 @@ export default async function handler(req, res) {
   const idContext = { receipt: scanIntent?.receipt || newIdReceipt(), owner: key, scan: scanId };
   const billingContext = { ...idContext, mode: isIdentifyMode ? 'identify' : 'grade', cost: isIdentifyMode ? 1 : gradeCost,
     bulkGrade: isBulkGrade };
+  // The ledger operation that currently holds this request's grade charge.
+  // A Deep Grade whose CV step does not complete is re-settled as a 1-credit
+  // Quick Grade operation (settleDeepGradeWithoutCv), after which refunds must
+  // target that operation, not the already-refunded 2-credit one.
+  let gradeBillingContext = billingContext;
   let idReservation = false;
   if ((isIdentifyMode || membershipV2) && !hasKV) return idBillingFailure(res);
   // Bulk entitlement is checked independently of retry admission.
@@ -1068,7 +1073,7 @@ export default async function handler(req, res) {
   async function refundCredits() {
     if (!hasKV || !consumedFrom || !consumedAmount) return;
     if (membershipV2) {
-      const result = await membershipBilling('refund', billingContext);
+      const result = await membershipBilling('refund', gradeBillingContext);
       if (!result.ok) throw new Error('billing_reconciliation_required');
       return;
     }
@@ -1087,6 +1092,49 @@ export default async function handler(req, res) {
         await setKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`, Math.max(0, cur - consumedAmount));
       }
     } catch(e) { console.error('Refund error:', e); }
+  }
+
+  // 2026-10-06 owner policy: never charge Deep Grade's 2 credits when its
+  // computer-vision step did not complete. A usable GPT assessment is settled
+  // as a Quick Grade (1 credit); no usable assessment refunds both (the normal
+  // refundCredits path). The ledger refunds whole operations only, so the
+  // 2-credit operation is refunded exactly and a new 1-credit operation is
+  // debited. Any failure or uncertainty on that second debit leaves the user
+  // uncharged -- the error is always in the customer's favour.
+  async function settleDeepGradeWithoutCv() {
+    const out = { charged: consumedAmount, refunded: 0 };
+    if (!hasKV || !consumedFrom || consumedAmount !== 2) return out;
+    if (membershipV2) {
+      const refund = await membershipBilling('refund', gradeBillingContext);
+      if (!refund.ok) throw new Error('billing_reconciliation_required');
+      consumedFrom = null; consumedAmount = 0; out.charged = 0; out.refunded = 2;
+      const quick = { receipt: newIdReceipt(), owner: key, scan: scanId, mode: 'grade', cost: 1,
+        bulkGrade: isBulkGrade };
+      try {
+        const debit = await membershipBilling('debit', quick);
+        if (debit.ok) {
+          gradeBillingContext = quick; consumedFrom = debit.bucket; consumedAmount = 1;
+          out.charged = 1; out.refunded = 1;
+        }
+      } catch {
+        try { await membershipBilling('refund', quick); } catch {
+          console.error('[grade-billing] reconciliation required (deep->quick settle)', quick.receipt);
+        }
+      }
+      return out;
+    }
+    // Legacy counters: return exactly one of the two credits.
+    try {
+      if (consumedFrom === 'paid_left') {
+        await incrByKV(kvUrl, kvToken, `scans:${key}:paid_left`, 1);
+      } else if (consumedFrom === 'free') {
+        const stamp = getMonthStamp();
+        const cur = await getKVInt(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`);
+        await setKV(kvUrl, kvToken, `scans:${key}:free_used_${stamp}`, Math.max(0, cur - 1));
+      } else return out;
+      consumedAmount = 1; out.charged = 1; out.refunded = 1;
+    } catch (e) { console.error('Deep->Quick settle error:', e); }
+    return out;
   }
 
   const openaiKey    = process.env.OPENAI_API_KEY;
@@ -2219,6 +2267,17 @@ Respond ONLY with valid JSON, no explanation:
           console.warn('[scan] ximilar-grader threw, keeping GPT sub-grades:', e?.message || e);
         }
       }
+      // Deep Grade without a completed CV step is a Quick Grade equivalent.
+      let cvDowngrade = null;
+      if (isDeepGrade && cvSource !== 'ximilar') {
+        try {
+          const settled = await settleDeepGradeWithoutCv();
+          cvDowngrade = { credits_charged: settled.charged, credits_refunded: settled.refunded };
+        } catch {
+          return res.status(503).json({ error: 'billing_reconciliation_required',
+            billing_reference: gradeBillingContext.receipt });
+        }
+      }
       // Compute a server-side confidence floor based on how many photos we actually had.
       // GPT can't over-claim: if it says "high" but we only had 2 photos, we downgrade to medium.
       const gptConf = (typeof cardInfo.confidence === 'string')
@@ -2298,10 +2357,9 @@ Respond ONLY with valid JSON, no explanation:
         }
       }
 
-      // Photo-based confidence gets a bump when Ximilar CV grades are available.
-      if (cvSource === 'ximilar' && confidence !== 'high' && totalPhotos >= 2) {
-        confidence = 'medium';
-      }
+      // 2026-10-06: a completed CV step no longer raises 'low' confidence to
+      // 'medium'. CV running does not make blurry or obstructed photos clearer;
+      // the model's low-visibility judgement stands.
 
       // Slab warning gets attached whenever we detected a slab, regardless
       // of which grader (Ximilar or GPT) produced the numbers. It's the
@@ -2493,7 +2551,7 @@ Respond ONLY with valid JSON, no explanation:
       if (edgeImages.length < 4 && isDeepGrade && !confidenceDrivers.includes('limited_edge_visibility')) confidenceDrivers.push('limited_edge_visibility');
       if (confidenceDrivers.length === 0) confidenceDrivers = ['none'];
 
-      if (membershipV2 && consumedFrom) await publishMembershipScan(billingContext, {
+      if (membershipV2 && consumedFrom) await publishMembershipScan(gradeBillingContext, {
         card_name: cardInfo.card_name || '', consumed_from: consumedFrom,
       });
       return res.status(200).json({
@@ -2514,7 +2572,11 @@ Respond ONLY with valid JSON, no explanation:
            claim that does not exist. */
         analysis_id:   scanId,
         deepGrade:     isDeepGrade,
-        creditsUsed:   membershipV2 ? consumedAmount : gradeCost,
+        creditsUsed:   membershipV2 || cvDowngrade ? consumedAmount : gradeCost,
+        // Set when Deep Grade's CV step did not complete: the result is a
+        // Quick Grade equivalent and was billed as one (or not at all).
+        cv_downgraded: cvDowngrade ? true : false,
+        credits_refunded: cvDowngrade ? cvDowngrade.credits_refunded : 0,
         photoCount:    totalPhotos,
         card_name:     cardInfo.card_name     || '',
 
