@@ -18,6 +18,16 @@ Still open before paid advertising:
 4. Ad copy must not claim calibrated grading accuracy or precise "pixel-measured" centering: same card measured T/B 66/34 vs 60/40 across sessions from 1000 px photos.
 5. Recommended, not blocking: higher-resolution grading capture (needs direct upload; 4.5 MB body limit), Ximilar invoice reconciliation, eBay sold comps remain blank (public API shut down).
 
+## Owner decisions and follow-up — October 6, 2026, 16:30 Eastern
+
+Owner policy (2026-10-06): Deep Grade whose CV step does not complete is billed as a Quick Grade (1 credit, 1 refunded) only when a usable assessment completes, clearly labelled; no usable assessment refunds both; never silently charge for unavailable CV. Keep pilot restriction until email path and this policy are accepted live. Ads describe identification and photo-based condition estimates; "CV-verified" means the CV step completed, not that the grade is proven. OpenAI readings are partial cost; Ximilar charges must be reconciled before setting an ad budget. Photo downscaling is a candidate, not established, cause of centering inconsistency.
+
+Shipped: source 8e21efd, Production dpl_EomqWYvHkC2rWZZZePXCjjQxzWVd (live homepage and core.806406cb.js byte-identical; scan GET 405, unauthenticated POST 401). The 2-credit ledger operation is refunded exactly and a new 1-credit operation is debited under the same scan id; failure/uncertainty on that debit leaves the user uncharged. CV completion no longer raises "low" confidence to "medium". Deep Grade picker and result badge wording narrowed. Validation on private Redis: membership-routes 80/0 (CV complete = 2; CV failed = 1 charged + 1 refunded, ledger refunded/debited records; CV disabled = 1; no assessment = both back), test-scan 37/0 (legacy counters), membership-consumption 119/0, membership-ledger 281/0, id-confirmation-atomic 365/0, membership-scan-intent 70/0. Not tested: uncertain second-debit branch. Live acceptance of a CV-failed Deep Grade has not occurred (cannot be induced safely in Production).
+
+Email path trace: every non-owner verification email is Firebase native. Signup calls sendEmailVerification; the six-digit "Send code" route uses Resend's test sender onboarding@resend.dev, which Production logs show returning 403 "testing emails only to your own email" for other recipients (7 requests on Oct 5), after which the client falls back to the Firebase link. The Resend key is accepted at runtime. www.cardresell.org is an authorized Firebase domain.
+
+Inbox acceptance (non-Gmail disposable inbox, 2026-10-06): Firebase signUp + VERIFY_EMAIL with the production continue URL delivered in 5–6 s from noreply@cardresell-e0329.firebaseapp.com; the link verified the account; with a fresh token /api/membership-account moved from 401 authentication_required to 403 membership_access_restricted (pilot gate). Two throwaway Firebase Auth users were created for this test; neither is pilot-listed or holds credits. Gmail/Outlook spam placement is not established. Defect: the email subject/sign-off read "project-107816299392" because the Firebase public-facing project name is unset — fix in Firebase console. A pilot-listed fresh email/password first-run grant is still not accepted live.
+
 ---
 
 # Current checkpoint — October 5, 2026, 16:50 Eastern
