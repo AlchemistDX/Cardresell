@@ -58,3 +58,21 @@ Grade model: `gpt-5-2025-08-07` shuts down 2026-12-11. `api/_gradeModel.js` make
 | gpt-6-luna | $0.0008 | 9–10 s | 3/3 | PSA 7–10, mixed |
 
 This is a compatibility and cost check, not accuracy: digital scans have no true physical grade. Leading candidate: gpt-6.1-sol (same $10/M output as gpt-5, $2 vs $1.25/M input, most honest about missing evidence). Acceptance needs real phone photos of cards with known PSA/CGC/BGS results, front+back, run through both models before switching.
+
+## Known-grade evaluation and Production switch (2026-10-05 ~20:15 EDT)
+
+User supplied phone photos (front+back) of three PSA slabs: Mega Lucario ex MEG 077 (PSA 9), Exeggutor AR M1L 066 JP (PSA 10), Geeta SIR OBF 226 (PSA 9). Photos are not committed. Blind run: card cropped from the slab with the label removed, compressed to 1000 px like the client, shipped Quick Grade prompt, 2 runs per model. As-uploaded run: full slab photos, 1 run.
+
+| | gpt-5 | gpt-6.1-sol | gpt-5.6-terra |
+|---|---|---|---|
+| Blind predictions (18 total) | 8,8 / 8,8 / 8,8 | 8,8 / 8,8 / 8,8 | 8,8 / 8,8 / 8,8 |
+| Exact vs PSA | 0/6 | 0/6 | 0/6 |
+| Mean abs. error | 1.33 | 1.33 | 1.33 |
+| Confidence | low ×6 | low ×6 | low ×6 |
+| Slab label read (as-uploaded) | 3/3 correct | 3/3 correct | — |
+| GPT cost / grade (front+back) | $0.013–0.018 | $0.015–0.017 | $0.017–0.021 |
+| Latency | 11–18 s | 12–17 s | 7–13 s |
+
+Findings: (1) gpt-6.1-sol reproduces gpt-5 behaviour exactly on this set (same grades, same slab reading) at ~10% higher GPT cost, fewer output tokens and tighter repeat distributions. (2) The grade itself collapses to "PSA 8, low confidence" for every card when surface/corner evidence is limited (through-slab plastic). It cannot separate a PSA 10 from a PSA 9 here and under-grades by 1–2. This is a prompt/calibration issue shared by all models, not a model-choice issue, and must be fixed before grading accuracy is advertised. Through-slab photos understate raw-card evidence; raw pre-submission photos with returned grades are the right benchmark.
+
+Production switch: `GRADE_MODEL_PRIMARY=gpt-6.1-sol` added (Production), deployment dpl_2gcp8nqs2KGMoHJKhbzKzi8Kbwjd rebuilt from the same source 5084a8b with Production settings. gpt-4o fallback unchanged. Revert = remove the variable and redeploy. Live acceptance requires one signed-in Quick Grade with a PROVIDER_USAGE line showing model gpt-6.1-sol.

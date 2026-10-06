@@ -61,7 +61,7 @@ async function run(model, vc, deep, key) {
   try {
     const g = parse(j.choices?.[0]?.message?.content || '');
     Object.assign(out, { parsed: true, card: g.card_name, grade: g.psa_estimate ?? g.grade_label, limiting: g.limiting_factor, distribution: g.psa_distribution,
-      confidence_pct: g.confidence_pct, confidence: g.confidence, slabbed: g.is_slabbed ?? g.slabbed });
+      confidence_pct: g.confidence_pct, confidence: g.confidence, slabbed: g.is_slabbed ?? g.slabbed, slab_grade: g.slab_grade ?? null, slab_grader: g.slab_grader ?? null });
   } catch { out.parsed = false; }
   return out;
 }
