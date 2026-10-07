@@ -22,5 +22,15 @@ check('label follows final grade', label(7) === 'Near Mint' && label(9) === 'Min
 check('no label for missing grade', label(null) === '' && label(undefined) === '' && label('') === '');
 check('response uses final-grade label', src.includes("grade_label:       gradeLabelFor(psaEstimate ?? cardInfo.psa_estimate) || cardInfo.grade_label || '',"));
 check('centering-lowered grade rewrites stale prose', /const centeringLowered = modelPsa != null[\s\S]{0,200}modelPsa > psaEstimate;\s*\n\s*const proseIsLying = proseContradicts \|\| centeringLowered;/.test(src));
+
+// 2026-10-06: centering header follows centering_source; share text says estimate.
+{
+  const idx2 = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const coreName = idx2.match(/\/js\/(core\.[0-9a-f]{8}\.js)/)[1];
+  const cjs = readFileSync(new URL(`../js/${coreName}`, import.meta.url), 'utf8');
+  check('centering header switches on centering_source', cjs.includes("data.centering_source === 'measured' ? 'MEASURED CENTERING"));
+  check('share text never claims a real grade result', !/came back PSA|CardResell AI called it|AI graded my|pulled a PSA/.test(cjs));
+  check('share title says Est. PSA', cjs.includes("_cardName + ' \u2014 Est. PSA '") || cjs.includes("_cardName + ' — Est. PSA '"));
+}
 console.log(`grade-evidence-honesty: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);
