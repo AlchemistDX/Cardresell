@@ -1,0 +1,189 @@
+CARDRESELL — PROJECT HANDOFF
+Snapshot: October 7, 2026, approximately 2:10 AM America/New_York (06:10 UTC)
+Supersedes: CardResell-Project-Handoff-2026-10-05.txt where facts differ. Standing rules from that file still apply and are restated in section 1.
+
+READ THIS FIRST
+
+The project is past Phase One. The active objective is profit and advertising readiness. Do not restart, rebuild, or re-run payment/scan acceptance that is already done ("No need to repeat the successful payment or scan tests" — owner).
+
+Readiness estimate: roughly 85% of a bounded advertising-readiness effort. It is qualitative, not measured, and NOT approval for paid advertising. Do not raise it because of instrumentation or offline tests alone.
+
+What you are picking up mid-stream:
+  - The live camera's new focus ("card looks soft") check was just deployed (source 651a18b). It has offline tests only; it has NOT been accepted on a physical phone. The next step is a live Deep Grade on willsep202 to confirm the hint appears for soft previews, does not nag on sharp ones, and that [capture-meta] sharpness scores appear in Production logs.
+  - The owner sent Ximilar support a question (see section 6) and is waiting for an answer. Their support was offline for about two hours as of ~12:30 AM EDT.
+
+1. USER AUTHORIZATION AND WORKING RULES
+
+- Continue autonomously toward profit and advertising readiness; ask the owner only for real dependencies (device tests, dashboard actions, decisions). Explain dashboard steps one screen at a time.
+- LIVE PRODUCTION ACCEPTANCE ONLY. Never use a Preview app to accept account, checkout, credit, scan or grading behavior. Local tests are allowed but are not acceptance.
+- Do not use "Promote to Production" on a Preview-built artifact. Rebuild the same commit for Production with `vercel redeploy <preview-url> --target production` (section 9).
+- Preserve all accounts, UID bindings, balances, grants, subscriptions and paid-through benefits. Never move credit/customer ownership between UIDs based on email. Never wipe or reset an account.
+- Do not weaken Turnstile, email verification, signed-token checks or pilot admission.
+- No extra real purchases. Don't ask again for confirmations already given. Do not send email or messages to anyone without explicit authorization (the owner sends support messages himself).
+- Prefer small, narrow changes and companion modules; the core bundle is huge. Follow the fingerprint procedure (section 9).
+- Do not print env values, tokens, ciphertext or raw provider payloads.
+- No subagents unless the owner asks.
+- Don't claim "warning-free" or "all tests pass" without evidence. Unknown costs stay unknown, never zero.
+- MEMBERSHIP_LIVE_PILOT_EMAILS is a sensitive env var: a JSON array, maximum 5 entries. Never reintroduce comma-separated or unquoted values. The original reserved owner's admission is separate.
+- eBay sold comps are intentionally blank (eBay shut its public API). /api/ebay-sold 403s are expected, not a bug.
+
+2. OWNER DECISIONS IN FORCE (October 6)
+
+- Deep Grade fallback: refund 1 of the 2 credits only if a usable Quick-Grade-equivalent result completes, clearly labeled as downgraded. If no usable assessment completes, refund both. Never silently charge for unavailable CV analysis. (Shipped 8e21efd; see section 5.)
+- Public signup stays pilot-restricted until the email path and the fallback/refund policy are accepted live.
+- Advertising language: describe identification and photo-based condition estimates. "CV-verified" means the computer-vision step completed — not that the grade is independently proven correct.
+- Keep explicit in docs and claims: photo shrinking is not an established cause of centering inconsistency (but see section 4 — the new evidence points at blur); OpenAI cost readings are partial costs.
+- Ximilar is worth keeping ("they're the best"); the $69/mo Business plan includes 100k credits.
+
+3. CURRENT SOURCE AND PRODUCTION
+
+Live site: https://www.cardresell.org
+GitHub: AlchemistDX/Cardresell, branch codex/profit-readiness (local checkout ~/workspace/cardresell)
+HEAD: 651a18bc209e09605d6de60c981e10890f61ff27 — live camera focus check + capture sharpness logging
+Production: dpl_3FRaZMnvT5vPUp7jzb1szbgb5bfc, rebuilt from 651a18b. Live index.html, core and ui bundles were byte-compared to local and match.
+Vercel team: willsep200-9430s-projects, project cardresell.
+
+Active client assets (confirm in index.html before editing):
+  js/core.ad375f02.js
+  js/ui.090e0807.js
+  js/auth.d7045eef.js
+  js/membership-shop.f86c0569.js
+  js/scan-request.822c1815.js
+  js/config.20ebe911.js
+  js/pwa.68032543.js
+
+Relevant Production env (values not printed):
+  GRADE_MODEL_PRIMARY = gpt-6.1-sol
+  ENABLE_XIMILAR_GRADER = deep_only (Quick Grade = GPT + Ximilar identify; Deep Grade adds the Ximilar async card-grader job)
+  WELCOME_DAILY_CAP unset → default 200 new welcome awards/day (circuit breaker; deferred, not denied)
+  MEMBERSHIP_LIVE_PILOT_EMAILS (sensitive JSON, 5 entries):
+    ["willsep200@gmail.com","willsep923@gmail.com","willsep205@gmail.com","cartoonclipscentral23@gmail.com","wljones9322@eagle.fgcu.edu"]
+  willsep23@gmail.com was removed with owner approval; its data is untouched and it can be re-added.
+
+4. WORK COMPLETED SINCE THE OCT 5 HANDOFF (chronological, all live)
+
+Plans and pricing
+  - afa4772: Business plan now includes 750 monthly ID credits and 100 Grade credits at $49.99.
+  - 5084a8b / 27fd73b: allowlisted grade-model setting plus an evaluation tool; Production switched to gpt-6.1-sol after a known-grade slab evaluation (it was the most conservative and the only model to flag digital reference images).
+
+Fraud and abuse
+  - 4d43b9e: daily circuit breaker for new welcome awards (default 200/day, deferred not denied). Owner approved.
+
+Grading correctness (scan-accuracy plan, Stage 1)
+  - 687203c: Ximilar grader migrated to the async job API (the synchronous endpoint is being retired). Poor visibility is no longer treated as damage. "Measured" labels appear only when something was actually measured. Unknown image quality is reported as unknown.
+  - c9315d9 / 2c206ee: the limiting-factor text and the PSA label follow the final grade (fixed "Mint" on a PSA 7 and "View PSA 1" on a PSA 3). Grade upside prices the graded printing (data.set_name/card_number). A name-only PriceCharting match is marked "printing not confirmed" (the Seize the Spoils $4.97 Secret Lair foil vs $0.32 bug; cache key v10).
+  - 8e21efd: Deep Grade fallback billing. settleDeepGradeWithoutCv() refunds the 2-credit operation and debits a new 1-credit operation with the same scanId. A failed re-debit leaves the user uncharged. The response carries cv_downgraded and credits_refunded. Badge text: "QUICK GRADE RESULT · DEEP CV UNAVAILABLE". The CV badge reads "CV-VERIFIED · COMPUTER-VISION STEP COMPLETED" plus a "not a guarantee" note. CV completion no longer raises low confidence. The Deep Grade picker discloses the fallback billing.
+
+Email and account path (accepted live)
+  - Signup verification is sent by Firebase sendEmailVerification from noreply@cardresell-e0329.firebaseapp.com. The six-digit "Send code" button goes through /api/verify-send using the Resend test sender onboarding@resend.dev. Resend returns 403 for anyone but the account owner, and the client falls back to the Firebase link. The Resend key itself works at runtime.
+  - The owner set the Firebase public-facing name to "CardResell"; the subject now reads "Verify your email for CardResell" (was "project-107816299392").
+  - Live Firebase project: cardresell-e0329. A second project, cardresell-37512, is unreferenced by the repo; leave it alone or delete it if empty.
+  - A disposable-inbox test delivered in 5–6 s, the link verified, and the server moved 401 → 403 pilot restriction as designed.
+  - willsep923@gmail.com (new Gmail, email/password): the email reached the Gmail Inbox. First setup ran 401 email_not_verified_password → link → association. Settings show 15 ID / 2 Grade. ACCEPTED.
+  - wljones9322@eagle.fgcu.edu (school): added to the pilot list; auto first setup succeeded, but the account was already verified, so school/Outlook inbox placement is still UNMEASURED.
+
+Grading capture and photo guide (Stage 1 audit finish + start of Stage 2)
+  - 533dd1b: grading photos were 1000 px on the LONG side (~715 px short side). Deep Grade front/back now go up to 2800 px long side (~2000 short, Ximilar's recommendation) at q0.88, with a 3% crop margin (the old 4 px margin could clip card edges) and ≤1.45 MB base64 each. Quick Grade 1600 px ≤700 KB; edges 1200 px ≤250 KB. Worst-case Deep body ≈ 3.9 MB, under Vercel's 4.5 MB limit. ID scan capture unchanged.
+  - 879233f / 97704cd: the centering header reads "MEASURED CENTERING" when centering_source = measured. All share-message variants are phrased as AI estimates (they had said "just came back PSA 9" and "CardResell AI called it"); the share title reads "Est. PSA".
+  - 87a5802 / 315aacc: the live camera requested only 1920x1440, and the preview is object-fit:cover while the full sensor frame was saved. A card inside the guide came out ~630 px across and ~21% of the photo, below the 25% client-crop threshold. The camera now requests up to 3840x2880 and saves the on-screen region plus a 10% margin on each side.
+  - 651a18b (JUST DEPLOYED, NOT YET ACCEPTED ON A DEVICE): the old blur check ran a Laplacian on a 96x134 thumbnail of the whole frame and could not see defocus. The guide turned green on a visibly blurry preview. New check: a contrast-normalized mean |Laplacian| of the guide region sampled at 320 px wide (_liveCapCardSharpness / _sharpnessScore in ui.090e0807.js); hint "Card looks soft — move back a little and hold steady" below _LIVECAP_SOFT_THRESHOLD = 14. It is advisory only; the shutter is never disabled.
+    - Offline calibration on real 1500x2000 photos: sharp 23–45, σ2 blur 17–32, σ4 blur 9–16, lighting-invariant. The threshold is provisional.
+    - The client sends body.captureMeta {frontSharpness, backSharpness} (null for uploads). The server logs '[capture-meta] {deep, front_sharpness, back_sharpness}', numbers only, for calibration.
+
+Repeat Deep Grades of one card (Page, Loose Leaf, willsep202) — evidence
+  | 00:39 | card small in frame (old camera)      | L/R 60/40 | T/B 50/50 | PSA 9 |
+  | 00:59 | too close, visibly defocused, dim     | L/R 60/40 | T/B 68/32 | PSA 7 |
+  | 01:02 | close, better light (old camera)      | L/R 62/38 | T/B 54/46 | PSA 8 |
+  | 01:11 | new camera, card inside guide         | L/R 62/38 | T/B 51/49 | PSA 8 |
+  Excluding the defocused run, all readings fall within about 4 points per axis. The defocused photo is the outlier. L/R sits at the PSA 9/8 boundary (60/40), so PSA 8 vs 9 flips on about 2 points. The model still listed "blurry photo" on the 01:11 run. Ximilar jobs succeeded in 17.9–22.4 s.
+  Supported conclusion: defocus, not resolution, drove the large swing. Resolution and crop fixes are plausible improvements but unproven.
+
+5. COSTS AND UNIT ECONOMICS (docs/unit-economics-20261005.md)
+
+- Ximilar: $69/mo Business includes 100k credits, so marginal cost is $0 within quota (≈10,000 ID calls or ≈1,000 grader jobs). Overage is listed at $99/100k (≈$0.0099 per ID, ≈$0.099 per grader job); whether overage is automatic is UNCONFIRMED.
+- UNRECONCILED: the owner's Ximilar dashboard showed no Card Grading usage for October ("No data available") even though logs show async grader jobs succeeding (http 201, success). It is unknown whether this is a reporting delay, a different service bucket, or not billed. Do not treat grading as free.
+- OpenAI (gpt-6.1-sol): Deep Grade was ~9.5k prompt tokens (~$0.025) at the old photo size. At the new size it is 12.3k–13.6k prompt / ~500 completion tokens (≈ $0.03, assuming $2/M in, $10/M out). Quick Grade ~$0.016–0.017. These are partial costs (Ximilar, hosting and payment fees are excluded).
+- Stripe 2.9% + $0.30 per charge; Billing 0.7%.
+
+6. OPEN ITEMS (priority order)
+
+1. Live acceptance of the focus hint (651a18b). Owner on willsep202, after fully closing and reopening the cardresell.org tab: one Deep Grade of Page, Loose Leaf with the card inside the guide.
+   - Confirm "Card looks soft" appears when the preview is out of focus and clears when sharp.
+   - Pull Production logs for '[capture-meta]' and compare the scores with whether GPT reports "blurry photo".
+   - Tune _LIVECAP_SOFT_THRESHOLD from that data. Acceptance: the hint fires on visibly soft previews, rarely on sharp ones, and never blocks the shutter.
+2. Ximilar support reply. The owner asked: (a) where async /account/v2/request card-grader jobs are counted and whether there is a delay; (b) what happens at 100,000 credits (hard stop or automatic overage). Update unit economics with the answer. If it is a hard stop, scans would fail with automatic refunds, so plan a usage alert.
+3. Deep Grade fallback not accepted live. A real CV failure can't be safely forced in Production; it is verified only on local Redis (tests/membership-routes.mjs 80/0, tests/test-scan.mjs 37/0 with a controllable Ximilar stub). Accept opportunistically when a real failure occurs (look for cv_downgraded/credits_refunded in the response and a 1-credit net debit). Uncertain second-debit recovery also remains open.
+4. Public admission switch: an owner decision. Keep pilot-only until items 3 and 5 are accepted.
+5. Outlook/school junk placement for Firebase verification mail: unmeasured (needs an unverified school/Outlook signup).
+6. Minor fix candidate: /api/pro-status and /api/scan-credits return 503 billing_unavailable for an account before its first association; they should report setup-needed. membershipBalances throws for unenrolled accounts (api/pro-status.js ~line 60, api/scan-credits.js ~line 33).
+7. Optional: verify a Resend sending domain so six-digit codes reach everyone (they currently fall back to the Firebase link).
+8. Scan-accuracy plan, remaining Stage 2 (attachment CardResell-Scan-Accuracy-and-Photo-Assistant-Plan-2026-10-06.txt):
+   - card-region assessment and role labels
+   - stabilized guidance
+   - targeted single-slot retakes that preserve good photos
+   - optional auto-capture after ~0.6–1 s of stable good frames
+   - closer, straight-on edge-photo guidance (GPT repeatedly said edge photos were distant or oblique and that fingers covered edges)
+   - upload/native-camera fallback checks
+   Stages 3–5 (exact printing, resumable operations, calibration) are not started.
+9. The welcome circuit breaker matters only once the audience is public.
+
+7. ACCOUNT MAP
+
+willsep202@gmail.com — original reserved owner/billing binding. Authorized for Deep Grade tests (the usual grading test account). Do not alter its binding.
+willsep200@gmail.com — accepted paid test account (25-ID pack + Starter; cancellation scheduled Nov 4, 2026). Do not alter, repurchase or refund.
+willsep923@gmail.com — new Gmail, email/password; first-run allocation accepted live (15 ID / 2 Grade).
+willsep205@gmail.com — Google; manually associated earlier (15/2). Do not reset.
+cartoonclipscentral23@gmail.com — Google; auto-association accepted Oct 5.
+wljones9322@eagle.fgcu.edu — school email; pilot-listed; already verified.
+willsep23@gmail.com — poor test account (Face ID/passkey friction); removed from pilot. Don't push the owner back to it.
+Fresh verified Free total = 5 ID + 1 Grade monthly plus 10 ID + 1 Grade welcome = 15 ID / 2 Grade.
+Four throwaway Firebase users were created by disposable-inbox tests (mail.tm). None is pilot-listed or holds credits.
+
+8. TESTS
+
+New or updated this stretch:
+  - tests/grade-capture-resolution.mjs 28/0: capture sizes and body budget, crop margin, visible-region math, focus score on sharp/blurred/dim patterns, server log hygiene. Registered in tests/run-all.sh as [85/86].
+  - tests/grade-evidence-honesty.mjs 18/0 (centering header, share text)
+  - tests/grade-upside-identity.mjs 12/0
+  - tests/test-scan.mjs 37/0
+  - tests/membership-routes.mjs 80/0
+Also green at 651a18b: photo-capture-lifecycle 11, photo-decoder-fallback 8, a11y-mobile 178, launch-audit-regressions 440, copy-truth-offline 224, asset-fingerprints 99, scan-hygiene 182, test-registry 12, listing-export-e2e 111, scan-request-recovery PASS, syntax-check 0 errors.
+Redis-backed suites: export PATH=/tmp/redis-7.4.2/src:$PATH CARDRESELL_TEST_REDIS_TCP=1 (rebuild Redis in /tmp if the sandbox was reset).
+Pre-existing failures (not caused by this work): bulk-batch-draft, entry-identity, billing-release-scope. Hanging suites: condition-applicability, flip-completeness-e2e, billing-release-rollback.
+The simulated canvas in grade-capture-resolution is not a substitute for a physical-device check.
+
+9. TOOLS AND SAFE PUBLICATION PROCEDURE
+
+Bundle edit (fingerprinting):
+  1. Copy the active bundle and make the narrow edit.
+  2. Name it js/<name>.<sha256[:8]>.js.
+  3. Update the single reference in index.html; keep the old file.
+  4. Run node tests/asset-fingerprints.mjs plus the related suites.
+
+Push: git push origin codex/profit-readiness (GitHub credential). A push triggers an automatic Preview build.
+
+Production rebuild (Vercel CLI with --token "$VERCEL_TOKEN" --scope willsep200-9430s-projects, run from a linked dir such as /tmp/vc):
+  vercel ls cardresell -m githubCommitSha=<full sha>        → Preview URL for that commit
+  vercel redeploy <preview-url> --target production          → rebuild for Production (never "Promote")
+  vercel inspect https://www.cardresell.org                  → confirm the new dpl id is Ready
+  Then curl / and the changed bundles and cmp them against local files. The CDN can return 000 or old bytes for 1–3 minutes, so retry before concluding anything.
+
+Logs: vercel logs --project cardresell --environment production --no-branch --no-follow --since <ISO> -n 300 --json
+  - Lines appear about 4x duplicated; dedupe them.
+  - PROVIDER_USAGE lines carry provider/mode/tokens/duration.
+  - '[capture-meta]' lines carry sharpness scores.
+  - Logs can lag a few minutes; one OpenAI line for the 05:10Z grade had not appeared at check time.
+
+Env: vercel env add NAME production --value "$V" --sensitive --force --yes.
+  Sensitive values pull back empty. A literal "\n" in a pulled file is a display artifact, not a fault.
+
+The Firebase connector covers Firestore only; Production has no Firebase admin credentials.
+
+10. CANONICAL DOCS (in repo)
+
+docs/advertising-readiness-20261004.md — checkpoints, owner decisions, email acceptance
+docs/unit-economics-20261005.md — cost model, Ximilar fixed-fee correction, unreconciled grader usage
+docs/scan-accuracy-stage1-20261006.md — Stage 1 changes, capture resolution, repeat-grade table, camera and focus changes
+Attachments the owner may re-supply: CardResell-Project-Handoff-2026-10-05.txt (prior handoff), CardResell-Scan-Accuracy-and-Photo-Assistant-Plan-2026-10-06.txt (staged plan).
+
+END OF HANDOFF
