@@ -59,6 +59,27 @@ function env({ W = 3024, H = 4032, bounds = { x: 400, y: 500, w: 2200, h: 3070 }
   await e.compress({}, 1200, { skipCrop: false });
   const crop = e.drawn.find(d => d.args.length === 9);
   check('non-grading callers keep original crop', crop.args[1] === 400 && crop.args[3] === 2200); }
+
+// 2026-10-07 live camera: higher stream request + save only the visible (cover) region.
+{
+  const uiName = idx.match(/\/js\/(ui\.[0-9a-f]{8}\.js)/)[1];
+  const ui = readFileSync(new URL(`../js/${uiName}`, import.meta.url), 'utf8');
+  check('live capture requests up to 3840x2880', ui.includes("width: { ideal: 3840 }, height: { ideal: 2880 }"));
+  check('snap draws the visible rectangle', ui.includes('drawImage(video, _vis.sx, _vis.sy, _vis.sw, _vis.sh, 0, 0, _vis.sw, _vis.sh)'));
+  const i = ui.indexOf('function _liveCapVisibleRect('); let d = 0, j = ui.indexOf('{', i), body;
+  for (let k = j; k < ui.length; k++) { if (ui[k] === '{') d++; else if (ui[k] === '}' && --d === 0) { body = ui.slice(i, k + 1); break; } }
+  const rect = new Function(body + '; return _liveCapVisibleRect;')();
+  // iPhone portrait: 2880x3840 stream shown cover in a 390x844 viewport.
+  const r = rect({ videoWidth: 2880, videoHeight: 3840, clientWidth: 390, clientHeight: 844 });
+  check('visible rect keeps full height, trims width', r.sh === 3840 && r.sw === 1774 && r.sx === 553 && r.sy === 0, JSON.stringify(r));
+  const scale = 844 / 3840, guideW = Math.min(0.72 * 390, 320) / scale, guideH = guideW * 3.5 / 2.5;
+  check('card framed in guide is >= 25% of saved photo (client crop applies)', (guideW * guideH) / (r.sw * r.sh) >= 0.25, ((guideW * guideH) / (r.sw * r.sh)).toFixed(3));
+  check('card framed in guide is >= 1200 px across', guideW >= 1200, Math.round(guideW));
+  const full = rect({ videoWidth: 1920, videoHeight: 1440, clientWidth: 0, clientHeight: 0 });
+  check('unknown layout falls back to full frame', full.sw === 1920 && full.sh === 1440 && full.sx === 0);
+  const land = rect({ videoWidth: 1920, videoHeight: 1080, clientWidth: 1000, clientHeight: 1000 });
+  check('landscape stream in square view trims sides', land.sw === 1080 && land.sh === 1080 && land.sx === 420);
+}
 check('worst-case Deep body under 4.5 MB', 2 * 1450000 + 4 * 250000 + 20000 < 4.5 * 1024 * 1024);
 console.log(`grade-capture-resolution: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);
