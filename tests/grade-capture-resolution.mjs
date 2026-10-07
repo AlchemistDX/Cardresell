@@ -71,14 +71,14 @@ function env({ W = 3024, H = 4032, bounds = { x: 400, y: 500, w: 2200, h: 3070 }
   const rect = new Function(body + '; return _liveCapVisibleRect;')();
   // iPhone portrait: 2880x3840 stream shown cover in a 390x844 viewport.
   const r = rect({ videoWidth: 2880, videoHeight: 3840, clientWidth: 390, clientHeight: 844 });
-  check('visible rect keeps full height, trims width', r.sh === 3840 && r.sw === 1774 && r.sx === 553 && r.sy === 0, JSON.stringify(r));
+  check('visible rect (+10%/side) keeps full height, trims width', r.sh === 3840 && r.sw === 2129 && r.sx === 376 && r.sy === 0, JSON.stringify(r));
   const scale = 844 / 3840, guideW = Math.min(0.72 * 390, 320) / scale, guideH = guideW * 3.5 / 2.5;
   check('card framed in guide is >= 25% of saved photo (client crop applies)', (guideW * guideH) / (r.sw * r.sh) >= 0.25, ((guideW * guideH) / (r.sw * r.sh)).toFixed(3));
   check('card framed in guide is >= 1200 px across', guideW >= 1200, Math.round(guideW));
   const full = rect({ videoWidth: 1920, videoHeight: 1440, clientWidth: 0, clientHeight: 0 });
   check('unknown layout falls back to full frame', full.sw === 1920 && full.sh === 1440 && full.sx === 0);
   const land = rect({ videoWidth: 1920, videoHeight: 1080, clientWidth: 1000, clientHeight: 1000 });
-  check('landscape stream in square view trims sides', land.sw === 1080 && land.sh === 1080 && land.sx === 420);
+  check('landscape stream in square view trims sides', land.sw === 1296 && land.sh === 1080 && land.sx === 312);
 }
 check('worst-case Deep body under 4.5 MB', 2 * 1450000 + 4 * 250000 + 20000 < 4.5 * 1024 * 1024);
 console.log(`grade-capture-resolution: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
