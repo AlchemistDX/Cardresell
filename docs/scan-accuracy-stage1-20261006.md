@@ -30,3 +30,11 @@ Expected side effects to measure live: higher OpenAI image tokens per grade (lar
 
 ### First live Deep Grade at new resolution (2026-10-07 04:39Z, willsep202, Page, Loose Leaf)
 Request 200 (fit body limit). Ximilar card_grade 201 success 17.9 s; OpenAI gpt-6.1-sol 6 images, 12,348 prompt / 534 completion tokens (vs 9,523 prompt at old size, ~+30% input). Result: PSA 9 (45/35/20), low confidence, CV-verified, L/R 60/40 · T/B 50/50. Single run: no consistency evidence yet; card filled a small part of the frame and edge photos were distant/oblique per the model. Follow-up (879233f, dpl_E7RrhWTurZDpEfvUrimzKML1Gip4): centering header reads "Measured centering" when centering_source=measured; share text rephrased as estimates.
+
+### Repeat Deep Grades, same card (Page, Loose Leaf), 2026-10-07
+| Time (EDT) | Framing | L/R | T/B | Grade |
+|---|---|---|---|---|
+| 00:39 | card small in frame | 60/40 | 50/50 | PSA 9 |
+| 00:59 | very close, preview visibly out of focus, dim | 60/40 | 68/32 | PSA 7 |
+| 01:02 | very close, better light; model still flagged "blurry photo" | 62/38 | 54/46 | PSA 8 |
+L/R repeatable within 2 points; T/B not (50→68→54), and the grade follows it. All three were taken on a page loaded before the live-camera fix (old "Estimated centering" label visible), i.e. 1920x1440 stream, full-sensor save. Live QA showed a green guide on a visibly defocused preview: the 96x134 blur check does not detect focus blur at close range. Fixes since: stream up to 3840x2880, save visible region +10%/side (315aacc, dpl_8asrmK3r9TuEAn8foqkDhjfLkb61). Open: focus/sharpness detection that blocks or warns on defocused frames; repeat test on fresh page load.
