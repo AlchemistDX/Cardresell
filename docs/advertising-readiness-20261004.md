@@ -1,3 +1,36 @@
+## 2026-10-07: framing-first camera guide follow-up
+
+Owner screenshots IMG_4544–4547 confirm the iPhone zoom control is gone and
+there is no green approval. They also show remaining errors: non-card scenes
+receive card-focus wording and the top instruction banner obscures a card edge.
+This is partial UI acceptance, not proof of reliable focus detection.
+
+This follow-up adds a local, advisory rectangular-outline check before focus
+advice. Unknown/clipped outlines receive neutral framing instructions. Plausible
+outlines receive fit/size/centering advice first, then brightness, glare and focus
+advice measured inside that outline. Instructions change after three observations
+(about 1.5 seconds). Edge close-ups retain their own manual instructions.
+The frame is sized between the measured instruction banner and capture controls,
+with resize handling. iPhone hardware zoom remains disabled. Capture remains
+available; no provider calls, account, credit, billing or resolution changes.
+
+Limitations: this is geometric outline detection, not semantic card recognition.
+Other rectangular objects can match; perspective, weak contrast, severe blur or
+clipped cards can be missed. The existing sharpness threshold is still provisional.
+Missing outline means uncertain framing, never a green pass. No claim of perfect
+photos or zero failed scans. Phone performance and real-card hint transitions
+still require live acceptance. No additional paid scan is needed for that check.
+
+Local validation: photo-capture-lifecycle 25/0, grade-capture-resolution 28/0,
+decoder fallback 10/0 plus retake history 8/0, mobile accessibility 178/0,
+asset fingerprints 101/0, registry 12/0, syntax and diff checks passed.
+Cases include absent/oversized/small outlines, focus-advice ordering, temporal
+stability, edge close-ups, and guide/banner/control separation at phone sizes.
+The supplied no-card screenshot crops returned no outline; the supplied real-card
+screenshots were clipped or strongly foreshortened and also returned no outline.
+Synthetic positive rectangles are not a substitute for physical-phone acceptance.
+Readiness remains approximately 85%; pilot admission remains on.
+
 ## 2026-10-07: physical-phone camera regression and mitigation
 
 Owner screenshots IMG_4541/4542/4543 show the soft warning on a small card,
