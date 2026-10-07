@@ -1,3 +1,29 @@
+## 2026-10-07: physical-phone camera regression and mitigation
+
+Owner screenshots IMG_4541/4542/4543 show the soft warning on a small card,
+but a visibly defocused close-up received a green guide. Owner also reports
+that the zoom slider freezes the camera. Focus-hint acceptance FAILED; a
+warning appearing once does not validate discrimination. No paid scan is
+needed to reproduce either preview problem.
+
+Mitigation: shared camera zoom is disabled on iPhone/iPad (including desktop-mode
+iPadOS); other devices serialize and coalesce hardware changes, preserve existing
+constraints, handle rejections, and disable controls after a 2-second timeout.
+Late completions cannot change UI or apply queued zoom after teardown.
+The live capture guide never uses a green pass: no warning means a neutral
+manual readability check. Unknown focus gets an explicit advisory; low-score
+advice no longer always says move back. Unknown scores clear previous metadata.
+The sharpness algorithm/threshold remains provisional and is NOT claimed fixed.
+No account, billing, grade, or image-resolution changes in this patch.
+
+Local validation: photo-capture-lifecycle 17/0 (including zoom regression cases),
+grade-capture-resolution 28/0, decoder fallback 10/0 and retake history 8/0,
+asset fingerprints 99/0, mobile accessibility 178/0, test registry 12/0;
+new bundle syntax and git diff checks passed. Physical iPhone acceptance is pending.
+The handoff's shortened a11y-mobile test filename did not exist; the actual
+registered a11y-mobile-2026-09-04.mjs passed.
+Readiness stays approximately 85%; pilot stays on.
+
 # Current checkpoint — October 6, 2026, 13:00 Eastern
 
 Roughly 85% of the bounded advertising-readiness effort, a qualitative estimate, not the complete master plan. The increase rests on live acceptance evidence (below), not on deployed instrumentation. Public advertising is still not ready: public admission is pilot-only and email/password verification delivery is unaccepted.
