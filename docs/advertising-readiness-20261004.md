@@ -1,3 +1,39 @@
+## 2026-10-07: four-edge fallback and off-thread camera analysis
+
+Implemented an actual outline fallback, beyond hint wording. The existing
+connected-border detector remains first choice; a bounded gradient/line-pair
+search now fits a convex four-corner candidate when that detector misses.
+Parallelism, aspect, area, placement and four-side edge support reject implausible
+shapes. This is still geometric detection, not semantic identity. Some foil
+examples produce inner-border candidates; no claim of precise outer corners.
+
+Both detectors run in a same-origin worker with one request per camera session
+at a time. Cancel/close terminates it; errors/timeouts disable analysis for that
+session; stale results cannot update a reopened camera. Unsupported Worker uses
+the existing lightweight detector. No cloud calls or added scan costs. Candidate
+interiors are resampled for advisory focus/glare so background corners around a
+tilted card do not enter those checks. Uploaded photos and grading-centering
+inputs are unchanged; do not use these candidate corners for grade measurements.
+
+Screenshot replay now masks app banners and dashed guide lines. Transparent
+excluded pixels cannot supply edge evidence to either detector. This matters:
+otherwise screenshot UI can be mistaken for a card outline. Masked source-area
+replays: 4544/4545/4546 (empty/skin/driveway) returned no outline; 4548/4556 clear
+cards returned no light warning; 4549/4550/4554/4555 retained reflection warnings;
+4553 located the tilted card and excluded the bright window (size/framing advice).
+The four-edge fallback supplied the new candidates for 4550/4553/4554. These are
+compressed screenshot regressions with manually excluded overlays, not measured
+live accuracy, catalogue coverage or a representative grading benchmark.
+
+Validation: camera lifecycle 36/0 including four synthetic rotations with corner
+error <8 px on a 200x240 input, negative scenes, masked-overlay rejection,
+polygon-only reflection sampling, worker execution, dependency fingerprint,
+timeout/cancel and stale-session rejection. Grade-resolution 28/0, decoder 10/0
+and retake 8/0, mobile accessibility 178/0, asset fingerprints 101/0. Syntax/diff
+checks passed. Worker data is bounded to 320x400 and no queue accumulates.
+Phone acceptance/performance still pending. No further paid test required.
+Readiness remains approximately 85%; pilot on; no accounts/billing changes.
+
 ## 2026-10-07: scope lighting advice to available geometry
 
 Follow-up to IMG_4553 window/background false reflection: qualityRegion now uses

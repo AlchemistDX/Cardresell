@@ -111,19 +111,19 @@ await test(async()=>{
  let calls=0,rendered=null,box=null,frames=0,reflection=false;
  const nodes={liveCapVideo:{videoWidth:200,videoHeight:270,getBoundingClientRect:()=>rect},liveCapOverlay:{style:{display:'flex'}},
   liveCapFrameArea:{getBoundingClientRect:()=>rect},liveCapFrame:{getBoundingClientRect:()=>fr}};
- const window={_liveCapState:{role:'face'},_liveCapQACand:null,_liveCapQAStreak:0,_liveCapQAState:null,
+ const window={_liveCapState:{role:'face',active:true},_liveCapQACand:null,_liveCapQAStreak:0,_liveCapQAState:null,
   _liveCapQACanvas:{getContext:()=>({drawImage(){},getImageData:()=>({data:pixels()})})},
   CardResellPhotoGuide:{...guide,outline:()=>box,reflection:()=>reflection}};
  const c={window,document:{getElementById:id=>nodes[id]},_LIVECAP_SOFT_THRESHOLD:14,
-  _liveCapCardSharpness(){calls++;return 1;},_liveCapRenderQA(h){rendered=h;},_liveCapLayout(){},_liveCapStopQA(){}};
- vm.createContext(c);vm.runInContext(source.slice(source.indexOf('function _liveCapQATick('),source.indexOf('function _liveCapRenderQA(')),c);
- for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'frame');
- box={x:.3,y:.3,w:.2,h:.3};for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'small');
- box={x:.15,y:.1,w:.7,h:.8};c._liveCapQATick();assert.equal(rendered,null);for(let i=0;i<2;i++)c._liveCapQATick();assert.equal(rendered.id,'soft');
- box=null;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');assert.equal(window._liveCapLastSharpness,null);
- reflection=true;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'lighting');assert.doesNotMatch(rendered.text,/reflection/i);assert.equal(window._liveCapLastSharpness,null);
- reflection=false;c._liveCapQATick();assert.equal(rendered,null);assert.equal(window._liveCapQAState,null);for(let i=0;i<2;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');
- window._liveCapState.role='edge';calls=0;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'edge');
+  _liveCapOutline:async()=>box,_liveCapCardSharpness(){calls++;return 1;},_liveCapRenderQA(h){rendered=h;},_liveCapLayout(){},_liveCapStopQA(){}};
+ vm.createContext(c);vm.runInContext(source.slice(source.indexOf('async function _liveCapQATick('),source.indexOf('function _liveCapRenderQA(')),c);
+ for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'frame');
+ box={x:.3,y:.3,w:.2,h:.3};for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'small');
+ box={x:.15,y:.1,w:.7,h:.8};await c._liveCapQATick();assert.equal(rendered,null);for(let i=0;i<2;i++)await c._liveCapQATick();assert.equal(rendered.id,'soft');
+ box=null;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'frame');assert.equal(window._liveCapLastSharpness,null);
+ reflection=true;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'lighting');assert.doesNotMatch(rendered.text,/reflection/i);assert.equal(window._liveCapLastSharpness,null);
+ reflection=false;await c._liveCapQATick();assert.equal(rendered,null);assert.equal(window._liveCapQAState,null);for(let i=0;i<2;i++)await c._liveCapQATick();assert.equal(rendered.id,'frame');
+ window._liveCapState.role='edge';calls=0;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'edge');
 });
 // Small localized reflections must not be diluted by the whole image or
 // suppressed by missing outlines. Uniform white stock / colored art are not
@@ -167,5 +167,72 @@ await test(async()=>{
  assert.equal(guide.reflection(crop,cw,ch),false);
  for(let y=30;y<45;y++)for(let x=25;x<40;x++)crop.set([255,249,200,255],(y*cw+x)*4);
  assert.equal(guide.reflection(crop,cw,ch),true);
+});
+const workerPath=source.match(/new Worker\('([^']+)'\)/)[1];
+const workerSource=readFileSync(new URL('..'+workerPath,import.meta.url),'utf8');
+const {createHash}=await import('node:crypto');
+const quad=require(new URL('..'+workerPath,import.meta.url).pathname);
+await test(async()=>{assert.ok(workerPath.includes(createHash('sha256').update(workerSource).digest('hex').slice(0,8)));
+ const dependency=workerSource.match(/importScripts\('([^']+)'\)/)[1];
+ assert.ok(referencedHashedAssets().some(a=>a.path.endsWith(dependency)));
+});
+function quadPixels(angle) {
+ const w=200,h=240,p=new Uint8ClampedArray(w*h*4),cs=Math.cos(angle),sn=Math.sin(angle),corners=[];
+ for(const [x,y] of [[-45,-63],[45,-63],[45,63],[-45,63]])corners.push({x:100+x*cs-y*sn,y:120+x*sn+y*cs});
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  const u=(x-100)*cs+(y-120)*sn,v=-(x-100)*sn+(y-120)*cs;
+  let c=170+7*Math.sin(x/9)*Math.cos(y/11);
+  if(Math.abs(u)<=45 && Math.abs(v)<=63)c=Math.abs(u)>41||Math.abs(v)>59?25:110+40*Math.sin(u/7)*Math.cos(v/8);
+  const i=(y*w+x)*4;p[i]=p[i+1]=p[i+2]=c;p[i+3]=255;
+ }return {p,w,h,corners};
+}
+await test(async()=>{for(const angle of [0,.38,-.5,.72]){
+ const {p,w,h,corners}=quadPixels(angle),box=quad.candidate(p,w,h);assert.ok(box,'quad at '+angle);
+ for(const expected of corners)assert.ok(Math.min(...box.corners.map(a=>Math.hypot(a.x*w-expected.x,a.y*h-expected.y)))<8,'corner close at '+angle);
+}});
+await test(async()=>{assert.equal(quad.candidate(pixels(),200,270),null);assert.equal(quad.candidate(pixels({texture:true}),200,270),null);});
+await test(async()=>{
+ const w=100,h=100,p=new Uint8ClampedArray(w*h*4);p.fill(255);
+ // Dark diamond in bright background; rectangular crop would include white.
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(Math.abs(x-50)+Math.abs(y-50)<45)p.set([80,80,80,255],(y*w+x)*4);
+ const corners=[{x:.5,y:.08},{x:.92,y:.5},{x:.5,y:.92},{x:.08,y:.5}];
+ const out=guide.rectify(p,w,h,corners,160,224);assert.equal(guide.reflection(out,160,224),false);
+ assert.ok([...out].filter((v,i)=>i%4!==3).every(v=>v===80));
+});
+await test(async()=>{
+ const events=[],timers=new Map(),workers=[];let seq=0;
+ class MockWorker {constructor(){workers.push(this);}postMessage(m){this.message=m;}terminate(){this.stopped=true;}}
+ const c={window:{CardResellPhotoGuide:guide},Worker:MockWorker,Promise,setTimeout(fn){timers.set(++seq,fn);return seq;},clearTimeout(id){timers.delete(id);}};
+ vm.createContext(c);vm.runInContext(source.slice(source.indexOf('function _liveCapOutline('),source.indexOf('async function _liveCapQATick(')),c);
+ const s={};let p=c._liveCapOutline(pixels(),200,270,s),worker=workers[0];
+ worker.onmessage({data:{id:worker.message.id,box:{x:.1}}});assert.equal((await p).x,.1);assert.equal(timers.size,0);
+ p=c._liveCapOutline(pixels(),200,270,s);s.cancelOutline();assert.equal(await p,null);assert.equal(worker.stopped,true);assert.equal(timers.size,0);
+ const next={};p=c._liveCapOutline(pixels(),200,270,next);[...timers.values()][0]();assert.equal(await p,null);assert.equal(next.outlineDisabled,true);assert.equal(await c._liveCapOutline(pixels(),200,270,next),null);
+});
+await test(async()=>{
+ const messages=[],self={};const c={self,ArrayBuffer,Uint8ClampedArray,importScripts(){self.CardResellPhotoGuide=guide;}};
+ self.postMessage=m=>messages.push(m);vm.createContext(c);vm.runInContext(workerSource,c);
+ const rotated=quadPixels(.72);self.onmessage({data:{id:1,w:rotated.w,h:rotated.h,rgba:rotated.p.buffer}});
+ assert.equal(messages[0].id,1);assert.ok(messages[0].box);assert.ok(messages[0].box.corners);
+ self.onmessage({data:{id:2,w:100000,h:100000,rgba:new ArrayBuffer(4)}});assert.equal(messages[1].box,null);
+});
+// An outstanding detector cannot queue another tick or paint a newly opened
+// camera session after its result settles.
+await test(async()=>{
+ const old={active:true,role:'face'},newSession={active:true,role:'face'},d=deferred();let requests=0,renders=0;
+ const r={left:0,top:0,width:200,height:270},f={left:20,top:20,width:160,height:224};
+ const nodes={liveCapOverlay:{style:{display:'flex'}},liveCapVideo:{videoWidth:200,videoHeight:270,getBoundingClientRect:()=>r},liveCapFrameArea:{getBoundingClientRect:()=>r},liveCapFrame:{getBoundingClientRect:()=>f}};
+ const window={_liveCapState:old,CardResellPhotoGuide:guide,_liveCapQACanvas:{getContext:()=>({drawImage(){},getImageData:()=>({data:pixels()})})}};
+ const c={window,document:{getElementById:id=>nodes[id]},_liveCapOutline(){requests++;return d.promise;},_liveCapRenderQA(){renders++;},_liveCapLayout(){},_liveCapStopQA(){},_LIVECAP_SOFT_THRESHOLD:14};
+ vm.createContext(c);vm.runInContext(source.slice(source.indexOf('async function _liveCapQATick('),source.indexOf('function _liveCapRenderQA(')),c);
+ const pending=c._liveCapQATick();await c._liveCapQATick();assert.equal(requests,1);
+ old.active=false;window._liveCapState=newSession;d.resolve(null);await pending;
+ assert.equal(renders,0);assert.equal(old.qaBusy,false);assert.equal(window._liveCapState,newSession);
+});
+await test(async()=>{
+ const w=200,h=270,p=pixels({background:120});
+ // Excluded screenshot overlays must not turn a featureless scene into a card.
+ for(let y=35;y<235;y++)for(let x=30;x<170;x++)if(x<39||x>160||y<44||y>225)p.set([255,255,255,0],(y*w+x)*4);
+ assert.equal(guide.outline(p,w,h),null);assert.equal(quad.candidate(p,w,h),null);
 });
 console.log(`Photo capture lifecycle: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);
