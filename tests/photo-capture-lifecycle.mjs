@@ -121,7 +121,7 @@ await test(async()=>{
  box={x:.3,y:.3,w:.2,h:.3};for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'small');
  box={x:.15,y:.1,w:.7,h:.8};c._liveCapQATick();assert.equal(rendered,null);for(let i=0;i<2;i++)c._liveCapQATick();assert.equal(rendered.id,'soft');
  box=null;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');assert.equal(window._liveCapLastSharpness,null);
- reflection=true;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'reflection');assert.equal(window._liveCapLastSharpness,null);
+ reflection=true;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'lighting');assert.doesNotMatch(rendered.text,/reflection/i);assert.equal(window._liveCapLastSharpness,null);
  reflection=false;c._liveCapQATick();assert.equal(rendered,null);assert.equal(window._liveCapQAState,null);for(let i=0;i<2;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');
  window._liveCapState.role='edge';calls=0;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'edge');
 });
@@ -144,5 +144,28 @@ await test(async()=>{assert.equal(guide.reflection(glarePixels({patch:[255,249,2
 await test(async()=>{assert.equal(guide.advice(null,g,guide.reflectionHint(),'face').id,'reflection');
  assert.equal(guide.advice({x:.3,y:.3,w:.2,h:.3},g,guide.reflectionHint(),'face').id,'reflection');
  assert.equal(guide.advice(null,g,guide.reflectionHint(),'edge').id,'edge');
+});
+// Background brightness must not enter quality measurements when an outline
+// is available. Unknown outlines retain a lighting hint, not a card diagnosis.
+await test(async()=>{
+ const region=guide.qualityRegion({x:.2,y:.2,w:.6,h:.65},{x:0,y:0,w:1,h:1});
+ assert.equal(region.located,true);assert.ok(region.x>.2);assert.ok(region.x+region.w<.8);
+ assert.equal(guide.qualityRegion(null,g).located,false);
+ assert.equal(guide.qualityRegion({x:-.5,y:0,w:.5,h:.8},g).located,false);
+ assert.equal(guide.qualityRegion({x:NaN,y:0,w:.5,h:.8},g).located,false);
+ assert.equal(guide.qualityRegion({x:.3,y:.3,w:.1,h:.1},g).located,false);
+ assert.equal(guide.reflectionHint(false).id,'lighting');
+ assert.doesNotMatch(guide.reflectionHint(false).text,/reflection/i);
+ assert.equal(guide.reflectionHint(true).id,'reflection');
+ const w=160,h=224,p=glarePixels({background:80});
+ // Bright window at the upper left of the full guide, outside the card.
+ for(let y=12;y<32;y++)for(let x=8;x<25;x++)p.set([255,255,250,255],(y*w+x)*4);
+ assert.equal(guide.reflection(p,w,h),true);
+ const x0=Math.ceil(region.x*w),y0=Math.ceil(region.y*h),cw=Math.floor(region.w*w),ch=Math.floor(region.h*h);
+ const crop=new Uint8ClampedArray(cw*ch*4);
+ for(let y=0;y<ch;y++)for(let x=0;x<cw;x++)crop.set(p.subarray(((y+y0)*w+x+x0)*4,((y+y0)*w+x+x0)*4+4),(y*cw+x)*4);
+ assert.equal(guide.reflection(crop,cw,ch),false);
+ for(let y=30;y<45;y++)for(let x=25;x<40;x++)crop.set([255,249,200,255],(y*cw+x)*4);
+ assert.equal(guide.reflection(crop,cw,ch),true);
 });
 console.log(`Photo capture lifecycle: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);

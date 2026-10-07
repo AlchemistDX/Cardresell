@@ -1,3 +1,27 @@
+## 2026-10-07: scope lighting advice to available geometry
+
+Follow-up to IMG_4553 window/background false reflection: qualityRegion now uses
+an inset of a plausible outline when at least 80% of the candidate overlaps the
+guide and its dimensions are at least half the guide. Bright guide/background
+pixels outside that region no longer enter the reflection measurement. With no
+usable outline, retain a general bright-light warning rather than attributing a
+reflection to the card. This preserves useful lighting advice when foil defeats
+outline detection. It does NOT establish semantic card identity or segmentation.
+
+Local replay of screenshot source-area crops (resampled compressed screenshots):
+4548 and 4556 found an outline, no lighting warning. 4549, 4550, 4553, 4554 and
+4555 found no outline and gave generic lighting advice. Thus only two of seven
+examples had usable outlines; do not claim robust card detection or full camera
+acceptance. Rotated/foil/handheld cases remain a detector limitation. No green
+pass; manual check and shutter remain available. Edge close-ups stay manual.
+
+Tests: camera lifecycle 28/0, grade resolution 28/0, fingerprints 101/0, syntax
+and diff checks. Synthetic bright-background case is excluded after localization;
+otherwise-identical in-card hotspot still warns. Invalid/displaced/tiny candidates
+fall back to generic lighting. Real-phone behavior of this release is unaccepted.
+Readiness approximately 85%; pilot on. No provider calls, credits, accounts or
+capture-resolution changes. No new paid scans requested.
+
 ## 2026-10-07 15:06 Eastern: glare transition accepted, framing caution
 
 IMG_4555 shows reflection advice on a visibly reflective card. IMG_4556 shows
