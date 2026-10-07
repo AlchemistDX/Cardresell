@@ -19,3 +19,11 @@ Source plan: CardResell-Scan-Accuracy-and-Photo-Assistant-Plan-2026-10-06.
 - Ximilar async grader worked live: `card_grade deep_grade success http=201` in 37.4 s (second scan), result rendered "CV-VERIFIED". GPT (gpt-6.1-sol) 14.7 s, 9,523 prompt / 559 completion tokens (~$0.025 at list). Ximilar identify 1.7 s.
 - Fresh card → PSA 7 (Ximilar T/B 66/34 centering ceiling); bent card → PSA 3. Same card measured T/B 66/34 then 60/40 across the two sessions: centering from angled 1000 px phone photos is noisy; do not market it as precise.
 - Bugs found and fixed: grade label stayed "Mint" on a server-lowered PSA 7; limiting factor still explained the model's pre-correction grade; grading-upside priced a name-only PriceCharting match (Secret Lair foil #2556, $4.97) instead of SOS #129 (~$0.40) because it ignored the grade response's set/number; "View PSA 1 price" on a PSA 3. Server now refuses to call a name-only TCG match "exact product match" (cache v10).
+
+## Grading capture resolution (2026-10-07, source 533dd1b, Production dpl_26Rv5ZYk1zBcGXZmMLWFSQ4du4X8)
+
+Audit correction: grading photos were scaled to 1000 px on the LONG side (~715 px short side), not 1000 px short side. Ximilar's grader recommends ~2000 px short side, unedited. The client card-bounds crop is found on a 256 px preview with a 4 px margin, so it can clip ~16 px of physical edge on a 12 MP photo — a plausible contributor to centering noise (66/34 vs 60/40 on the same card), not established.
+
+Change (client only, core.9e0c00ba.js): Deep Grade front/back 2800 px long side (~2000 short), q0.88, 3% crop margin, ≤1.45 MB base64 each with quality-then-size fallback; Quick Grade 1600 px (≥768 short side for GPT high detail), ≤700 KB; edges 1200 px, ≤250 KB. Worst-case Deep body ≈ 3.9 MB (< 4.5 MB Vercel limit). ID scan capture unchanged. Simulated-canvas suite grade-capture-resolution 12/0.
+
+Expected side effects to measure live: higher OpenAI image tokens per grade (larger front/back tiles), longer upload on mobile data, possibly different Ximilar job time. Acceptance: repeat Deep Grades of one physical card should give closer centering readings than 66/34 vs 60/40; no 413 errors.
