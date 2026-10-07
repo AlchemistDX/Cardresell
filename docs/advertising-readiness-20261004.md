@@ -18,6 +18,17 @@ Still open before paid advertising:
 4. Ad copy must not claim calibrated grading accuracy or precise "pixel-measured" centering: same card measured T/B 66/34 vs 60/40 across sessions from 1000 px photos.
 5. Recommended, not blocking: higher-resolution grading capture (needs direct upload; 4.5 MB body limit), Ximilar invoice reconciliation, eBay sold comps remain blank (public API shut down).
 
+## Email/password fresh-account acceptance — October 7, 2026, 00:02 Eastern
+
+Pilot list (sensitive env, JSON, 5 max) now: willsep200, willsep923 (new, replaced willsep23 with owner approval; willsep23 balances untouched but not admitted), willsep205, cartoonclipscentral23, wljones9322@eagle.fgcu.edu. Rebuilt Production dpl_8yT8LUYznB3ySuPy2Vn3hdcBbjZe (source 8e21efd); homepage byte-identical.
+
+- Gmail inbox delivery: owner screenshot shows "Verify your email for CardResell" from noreply@cardresell-e0329.firebaseapp.com labelled Inbox (not Spam) at 23:15, for a new email/password Gmail account.
+- First run (willsep923, 04:02Z): GET membership-account 401 email_not_verified_password (stale pre-link token) → verify-send Resend 403 test-sender restriction → Firebase link fallback → GET 200 → single POST 200 association → GET 200. Settings screenshot: verified email, 15 ID / 2 Grade, no Shop opened. Exactly one association request in the window.
+- School account (wljones9322, 02:59Z): automatic first association GET 200 → POST 200 → GET 200 without the Shop; that account was already verified, so its inbox delivery is not established.
+- Minor: before first association, /api/pro-status and /api/scan-credits return 503 billing_unavailable for an unenrolled verified/unverified account; it should report setup-needed, not outage. Self-resolves after association; not changed.
+
+Email/password verification delivery (Gmail) and fresh-account first-run grant are now accepted live. Outlook/school junk placement remains unmeasured.
+
 ## Owner decisions and follow-up — October 6, 2026, 16:30 Eastern
 
 Owner policy (2026-10-06): Deep Grade whose CV step does not complete is billed as a Quick Grade (1 credit, 1 refunded) only when a usable assessment completes, clearly labelled; no usable assessment refunds both; never silently charge for unavailable CV. Keep pilot restriction until email path and this policy are accepted live. Ads describe identification and photo-based condition estimates; "CV-verified" means the CV step completed, not that the grade is proven. OpenAI readings are partial cost; Ximilar charges must be reconciled before setting an ad budget. Photo downscaling is a candidate, not established, cause of centering inconsistency.
