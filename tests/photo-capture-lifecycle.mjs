@@ -89,7 +89,7 @@ await test(async()=>{assert.equal(guide.outline(pixels({box:[0,45,120,213]}),200
 const g={x:.1,y:.05,w:.8,h:.9},blur={id:'soft',text:'soft'};
 await test(async()=>{assert.equal(guide.advice(null,g,blur,'face').id,'frame');assert.equal(guide.advice(null,g,blur,'edge').id,'edge');});
 await test(async()=>{assert.equal(guide.advice({x:.3,y:.3,w:.2,h:.3},g,blur,'face').id,'small');
- assert.equal(guide.advice({x:.01,y:.05,w:.85,h:.9},g,blur,'face').id,'fit');
+ const fit=guide.advice({x:.01,y:.05,w:.85,h:.9},g,blur,'face');assert.equal(fit.id,'fit');assert.equal(fit.kind,'neutral');assert.doesNotMatch(fit.text,/move back/i);
  assert.equal(guide.advice({x:.15,y:.1,w:.7,h:.8},g,blur,'face').id,'soft');
  assert.equal(guide.advice({x:.15,y:.1,w:.7,h:.8},g,null,'face').kind,'neutral');});
 await test(async()=>{let s=guide.stable(null,{id:'soft'});assert.equal(s.show,false);s=guide.stable(s,{id:'soft'});assert.equal(s.show,false);
@@ -119,9 +119,10 @@ await test(async()=>{
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('function _liveCapQATick('),source.indexOf('function _liveCapRenderQA(')),c);
  for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'frame');
  box={x:.3,y:.3,w:.2,h:.3};for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'small');
- box={x:.15,y:.1,w:.7,h:.8};for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'soft');
+ box={x:.15,y:.1,w:.7,h:.8};c._liveCapQATick();assert.equal(rendered,null);for(let i=0;i<2;i++)c._liveCapQATick();assert.equal(rendered.id,'soft');
  box=null;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');assert.equal(window._liveCapLastSharpness,null);
  reflection=true;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'reflection');assert.equal(window._liveCapLastSharpness,null);
+ reflection=false;c._liveCapQATick();assert.equal(rendered,null);assert.equal(window._liveCapQAState,null);for(let i=0;i<2;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');
  window._liveCapState.role='edge';calls=0;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'edge');
 });
 // Small localized reflections must not be diluted by the whole image or

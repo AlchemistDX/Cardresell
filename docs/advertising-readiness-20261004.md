@@ -1,3 +1,26 @@
+## 2026-10-07 15:06 Eastern: glare transition accepted, framing caution
+
+IMG_4555 shows reflection advice on a visibly reflective card. IMG_4556 shows
+that warning replaced by a fit/move-back warning despite all four card corners
+appearing inside the guide. Local screenshot replay: glare true/false respectively;
+second screenshot outline is inside the guide with neutral review advice. The
+incorrect fit decision was NOT reproduced from this still screenshot. An earlier
+video frame, outline error or a stale hint could explain it; cause is unconfirmed.
+
+Confirmed code issue: an old instruction stays visible during the three-sample
+confirmation period for its replacement (~1.5 seconds). Correction clears old
+instructions on the first changed candidate (next 500 ms analysis tick), retains
+three-sample confirmation for a new instruction, and makes uncertain fit advice a
+neutral manual corner/parallel-phone check instead of telling the owner to move
+back. This is conservative guidance, not a claim that outline detection is solved.
+
+Local camera suite 27/0 includes stale reflection/size-warning clearing; asset
+fingerprints 101/0, syntax and diff checks pass. Bright-background discrimination
+remains open: IMG_4553 could be triggered by the window inside the guide. Phone
+acceptance for immediate clearing remains pending. No paid scan needed.
+Normal ID-to-Magic result flow accepted by owner earlier today; readiness remains
+approximately 85%, pilot on. No billing, provider or capture-resolution changes.
+
 ## 2026-10-07 08:35 Eastern: owner scan success and glare regression
 
 Owner reports normal live ID scan identified the card, selected Magic TCG and
