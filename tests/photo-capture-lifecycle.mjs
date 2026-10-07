@@ -65,7 +65,7 @@ await test(async()=>{const nodes=new Map();const node=id=>{if(!nodes.has(id))nod
   const c={document:{getElementById:node}};vm.createContext(c);
   vm.runInContext(source.slice(source.indexOf('function _liveCapRenderQA('),source.indexOf('// Public entry point used by the sub-row')),c);
   c._liveCapRenderQA(null);assert.equal(node('liveCapQABar').style.display,'flex');
-  assert.match(node('liveCapQAText').textContent,/Place one card/);assert.equal(node('liveCapFrame').style.borderColor,'rgba(255,255,255,.7)');
+  assert.match(node('liveCapQAText').textContent,/Keep all four edges/);assert.equal(node('liveCapFrame').style.borderColor,'rgba(255,255,255,.7)');
   c._liveCapRenderQA({icon:'?',text:'Cannot assess focus'});assert.equal(node('liveCapQAText').textContent,'Cannot assess focus');
   c._liveCapRenderQA(null);assert.equal(node('liveCapQAPill').style.color,'#fff');});
 // Guide detector and ordered advice, with no provider calls or charges.
@@ -108,12 +108,12 @@ await test(async()=>{for(const [w,h,bannerBottom,footerTop] of [[390,740,132,578
 // framing has priority even when a quality check would warn about blur.
 await test(async()=>{
  const rect={left:0,top:0,width:200,height:270},fr={left:20,top:13.5,width:160,height:243};
- let calls=0,rendered=null,box=null,frames=0;
+ let calls=0,rendered=null,box=null,frames=0,reflection=false;
  const nodes={liveCapVideo:{videoWidth:200,videoHeight:270,getBoundingClientRect:()=>rect},liveCapOverlay:{style:{display:'flex'}},
   liveCapFrameArea:{getBoundingClientRect:()=>rect},liveCapFrame:{getBoundingClientRect:()=>fr}};
  const window={_liveCapState:{role:'face'},_liveCapQACand:null,_liveCapQAStreak:0,_liveCapQAState:null,
   _liveCapQACanvas:{getContext:()=>({drawImage(){},getImageData:()=>({data:pixels()})})},
-  CardResellPhotoGuide:{...guide,outline:()=>box}};
+  CardResellPhotoGuide:{...guide,outline:()=>box,reflection:()=>reflection}};
  const c={window,document:{getElementById:id=>nodes[id]},_LIVECAP_SOFT_THRESHOLD:14,
   _liveCapCardSharpness(){calls++;return 1;},_liveCapRenderQA(h){rendered=h;},_liveCapLayout(){},_liveCapStopQA(){}};
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('function _liveCapQATick('),source.indexOf('function _liveCapRenderQA(')),c);
@@ -121,6 +121,27 @@ await test(async()=>{
  box={x:.3,y:.3,w:.2,h:.3};for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'small');
  box={x:.15,y:.1,w:.7,h:.8};for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'soft');
  box=null;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'frame');assert.equal(window._liveCapLastSharpness,null);
+ reflection=true;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(rendered.id,'reflection');assert.equal(window._liveCapLastSharpness,null);
  window._liveCapState.role='edge';calls=0;for(let i=0;i<3;i++)c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'edge');
+});
+// Small localized reflections must not be diluted by the whole image or
+// suppressed by missing outlines. Uniform white stock / colored art are not
+// sufficient evidence. These cases intentionally do not imply calibration.
+function glarePixels({background=100,patch=null}={}) {
+ const w=160,h=224,p=new Uint8ClampedArray(w*h*4);
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++) {
+  const color=patch && x>=65 && x<80 && y>=45 && y<60?patch:[background,background,background];
+  const i=(y*w+x)*4;p.set([...color,255],i);
+ }return p;
+}
+await test(async()=>{assert.equal(guide.reflection(glarePixels({patch:[255,249,200]}),160,224),true);
+ assert.equal(guide.reflection(glarePixels({background:245}),160,224),false);
+ assert.equal(guide.reflection(glarePixels({background:235,patch:[255,255,255]}),160,224),false);
+ for(const patch of [[255,50,0],[0,255,30],[0,40,255]])assert.equal(guide.reflection(glarePixels({patch}),160,224),false);
+ assert.equal(guide.reflection(new Uint8Array(4),160,224),false);
+});
+await test(async()=>{assert.equal(guide.advice(null,g,guide.reflectionHint(),'face').id,'reflection');
+ assert.equal(guide.advice({x:.3,y:.3,w:.2,h:.3},g,guide.reflectionHint(),'face').id,'reflection');
+ assert.equal(guide.advice(null,g,guide.reflectionHint(),'edge').id,'edge');
 });
 console.log(`Photo capture lifecycle: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);

@@ -1,3 +1,41 @@
+## 2026-10-07 08:35 Eastern: owner scan success and glare regression
+
+Owner reports normal live ID scan identified the card, selected Magic TCG and
+opened the expected result. IMG_4548–4550 show the new unobstructed framing UI,
+but guidance remains on framing even for the normal card and two reflections.
+IMG_4551–4552 show an identification miss and the automatic ID-credit-refund
+message; the actual ledger balance was not independently checked in this pass.
+Glare guidance acceptance FAILED; normal identification success does not validate
+photo-quality warnings or grade accuracy.
+
+Root causes in client: outline analysis was limited to the stage occupied by a
+height-constrained guide, while detection requires a 5% margin; a well-filled card
+could therefore be rejected. All quality checks were gated on that outline. The
+old glare statistic also required >2% almost-neutral, near-white pixels (>245),
+missing the smaller warm hotspot in the owner's screenshot.
+
+Correction: sample source video 12% beyond the stage vertically (clamped to video)
+for outlines. Independently check the guide interior for localized bright spots
+with surrounding contrast. Such spots display a cautious possible-reflection
+warning even with no outline, ahead of framing advice. Color alone does not
+trigger it. Unknown framing now asks for manual edges/text/reflection checks,
+without implying the card is absent. No green approval or shutter block; edge
+close-ups retain manual guidance; no provider, credit, account or capture changes.
+
+Evidence: owner screenshot guide interiors replayed locally at 160x225: normal
+IMG_4548 false, glare IMG_4549 true, foil/reflection IMG_4550 true. Normal screenshot
+outline was null in the old sample and found in an expanded source-area crop.
+Screenshots are compressed/rendered evidence, not original camera frames; these
+three examples are not a calibrated accuracy estimate. Printed bright highlights
+can resemble reflections, and dim/colored glare can still be missed. No zero-fail
+promise. Raw screenshots were not added to the repository.
+
+Validation: camera lifecycle 27/0 including independent reflection advice with no
+outline, uniform light stock and saturated-color controls; grade resolution 28/0;
+asset fingerprints 101/0; JavaScript syntax and diff checks passed. Phone acceptance
+of the new reflection warning remains pending. No additional paid scan is needed.
+Readiness remains approximately 85%; pilot stays on.
+
 ## 2026-10-07: framing-first camera guide follow-up
 
 Owner screenshots IMG_4544–4547 confirm the iPhone zoom control is gone and
