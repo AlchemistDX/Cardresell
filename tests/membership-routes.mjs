@@ -249,6 +249,97 @@ await t.section('Deep Grade without completed CV is billed as Quick; no assessme
   }
 });
 
+// Exercise real Lua through the HTTP boundary, including commit-before-timeout.
+for (const fault of ['before_debit', 'after_debit', 'refund_reply_lost', 'refund_unavailable', 'refund_denied']) {
+  await t.section('Deep fallback uncertain settlement: ' + fault, async () => {
+    const h = billingHarness({ balance: 0 });
+    const localFetch = globalThis.fetch;
+    let armed = false, quickContext, debitCalls = 0, refundCalls = 0, providerCalls = 0;
+    try {
+      await seed();
+      process.env.OPENAI_API_KEY = 'local-placeholder-not-a-credential';
+      process.env.ENABLE_XIMILAR_GRADER = 'deep_only';
+      globalThis.__XIMILAR_GRADE = async () => ({ ok: false, reason: 'timeout' });
+      globalThis.fetch = async (input, init) => {
+        if (String(input).startsWith('https://api.openai.com/')) {
+          providerCalls++;
+          return Response.json({ choices: [{ message: { content: JSON.stringify({
+            card_name: 'Synthetic Grade', psa_estimate: 8, grade_label: 'Near Mint',
+            subgrades: { centering: 8, corners: 8, edges: 8, surface: 8 }, confidence: 'medium',
+          }) } }] });
+        }
+        if (armed && String(input).startsWith(process.env.KV_REST_API_URL) && init?.body) {
+          const args = JSON.parse(init.body);
+          if (String(args[0]).toUpperCase() === 'EVAL') {
+            let p; try { p = JSON.parse(args.at(-1)); } catch {}
+            if (p?.mode === 'grade' && p.cost === 1) {
+              if (p.action === 'debit') {
+                quickContext = p; debitCalls++;
+                if (fault !== 'before_debit') await localFetch(input, init);
+                throw new Error('injected uncertain replacement debit');
+              }
+              if (p.action === 'refund') {
+                refundCalls++;
+                if (fault === 'refund_unavailable') throw new Error('injected refund outage');
+                if (fault === 'refund_denied') return Response.json({ result: JSON.stringify({ ok: false, code: 'invalid_state' }) });
+                if (fault === 'refund_reply_lost' && refundCalls === 1) {
+                  await localFetch(input, init);
+                  throw new Error('injected lost refund acknowledgement');
+                }
+              }
+            }
+          }
+        }
+        return localFetch(input, init);
+      };
+      // Spend the included grade; the scenario then uses purchased credits only.
+      await h.scan(exact(), { mode: 'grade', backBase64: 'back' });
+      await redis(['SET', `scans:${UID}:paid_left`, '2']);
+      armed = true;
+      const body = { operation_id: (await import('node:crypto')).randomBytes(32).toString('hex'),
+        mode: 'grade', deepGrade: true, imageBase64: 'A'.repeat(9000), mimeType: 'image/jpeg',
+        backBase64: 'B'.repeat(9000), topEdgeBase64: 'C'.repeat(9000), bottomEdgeBase64: 'D'.repeat(9000) };
+      const result = await h.scan(exact(), body);
+      const unresolved = ['refund_unavailable', 'refund_denied'].includes(fault);
+      t.check('replacement debit attempted once', debitCalls === 1);
+      t.check('refund attempt count is bounded', refundCalls >= 1 && refundCalls <= 2);
+      t.check('balance agrees with confirmed settlement',
+        await redis(['GET', `scans:${UID}:paid_left`]) === (unresolved ? '1' : '2'));
+      if (unresolved) {
+        t.check('uncertain refund never claims a free completed result', result.statusCode === 503
+          && !result.payload.success && result.payload.creditsUsed === undefined);
+        t.check('reconciliation names the replacement receipt in the visible error',
+          result.payload.billing_reference === quickContext.receipt
+          && result.payload.error.includes(quickContext.receipt)
+          && result.payload.code === 'billing_reconciliation_required');
+      } else {
+        t.check('confirmed compensation delivers a free assessment', result.statusCode === 200
+          && result.payload.creditsUsed === 0 && result.payload.credits_refunded === 2);
+        const receipt = JSON.parse(await redis(['GET', membershipReceiptKey(quickContext.receipt)]));
+        t.check('receipt is durably refunded or cancelled', ['refunded', 'cancelled'].includes(receipt.state));
+      }
+      const beforeReplay = await state(), calls = providerCalls;
+      const replay = await h.invokeScan(body);
+      t.check('same operation replays without new charge or provider work', replay.statusCode === result.statusCode
+        && JSON.stringify(replay.payload) === JSON.stringify(result.payload)
+        && await state() === beforeReplay && providerCalls === calls && debitCalls === 1);
+      // Restore transport and reconcile the SAME operation. Repeats must not mint credits;
+      // a debit arriving after cancellation must not consume a credit either.
+      armed = false;
+      const compensation = await consume('refund', quickContext);
+      await consume('refund', quickContext);
+      const delayed = await consume('debit', quickContext);
+      t.check('exact-receipt recovery/replay preserves two credits and fences late debit', compensation.ok
+        && !delayed.ok && await redis(['GET', `scans:${UID}:paid_left`]) === '2');
+      t.check('no live service calls', h.outbound.length === 0);
+    } finally {
+      globalThis.fetch = localFetch;
+      delete globalThis.__XIMILAR_GRADE; delete process.env.ENABLE_XIMILAR_GRADER;
+      finish(h);
+    }
+  });
+}
+
 await t.section('normal welcome and authenticated read-only balances', async () => {
   const h = billingHarness({ balance: 12 });
   try {

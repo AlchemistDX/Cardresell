@@ -1,3 +1,35 @@
+## 2026-10-07: uncertain Deep-to-Quick settlement regression closed locally
+
+Found a real fault-path gap: after refunding the two-credit Deep operation, a
+replacement one-credit debit could commit but lose its acknowledgement. The
+handler attempted compensation but ignored a negative refund result or swallowed
+a refund transport failure, then reported a free assessment despite a possible
+one-credit debit remaining.
+
+The handler now validates compensation and retries the SAME refund receipt once.
+A confirmed refund/cancellation delivers the assessment for zero credits. If both
+attempts remain unconfirmed, it returns HTTP 503 with an explicit reconciliation
+code and the replacement receipt in both the machine field and visible support
+message. It never claims zero charge for an unresolved ledger outcome. The
+original Deep refund remains exact; normal CV fallback still costs one credit.
+No ledger script, account, standing balance, provider or camera changes.
+
+Five HTTP-boundary fault scenarios use the real Lua ledger on isolated local
+Redis: debit fails before commit; commits then loses reply; refund commits then
+loses reply; refund unavailable; refund returns a negative result. Same-operation
+replays perform no extra debit/provider work. Exact-receipt recovery is idempotent
+and cancellation prevents a late debit. The old implementation failed four of
+these assertions. Updated full suites: membership routes 120/0, consumption
+119/0, scan intent 70/0, legacy scan 37/0. Release inspection and syntax/diff checks
+passed. No production failure was forced and no customer credits were spent.
+
+Limitation: a persistent ledger outage still needs reconciliation after recovery;
+this change does not introduce a background refund worker or automatic recovery
+of a completed 503 response. The support receipt identifies the operation to
+refund using the existing trusted ledger path. Physical-phone camera acceptance
+and a naturally observed live CV fallback remain open. Pilot stays on; readiness
+remains approximately 85%. Deployment must be confirmed separately.
+
 ## 2026-10-07: four-edge fallback and off-thread camera analysis
 
 Implemented an actual outline fallback, beyond hint wording. The existing

@@ -1104,8 +1104,9 @@ export default async function handler(req, res) {
   // as a Quick Grade (1 credit); no usable assessment refunds both (the normal
   // refundCredits path). The ledger refunds whole operations only, so the
   // 2-credit operation is refunded exactly and a new 1-credit operation is
-  // debited. Any failure or uncertainty on that second debit leaves the user
-  // uncharged -- the error is always in the customer's favour.
+  // debited. An uncertain second debit is compensated on that same receipt.
+  // Only a confirmed compensation may be reported as free; an unresolved
+  // ledger outcome returns a reconciliation reference instead.
   async function settleDeepGradeWithoutCv() {
     const out = { charged: consumedAmount, refunded: 0 };
     if (!hasKV || !consumedFrom || consumedAmount !== 2) return out;
@@ -1122,8 +1123,21 @@ export default async function handler(req, res) {
           out.charged = 1; out.refunded = 1;
         }
       } catch {
-        try { await membershipBilling('refund', quick); } catch {
+        // Keep the uncertain operation addressable, not the already-refunded
+        // Deep receipt. Refund is idempotent and creates a cancellation fence
+        // even if the debit has not reached Redis yet. Retry once if its reply
+        // is lost; never issue another debit to resolve an unknown outcome.
+        gradeBillingContext = quick;
+        let compensated = false;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const refund = await membershipBilling('refund', quick);
+            if (refund.ok) { compensated = true; break; }
+          } catch { /* retry the same receipt, with a strict attempt bound */ }
+        }
+        if (!compensated) {
           console.error('[grade-billing] reconciliation required (deep->quick settle)', quick.receipt);
+          throw new Error('billing_reconciliation_required');
         }
       }
       return out;
@@ -2279,7 +2293,8 @@ Respond ONLY with valid JSON, no explanation:
           const settled = await settleDeepGradeWithoutCv();
           cvDowngrade = { credits_charged: settled.charged, credits_refunded: settled.refunded };
         } catch {
-          return res.status(503).json({ error: 'billing_reconciliation_required',
+          return res.status(503).json({ code: 'billing_reconciliation_required',
+            error: `We could not confirm your credit adjustment. Please contact will@cardresell.org before starting another scan. Billing reference: ${gradeBillingContext.receipt}`,
             billing_reference: gradeBillingContext.receipt });
         }
       }
