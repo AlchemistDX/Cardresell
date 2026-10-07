@@ -741,6 +741,11 @@ export default async function handler(req, res) {
   // Deep Grade = 6-photo PSA-style inspection (front + back + 4 edges), costs 2 credits.
   // Only applies to grade mode; ignored otherwise.
   const isDeepGrade    = isGradeMode && deepGrade === true;
+  if (isGradeMode) {
+    const _cm = (req.body && req.body.captureMeta) || {};
+    const _num = v => (typeof v === 'number' && isFinite(v) && v >= 0 && v < 1000) ? Math.round(v * 10) / 10 : null;
+    try { console.log('[capture-meta] ' + JSON.stringify({ deep: isDeepGrade, front_sharpness: _num(_cm.frontSharpness), back_sharpness: _num(_cm.backSharpness) })); } catch (_) {}
+  }
   // Bulk Grade is a Pro Max benefit. The client gate reads window._userTier,
   // which anyone can set in DevTools, so the entitlement is enforced here too.
   // Single-card grading is unaffected: only requests that declare bulkGrade

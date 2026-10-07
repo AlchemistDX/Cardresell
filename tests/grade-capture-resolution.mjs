@@ -80,6 +80,49 @@ function env({ W = 3024, H = 4032, bounds = { x: 400, y: 500, w: 2200, h: 3070 }
   const land = rect({ videoWidth: 1920, videoHeight: 1080, clientWidth: 1000, clientHeight: 1000 });
   check('landscape stream in square view trims sides', land.sw === 1296 && land.sh === 1080 && land.sx === 312);
 }
+
+// 2026-10-07 focus check: real _sharpnessScore on a card-like pattern, sharp vs blurred.
+{
+  const uiName = idx.match(/\/js\/(ui\.[0-9a-f]{8}\.js)/)[1];
+  const ui = readFileSync(new URL(`../js/${uiName}`, import.meta.url), 'utf8');
+  const fnSrc = (name) => { const i = ui.indexOf(`function ${name}(`); let d = 0, j = ui.indexOf('{', i);
+    for (let k = j; k < ui.length; k++) { if (ui[k] === '{') d++; else if (ui[k] === '}' && --d === 0) return ui.slice(i, k + 1); } };
+  const score = new Function(fnSrc('_sharpnessScore') + '; return _sharpnessScore;')();
+  const thr = Number((ui.match(/const _LIVECAP_SOFT_THRESHOLD = (\d+(?:\.\d+)?);/) || [])[1]);
+  const W = 320, H = 448;
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const g = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let v = 40;                                                // black border
+    if (x > 14 && x < W - 14 && y > 14 && y < H - 14) v = 150;  // frame
+    if (x > 24 && x < W - 24 && y > 40 && y < 230) v = 90 + 60 * Math.sin(x / 9) * Math.cos(y / 13); // art
+    if (y > 260 && y < 420 && x > 26 && x < W - 26 && (y % 14) < 8 && rnd() < 0.55) v = 30; // text glyphs
+    g[y * W + x] = v;
+  }
+  const blur = (src, r) => { if (!r) return src; let a = src;
+    for (let pass = 0; pass < 3; pass++) { const o = new Float32Array(W * H);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { let t = 0, n = 0;
+        for (let dx = -r; dx <= r; dx++) { const xx = x + dx; if (xx >= 0 && xx < W) { t += a[y * W + xx]; n++; } } o[y * W + x] = t / n; }
+      const o2 = new Float32Array(W * H);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { let t = 0, n = 0;
+        for (let dy = -r; dy <= r; dy++) { const yy = y + dy; if (yy >= 0 && yy < H) { t += o[yy * W + x]; n++; } } o2[y * W + x] = t / n; }
+      a = o2; } return a; };
+  const rgba = (a, k = 1) => { const px = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < a.length; i++) { const v = Math.round(a[i] * k); px[4*i] = px[4*i+1] = px[4*i+2] = v; px[4*i+3] = 255; } return px; };
+  const sSharp = score(rgba(g), W, H), sMild = score(rgba(blur(g, 1)), W, H), sSoft = score(rgba(blur(g, 2)), W, H);
+  const sDim = score(rgba(g, 0.4), W, H), sSoftDim = score(rgba(blur(g, 2), 0.4), W, H);
+  check('threshold parsed', thr > 0, thr);
+  check('sharp pattern passes the focus check', sSharp >= thr, sSharp);
+  check('defocused pattern is flagged soft', sSoft < thr, sSoft);
+  console.log('  scores sharp/mild/soft/dim/softdim:', sSharp, sMild, sSoft, sDim, sSoftDim);
+  check('score falls monotonically with blur', sSharp > sMild && sMild > sSoft, [sSharp, sMild, sSoft].join(' > '));
+  check('dim light does not flip a sharp verdict', sDim >= thr, sDim);
+  check('dim light does not hide blur', sSoftDim < thr, sSoftDim);
+  check('featureless frame gives no verdict', score(rgba(new Float32Array(W * H).fill(120)), W, H) === null);
+  check('soft hint is advisory (shutter not disabled)', !/liveCapShutter[^;]*disabled\s*=\s*true/.test(ui));
+  const scanSrc = readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
+  check('server logs numeric capture scores only', scanSrc.includes("'[capture-meta] '") && scanSrc.includes("typeof v === 'number' && isFinite(v)"));
+}
 check('worst-case Deep body under 4.5 MB', 2 * 1450000 + 4 * 250000 + 20000 < 4.5 * 1024 * 1024);
 console.log(`grade-capture-resolution: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);
