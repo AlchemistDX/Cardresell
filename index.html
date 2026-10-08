@@ -4490,7 +4490,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
      single "Bulk" button in the scan sub-row so mobile stays uncluttered.
      ===================================================================== -->
 <div id="bulkModePickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:305;align-items:flex-end;justify-content:center;padding:0" onclick="if(event.target===this)closeBulkModePicker()">
-  <div style="width:100%;max-width:480px;background:#0a0a0a;border-top:1px solid #1e1e1e;border-radius:16px 16px 0 0;padding:1.1rem 1.1rem 1.4rem;display:flex;flex-direction:column;gap:.65rem;box-shadow:0 -8px 40px rgba(0,0,0,.6)">
+  <div style="width:100%;max-width:480px;max-height:90vh;max-height:90dvh;overflow-y:auto;overscroll-behavior:contain;background:#0a0a0a;border-top:1px solid #1e1e1e;border-radius:16px 16px 0 0;padding:1.1rem 1.1rem max(1.4rem,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:.65rem;box-shadow:0 -8px 40px rgba(0,0,0,.6)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.15rem">
       <div style="font-size:1rem;font-weight:800;color:#fff">Scan menu</div>
       <button onclick="closeBulkModePicker()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.4rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
@@ -4542,6 +4542,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <!-- ==================== GRADE PANEL ==================== -->
     <div id="scanMenuPanelGrade" style="display:none;flex-direction:column;gap:.55rem">
       <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.15rem;line-height:1.45">Estimate PSA-style grades. Uses <strong style="color:#fff">grade credits</strong>.</div>
+
+      <button id="scanMenuPhotoTips" type="button" onclick="closeBulkModePicker();openPhotoTipsModal(null)" style="width:100%;min-height:44px;padding:.7rem .8rem;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.35);border-radius:10px;color:var(--gold-text);font-size:.8rem;font-weight:700;text-align:left;cursor:pointer">
+        📸 Grading photo do’s &amp; don’ts
+        <span style="display:block;margin-top:.2rem;font-size:.7rem;font-weight:400;color:var(--text-muted)">See good and bad examples before taking photos.</span>
+      </button>
 
       <!-- Quick Grade (single card) -->
       <button onclick="closeBulkModePicker();startSingleGradeFlow('quick')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
