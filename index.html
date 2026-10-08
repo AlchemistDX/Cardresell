@@ -2236,6 +2236,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <input type="file" id="scanFileInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processScanImage(this)" />
   <input type="file" id="gradeFileInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeImage(this)" />
   <input type="file" id="gradeBackFileInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeBack(this)" />
+  <dialog id="gradePhotoSource" class="membership-shop" aria-labelledby="gradePhotoSourceTitle">
+    <header><h2 id="gradePhotoSourceTitle">Choose a photo</h2><button type="button" onclick="document.getElementById('gradePhotoSource').close()">Cancel</button></header>
+    <p>Use a clear photo from your camera app, or take one now. Keep the requested edge and its corners visible.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px"><button id="gradeTakePhoto" type="button">Take photo</button><button id="gradeUploadPhoto" type="button">Upload photo</button></div>
+    <input id="gradeLibraryInput" type="file" accept="image/*" style="display:none">
+    <p>Choose JPEG, PNG or WebP. Photos are prepared for grading at high resolution. Credits are used when you submit.</p>
+  </dialog>
   <!-- Deep Grade edge photo inputs — optional, up to 4 edges -->
   <input type="file" id="gradeEdgeTopInput"    accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'top')" />
   <input type="file" id="gradeEdgeBottomInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'bottom')" />
@@ -2283,6 +2290,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <!-- Shown while scanning -->
       <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
       <!-- Shown after success -->
+      <button id="scanCreateDraftBtn" type="button" onclick="createSingleScanDraft()" style="display:none;padding:.7rem 1rem;background:#2563eb;color:white;border:0;border-radius:12px;font-weight:800;min-height:48px;width:100%">Create draft</button>
       <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View Card Prices →</button>
       <button id="scanWrongCardBtn" onclick="openWrongCardPicker()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.12);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">🔀 Wrong card? Fix for free</button>
       <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
@@ -4152,7 +4160,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.cee58f73.js"></script>
+<script defer src="/js/core.0cbd6f14.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4206,7 +4214,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .membership-account-status:not([hidden]) { position:relative; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0; padding:14px 16px; border:1px solid var(--gold,#d4af37); border-radius:12px; background:var(--surface,#171717); color:var(--text,#fafafa); font-size:.875rem; line-height:1.5; }
 .membership-account-status button { min-height:44px; padding:10px 16px; border:1px solid var(--gold,#d4af37); border-radius:8px; background:var(--surface-2,#252525); color:inherit; font:inherit; cursor:pointer; }
 </style>
-<script defer src="/js/membership-shop.f86c0569.js"></script>
+<script defer src="/js/membership-shop.4c106b6b.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/ui.f017bba2.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
