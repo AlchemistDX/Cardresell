@@ -411,7 +411,21 @@
       ],
       "already_present": 452,
       "covered_provider_cards": 452,
-      "added_in_release": 418
+      "added_in_release": 418,
+      "future_printings_already_in_baseline": [
+        "236b2024-9141-4a91-b5f8-2180ecc3a761",
+        "29a7f3e8-efcd-42bb-b315-9e9c0794dddb",
+        "60b9f969-694a-4445-9b0f-525c259edfc8",
+        "3d580fa2-954d-4de6-a64c-369c5ab8e03f"
+      ],
+      "future_additions_not_imported": [
+        "ee609b68-5c9c-43e0-aff4-eb1bbc8b2911",
+        "65e9f4df-02e5-4ac7-86da-795688bfb66f",
+        "f1a15a83-2f74-4513-ae4b-4cdc17016a84",
+        "16c5f0f3-2578-40d3-9012-6eaef17fa0b1",
+        "f28b1518-8347-4385-9f34-a9c48818c770",
+        "91e787cb-a9b0-4353-86b4-a4340122fd2f"
+      ]
     },
     {
       "game": "mtg",

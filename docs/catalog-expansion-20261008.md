@@ -31,7 +31,7 @@ Added provider-verified English printing records to the local reference-image in
 | mtg | The Lord of the Rings: Tales of Middle-earth (ltr) | 853 | 853/853 |
 | mtg | Secrets of Strixhaven (sos) | 61 | 368/368 |
 
-Magic uses Scryfall `unique=prints`, English paper cards, all result pages, extras and variations. Finish variants that share one provider ID are not counted as separate records. Pokémon uses canonical PokémonTCG.io IDs and printed numbers. No hashes are invented for unavailable images. Six Reality Fracture variants dated 2026-10-23 were excluded; the eligible subset is 456 of the 462 returned records. All added IDs, names, sets, numbers, image URLs and Magic release dates were checked against the downloaded source responses.
+Magic uses Scryfall `unique=prints`, English paper cards, all result pages, extras and variations. Finish variants that share one provider ID are not counted as separate records. Pokémon uses canonical PokémonTCG.io IDs and printed numbers. No hashes are invented for unavailable images. Six new Reality Fracture variants dated 2026-10-23 were excluded from this import. The source query contains 452 released records and 10 future-dated records; four of those future records were already in the baseline index and are retained under the additive-only policy. The release-date check certifies new additions, not every historical record. All added IDs, names, sets, numbers, image URLs and Magic release dates were checked against the downloaded source responses.
 
 ## Search and identity fixes
 
