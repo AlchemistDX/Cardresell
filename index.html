@@ -2240,7 +2240,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <header><h2 id="gradePhotoSourceTitle">Choose a photo</h2><button type="button" onclick="document.getElementById('gradePhotoSource').close()">Cancel</button></header>
     <p>Use a clear photo from your camera app, or take one now. Keep the requested edge and its corners visible.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px"><button id="gradeTakePhoto" type="button">Take photo</button><button id="gradeUploadPhoto" type="button">Upload photo</button></div>
-    <input id="gradeLibraryInput" type="file" accept="image/*" style="display:none">
+    <input id="gradeLibraryInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
     <p>Choose JPEG, PNG or WebP. Photos are prepared for grading at high resolution. Credits are used when you submit.</p>
   </dialog>
   <!-- Deep Grade edge photo inputs — optional, up to 4 edges -->
@@ -4160,7 +4160,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.4ad3f7f7.js"></script>
+<script defer src="/js/core.54c33219.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4216,7 +4216,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </style>
 <script defer src="/js/membership-shop.4c106b6b.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.f017bba2.js"></script>
+<script defer src="/js/ui.3ec0d65e.js"></script>
+  <script defer src="/js/binder.033366b3.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.d7045eef.js"></script>
 <script>
@@ -4361,7 +4362,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
 
     <!-- Mode picker (shown at start) -->
-    <div id="bulkModePicker" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:2rem 1.5rem;flex:1">
+    <div id="bulkModePicker" style="overflow-y:auto;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1rem;padding:2rem 1.5rem;flex:1">
       <!-- 2026-08-15: optional pack cost up front so users see a live
            "$X of $Y recovered" pill as each card scans. Optional — blank
            = no tracker shown. Persists to the end-of-scan cost sheet. -->
@@ -4390,7 +4391,57 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <div style="font-size:.72rem;color:rgba(255,255,255,.4);font-weight:400;margin-top:.15rem">Select multiple images from your library</div>
         </div>
       </button>
+      <button onclick="startBinderScan()" style="width:100%;max-width:320px;padding:1rem;background:#1a1a1a;border:1.5px solid #7254a6;border-radius:14px;color:#fff;text-align:left;cursor:pointer;flex-shrink:0">
+        <strong>📒 Binder page · Guided</strong><br><span style="font-size:.75rem;color:#bbb">Upload a page, review pockets, select cards to scan</span>
+      </button>
     </div>
+
+    <section id="bulkBinderReview" aria-label="Binder page review" style="display:none;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:1rem;color:#fff;gap:1rem">
+      <style>
+        #bulkBinderReview {background:#111}
+        #bulkBinderReview * {box-sizing:border-box}
+        #bulkBinderReview > * {flex-shrink:0}
+        #bulkBinderReview input[type="number"] {background:#252525;color:#fff;border:1px solid #888;border-radius:5px;padding:.4rem}
+        #bulkBinderReview button,#bulkBinderReview select,#bulkBinderReview input {font:inherit}
+        #bulkBinderReview button,#bulkBinderReview select {padding:.7rem;background:#252525;color:#fff;border:1px solid #666;border-radius:10px}
+        #bulkBinderReview button:disabled {opacity:.5}
+        #binderControls {border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:1rem;min-width:0}
+        #binderInput {width:100%;max-width:100%}
+        #binderPockets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+        .binder-pocket {display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;background:#202020;border:1px solid #666;border-radius:10px;padding:.6rem;cursor:pointer}
+        .binder-pocket:has(input:checked) {border-color:#4ade80;background:#14291b}
+        .binder-pocket img {width:100%;height:190px;object-fit:contain;background:#111}
+        .binder-pocket input {width:22px;height:22px;accent-color:#4ade80}
+        #bulkBinderReview :focus-visible {outline:3px solid #f5ad27;outline-offset:3px}
+        @media(min-width:700px){#binderPockets{grid-template-columns:repeat(4,minmax(0,1fr))}}
+      </style>
+      <h2 style="margin:0;font-size:1.2rem">Scan a binder page <small style="font-size:.75rem;color:#f5ad27">Guided</small></h2>
+      <p style="margin:0;line-height:1.5">Photograph one page straight-on in even light. Match the grid to the pockets, then select the cards to identify. This scans card identities, not grades.</p>
+      <fieldset id="binderControls">
+        <label for="binderInput">Binder page photo</label>
+        <input id="binderInput" type="file" accept="image/jpeg,image/png,image/webp">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
+          <label for="binderLayout">Pocket layout</label>
+          <select id="binderLayout"><option value="2,2">2 columns × 2 rows</option><option value="3,3" selected>3 columns × 3 rows</option><option value="3,4">3 columns × 4 rows</option><option value="4,3">4 columns × 3 rows</option><option value="4,4">4 columns × 4 rows</option></select>
+          <button id="binderRotate" type="button">Rotate 90°</button>
+        </div>
+        <details><summary style="padding:.6rem 0;cursor:pointer">Adjust the grid edges</summary>
+          <p>Trim background until the grid surrounds the pockets. Each value removes a percentage of the photo from that side. Keep all card corners visible.</p>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem">
+            <label>Left % <input id="binderLeft" type="number" min="0" max="40" value="0" style="width:4rem"></label>
+            <label>Right % <input id="binderRight" type="number" min="0" max="40" value="0" style="width:4rem"></label>
+            <label>Top % <input id="binderTop" type="number" min="0" max="40" value="0" style="width:4rem"></label>
+            <label>Bottom % <input id="binderBottom" type="number" min="0" max="40" value="0" style="width:4rem"></label>
+          </div>
+        </details>
+      </fieldset>
+      <canvas id="binderPreview" hidden aria-label="Page with pocket grid" style="width:100%;max-width:500px;align-self:center;height:auto"></canvas>
+      <p id="binderStatus" role="status" style="margin:0;line-height:1.5"></p>
+      <div id="binderPockets"></div>
+      <p style="margin:0;font-size:.85rem;color:#bbb">1 ID credit per selected pocket. Glare or angled pages may need individual photos. Only selected crops are sent for identification.</p>
+      <button id="binderContinue" type="button" disabled style="background:#f0a51c;color:#111;font-weight:800">Select the cards to scan</button>
+      <button id="binderCancel" type="button">Back to scan options</button>
+    </section>
 
     <!-- Rapid Scan live camera view -->
     <div id="bulkRapidCam" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:#000;position:relative">

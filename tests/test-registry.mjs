@@ -70,6 +70,8 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'binder-scan-browser.mjs':
+    'Required binder release gate: CR_CHROMIUM=<binary> node tests/binder-scan-browser.mjs. Shipped DOM/crops/bulk handoff; synthetic images, no provider calls.',
   'grade-upload-single-draft-browser.mjs':
     'Required grading/draft/shop browser gate: CR_CHROMIUM=<binary> node tests/grade-upload-single-draft-browser.mjs. Real shipped DOM/functions, synthetic services, external network blocked.',
   'photo-guide-browser.mjs':
