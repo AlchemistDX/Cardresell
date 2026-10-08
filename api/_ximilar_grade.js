@@ -143,6 +143,10 @@ export function parseGradeResponse(data) {
     return { ok: false, reason: 'empty_grades', raw: data };
   }
 
+  if (![g.final, g.corners, g.edges, g.surface, g.centering].some(v => toNum(v) != null)) {
+    return { ok: false, reason: 'empty_grades', raw: data };
+  }
+
   const cardBlock = rec.card?.[0] || {};
   const centering = cardBlock.centering || {};
   const surface   = cardBlock.surface || {};
@@ -174,6 +178,7 @@ export function parseGradeResponse(data) {
 
 function toNum(v) {
   if (v == null) return null;
+  if (typeof v !== 'number' && (typeof v !== 'string' || !v.trim())) return null;
   const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
 }

@@ -1,3 +1,5 @@
+import {completionGuard} from './_complete.mjs';
+const {finish} = completionGuard('scan-input-reset');
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
@@ -23,3 +25,5 @@ const reset=source.slice(start,source.indexOf('\n\n  } catch(err)',start));
 vm.runInNewContext(reset,context);
 for(const id of ['gradeBackFileInput','gradeEdgeTopInput','gradeEdgeBottomInput','gradeEdgeLeftInput','gradeEdgeRightInput']){calls.length=0;nodes.get(id).change();assert.deepEqual(calls,[id]);}
 console.log('PASS repeated scanner resets dispatch one handler per selected photo');
+
+finish(1, 0); // one end-to-end assertion sequence; exceptions abort before this point

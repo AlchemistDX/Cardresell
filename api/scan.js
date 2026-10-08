@@ -1,3 +1,4 @@
+import { parseCenteringRatio, selectCenteringEvidence, finalGradeDistribution } from './_gradeEvidence.js';
 import { catalogText, matchesCatalogPrinting, uniqueCatalogMatch, ygoPrinting } from './_catalogEvidence.js';
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
@@ -2128,14 +2129,7 @@ Respond ONLY with valid JSON, no explanation:
       // The model is now prompted with the correct thresholds, but we also
       // enforce them server-side in case the model makes an arithmetic
       // mistake or ignores the prompt. "NN/NN" → worse pct of the pair.
-      const parseRatio = (s) => {
-        if (!s || typeof s !== 'string') return null;
-        const m = s.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
-        if (!m) return null;
-        const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
-        if (!isFinite(a) || !isFinite(b) || a + b === 0) return null;
-        return Math.max(a, b) / (a + b); // 0.5..1.0 — higher means MORE off-center
-      };
+      const parseRatio = parseCenteringRatio;
       const centeringCeilingFromRatio = (worstRatio) => {
         if (worstRatio == null) return null;
         // OFFICIAL PSA front-centering thresholds:
@@ -2173,9 +2167,7 @@ Respond ONLY with valid JSON, no explanation:
       // Enforce the centering ceiling on the reported PSA estimate.
       let psaEstimate = clampSub(cardInfo.psa_estimate);
       if (psaEstimate != null) psaEstimate = Math.round(psaEstimate);
-      if (centeringCeiling != null && psaEstimate != null && psaEstimate > centeringCeiling) {
-        psaEstimate = centeringCeiling;
-      }
+      // Apply the ceiling only after selecting the final measurement evidence.
 
       // Legacy subgrades object — keep populated for older frontend paths.
       // Centering sub-score derived from the ceiling (10 → 10, 9 → 9, etc.).
@@ -2314,31 +2306,11 @@ Respond ONLY with valid JSON, no explanation:
       // but the wire fields stayed as GPT's eyeball estimate — the UI would
       // render a meter showing 55/45 with a caption saying "caps at PSA 6",
       // which was mathematically impossible and shattered user trust.
-      let finalCenteringLR = centeringLR;
-      let finalCenteringTB = centeringTB;
-      let centeringDisplay =
-        (centeringLR || centeringTB)
-          ? [centeringLR && `${centeringLR} L/R`, centeringTB && `${centeringTB} T/B`].filter(Boolean).join(', ')
-          : (cardInfo.centering || 'Unknown');
+      const centeringEvidence = selectCenteringEvidence(centeringLR, centeringTB, cvCentering);
+      let finalCenteringLR = centeringEvidence.leftRight.value;
+      let finalCenteringTB = centeringEvidence.topBottom.value;
+      const centeringDisplay = [finalCenteringLR && `${finalCenteringLR} L/R`, finalCenteringTB && `${finalCenteringTB} T/B`].filter(Boolean).join(', ') || 'Unknown';
       let finalCenteringCeiling = centeringCeiling;
-      if (cvCentering?.leftRight || cvCentering?.topBottom) {
-        const lr = cvCentering.leftRight;
-        const tb = cvCentering.topBottom;
-        centeringDisplay = [lr && `${lr} L/R`, tb && `${tb} T/B`].filter(Boolean).join(', ');
-        // Sync wire fields so meter + caption stay in sync.
-        if (lr) finalCenteringLR = lr;
-        if (tb) finalCenteringTB = tb;
-        // Re-run the ceiling calc with Ximilar's pixel-measured numbers.
-        const rLRx = parseRatio(lr);
-        const rTBx = parseRatio(tb);
-        const worstX = (rLRx != null && rTBx != null) ? Math.max(rLRx, rTBx) : (rLRx ?? rTBx);
-        const cvCeil = centeringCeilingFromRatio(worstX);
-        if (cvCeil != null) {
-          finalCenteringCeiling = cvCeil;
-          subgrades.centering = cvCeil;
-          if (psaEstimate != null && psaEstimate > cvCeil) psaEstimate = cvCeil;
-        }
-      }
 
       // ── FINAL COHERENCE PASS ──
       // Regardless of which source produced the ratios, the ceiling MUST
@@ -2364,6 +2336,8 @@ Respond ONLY with valid JSON, no explanation:
           if (psaEstimate != null && psaEstimate > truCeil) psaEstimate = truCeil;
         }
       }
+
+      if (psaEstimate != null && finalCenteringCeiling != null) psaEstimate = Math.min(psaEstimate, finalCenteringCeiling);
 
       // 2026-10-06: a completed CV step no longer raises 'low' confidence to
       // 'medium'. CV running does not make blurry or obstructed photos clearer;
@@ -2502,6 +2476,8 @@ Respond ONLY with valid JSON, no explanation:
         rest.forEach(x => { x.pct = Math.round((x.pct / totalRest) * 50); });
       }
 
+      distArray = finalGradeDistribution(distArray, psaEstimate);
+
       // ── LIMITING FACTOR PROSE RECONCILIATION ──
       // The model writes limiting_factor as free text, but sometimes it
       // contradicts the (server-corrected) numbers we're about to show —
@@ -2530,7 +2506,7 @@ Respond ONLY with valid JSON, no explanation:
           && psaEstimate === truCeil && modelPsa > psaEstimate;
         const proseIsLying = proseContradicts || centeringLowered;
         // Only Ximilar's CV output is a pixel measurement; GPT values are estimates.
-        const centeringWord = cvSource === 'ximilar' ? 'Measured' : 'Estimated';
+        const centeringWord = centeringEvidence.source === 'measured' ? 'Measured' : centeringEvidence.source === 'mixed' ? 'Partly measured' : 'Estimated';
         if (proseIsLying) {
           console.warn('[scan] limiting_factor prose contradicts measured centering — rewriting:', {
             claimed_grade: claimedGrade,
@@ -2647,10 +2623,12 @@ Respond ONLY with valid JSON, no explanation:
         confidence,
         confidence_drivers: confidenceDrivers,
         cv_source:     cvSource,     // 'ximilar' or 'gpt'
-        centering_source: cvSource === 'ximilar' ? 'measured' : 'model_estimated',
+        centering_source: centeringEvidence.source,
+        centering_axis_sources: { lr: centeringEvidence.leftRight.source, tb: centeringEvidence.topBottom.source },
+        grade_probability_source: 'uncalibrated_model_weights',
         cv_grader:     cvGrader,     // { condition, final, corners[], edges[] } when ximilar succeeded
         // Grading standard disclosure — aligned to OFFICIAL PSA thresholds now.
-        grading_standard: cvSource === 'ximilar'
+        grading_standard: centeringEvidence.source === 'measured'
           ? 'AI estimate using OFFICIAL PSA thresholds with pixel-measured centering. Final grade is at PSA\'s discretion.'
           : 'AI estimate using OFFICIAL PSA thresholds (55/45 = PSA 10, 60/40 = PSA 9, 65/35 = PSA 8). Final grade is at PSA\'s discretion.',
         slab_warning:  slabWarning,

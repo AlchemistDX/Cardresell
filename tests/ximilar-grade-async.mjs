@@ -70,6 +70,10 @@ const imgs = ['RlJPTlQ=', 'QkFDSw=='];
 check('no card detected', parseGradeResponse({ records: [{ _status: { code: 400 } }] }).reason === 'no_card_detected');
 check('empty grades', parseGradeResponse({ records: [{ _status: { code: 200 }, grades: {} }] }).reason === 'empty_grades');
 check('missing response', parseGradeResponse(undefined).reason === 'no_card_detected');
+for (const invalid of ['', ' ', true, false, 'garbage', 0, -2, 11]) {
+  check('invalid provider grade refused: '+String(invalid), parseGradeResponse({records:[{grades:{final:invalid}}]}).reason === 'empty_grades');
+}
+check('valid numeric string accepted', parseGradeResponse({records:[{grades:{final:'9.5'}}]}).grades.final === 9.5);
 // 7. retired endpoint gone from runtime code
 const src = readFileSync(new URL('../api/_ximilar_grade.js', import.meta.url), 'utf8');
 check('retired sync URL not called', !/fetch\([^)]*card-grader\/v2/.test(src) && !src.includes("= 'https://api.ximilar.com/card-grader/v2/grade'"));

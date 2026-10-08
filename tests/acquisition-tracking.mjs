@@ -1,3 +1,5 @@
+import {completionGuard} from './_complete.mjs';
+const {finish} = completionGuard('acquisition-tracking');
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -57,3 +59,5 @@ await test('campaign report is admin protected',async()=>{const before=commands.
 await test('admin campaign counts reconcile with stored events',async()=>{const r=await request('GET',null,{admin:'test-admin',window:'1',breakdown:'campaign'});assert.equal(r.body.campaigns.shop_qr.membership_checkout_attempt,1);assert.equal(r.body.campaigns.other_campaign.page_view,1);assert.equal(r.body.campaigns.qa.membership_checkout_attempt,0);assert.match(r.body.measurement,/not_unique_customers_or_revenue/);});
 await test('storage failure never claims recording or interrupts client',async()=>{down=true;const r=await request('POST',{name:'telemetry_check',props:{campaign:'qa'}});assert.equal(r.code,200);assert.equal(r.body.recorded,false);down=false;});
 console.log(`${passed} passed, 0 failed`);
+
+finish(passed, 0); // failures throw before this point

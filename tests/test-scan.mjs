@@ -723,6 +723,26 @@ await test('confidence: GPT says low, 6 photos → keeps low (no forced upgrade)
   assert(res.body.confidence === 'low', 'low preserved even with 6 photos');
 });
 
+// Execute the full handler to catch ordering/provenance bugs, not just helpers.
+for (const [name, cv, expectedSource, expectedGrade] of [
+  ['measured axes replace the stale model cap', {'left/right':'55/45','top/bottom':'50/50'}, 'measured', 9],
+  ['partial CV does not claim both axes measured', {'left/right':'55/45'}, 'mixed', 7],
+  ['scores without ratios keep model provenance', {}, 'model_estimated', 7],
+]) await test(name, async () => {
+  const kv = new MockKV({'scans:user123:paid_left':'5'});
+  const model = {card_name:'Test',psa_estimate:9,centering_lr:'70/30',centering_tb:'70/30',confidence:'medium',psa_distribution:{'9':60,'8':30,'10':10}};
+  installMocks(kv, () => Promise.resolve({ok:true,status:200,json:async()=>({choices:[{message:{content:JSON.stringify(model)}}]})}));
+  xgradeHandler = () => Promise.resolve({ok:true,status:200,json:async()=>({id:'job-test-0001',status:'DONE',response:{records:[{...cvRecord,card:[{centering:cv}]}]}})});
+  try {
+    const res=makeRes();await handler(makeReq(bodyFor({mode:'grade',deepGrade:true,hasBack:true,hasEdges:true}),goodToken),res);
+    assert(res.statusCode===200,'handler succeeded');
+    assert(res.body.centering_source===expectedSource,'source '+res.body.centering_source);
+    assert(res.body.psa_estimate===expectedGrade,'grade '+res.body.psa_estimate);
+    assert(res.body.psa_distribution[0].grade===expectedGrade,'distribution follows final grade');
+    assert(res.body.psa_distribution.reduce((s,x)=>s+x.pct,0)===100,'weights sum to 100');
+  } finally {xgradeHandler=xgradeDone;restoreFetch();}
+});
+
 await test('legacy deep grade, CV job fails — billed as Quick: 1 credit, flagged downgraded', async () => {
   const kv = new MockKV({ 'scans:user123:paid_left': '5' });
   installMocks(kv, goodOpenAI('grade'));

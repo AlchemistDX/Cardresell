@@ -1,3 +1,5 @@
+import {completionGuard} from './_complete.mjs';
+const {finish} = completionGuard('scan-request-recovery');
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
@@ -33,3 +35,5 @@ const refreshed=refreshes;await req(make('refresh-check'));assert.equal(refreshe
 status=202;await assert.rejects(()=>req(make('pending-check')),/still processing/);assert.equal(refreshes,refreshed+1);status=200;
 const refreshFails=make('refresh-fails');refreshFails.loadSettingsScanCredits=()=>{throw Error('offline');};assert.equal((await req(refreshFails)).status,200);
 console.log('PASS scan recovery: concurrent/reloaded retries, pending/network failures, account isolation, storage failure and all shipped callers');
+
+finish(1, 0); // one end-to-end assertion sequence; exceptions abort before this point

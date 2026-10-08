@@ -1,3 +1,5 @@
+import {completionGuard} from './_complete.mjs';
+const {finish} = completionGuard('google-provider-verification');
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
 import { readGoogleProviderVerification } from '../api/_googleProviderVerification.js';
@@ -92,3 +94,5 @@ await test('provider lookup outage denies membership without leaking details',as
   assert.ok(JSON.stringify(messages).includes('email_not_verified_google'));
 });
 console.log(`${passed} passed, 0 failed`);
+
+finish(passed, 0); // failures throw before this point

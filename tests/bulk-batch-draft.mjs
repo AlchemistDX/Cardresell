@@ -178,6 +178,12 @@ async function boot({ sub, scanPlan = null, photos = 2 } = {}) {
 
   await page.evaluate(({ t, credits }) => {
     window._crIdToken = async () => t;
+    // scan-request uses Firebase's current user for operation ownership.
+    // This suite supplies the same signed fixture token at that boundary.
+    const fixtureAuth = { currentUser: { uid: 'dev', getIdToken: async () => t } };
+    Object.defineProperty(window, '_fbAuth', { configurable: true,
+      get: () => fixtureAuth, set: () => {} });
+
     // Pinned via a getter, not a plain assignment: Firebase's own
     // onAuthStateChanged resolves a second or two into the run and writes
     // `window.googleUser = null` (auth bundle), which is correct product
@@ -253,6 +259,7 @@ try {
     const rows = await rowsOf(page);
 
     eq('two rows scanned', rows.length, 2);
+    ok('both fixture identifications succeeded', rows.every(r => r.success), JSON.stringify(rows));
     ok('every row has a scanUid', rows.every(r => /^scan_[0-9a-f]{8,}/.test(r.scanUid || '')),
        JSON.stringify(rows.map(r => r.scanUid)));
     ok('the two rows have DIFFERENT identities', rows[0].scanUid !== rows[1].scanUid);
