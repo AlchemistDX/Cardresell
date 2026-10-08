@@ -21,10 +21,11 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
   await page.evaluate(t=>{window._userTier=t;updateTierUI(t);updateProUI()},tier);
   check('membership label '+tier,await page.locator('#headerMembershipLabel').textContent(),label);
   check('membership stays visible '+tier,await page.locator('#getProBtn').isVisible(),true);
+  check('tier '+tier+' fits header',await page.locator('.hdr').evaluate(h=>{const a=h.querySelector('.logo').getBoundingClientRect(),b=h.querySelector('#getProBtn').getBoundingClientRect(),c=h.querySelector('#shopBtn').getBoundingClientRect();return a.right<=b.left+1&&b.right<=c.left+1}),true);
  }
  await page.evaluate(()=>{window.googleUser=null;updateProUI()});
  check('signed-out membership resets',await page.locator('#headerMembershipLabel').textContent(),'Subscriptions');
- await page.evaluate(()=>{window.googleUser={sub:'fixture',emailVerified:true};updateProUI();document.getElementById('verifiedBadge').style.display='inline-flex'});
+ await page.evaluate(()=>{window.googleUser={sub:'fixture',emailVerified:true};window._userTier='free';updateProUI();document.getElementById('verifiedBadge').style.display='inline-flex'});
  check('verified badge belongs to avatar',await page.locator('.profile-avatar #verifiedBadge').count(),1);
  await page.locator('.profile-avatar').click();
  check('profile opens account settings',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),true);
@@ -37,6 +38,8 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  check('search precedes supporting banners',await page.evaluate(()=>{const search=document.getElementById('searchRow');return ['landingHero','howItWorksBar','scanGuaranteeBar'].every(id=>!!(search.compareDocumentPosition(document.getElementById(id))&Node.DOCUMENT_POSITION_FOLLOWING))}),true);
  check('repeated upgrade banner removed',await page.locator('#promoBanner').count(),0);
  check('search has an accessible label',await page.locator('#searchInput').getAttribute('aria-label'),'Search card name');
+ check('header stays in one row',await page.locator('.hdr').evaluate(h=>{const nodes=[h.querySelector('.logo'),h.querySelector('#getProBtn'),h.querySelector('#shopBtn'),h.querySelector('.settings-btn'),h.querySelector('#googleUserBtn')];const centers=nodes.map(e=>{const r=e.getBoundingClientRect();return r.top+r.height/2});return Math.max(...centers)-Math.min(...centers)<2}),true);
+ check('header order matches requested layout',await page.locator('.hdr').evaluate(h=>{const ids=['.logo','#getProBtn','#shopBtn','.settings-btn','#googleUserBtn'];return ids.slice(1).every((id,i)=>h.querySelector(ids[i]).getBoundingClientRect().right<=h.querySelector(id).getBoundingClientRect().left+1)}),true);
  check('brand loads',await page.locator('.hdr .brand-mark').evaluate(i=>i.complete&&i.naturalWidth>0),true);
  check('header has no overlap',await page.locator('.hdr').evaluate(h=>{const els=[h.querySelector('.logo'),...h.querySelector('.hdr-right').children].filter(e=>e.getBoundingClientRect().width>0);return els.every((a,i)=>els.slice(i+1).every(b=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return !(x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top)}))}),true);
  check('header controls have 44px targets',await page.locator('.hdr .settings-btn,.hdr #shopBtn,.hdr .profile-avatar').evaluateAll(es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44})),true);
