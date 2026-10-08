@@ -1,0 +1,1808 @@
+{
+  "as_of": "2026-10-08",
+  "base_commit": "19e759711088b8f608f0b7e0e8d8a3602e05b063",
+  "scope": "English local reference-image catalog additions; not total searchable coverage or a measured scan accuracy rate",
+  "indexes": {
+    "pokemon": {
+      "before": 20506,
+      "after": 20699,
+      "added": 193,
+      "represented_sets": 173,
+      "sha256": "eb57b82a8a9521a0c037a0541dbbeb67cead73fd6e872329a4ad7fef4cea4e9c",
+      "existing_records_unchanged": true
+    },
+    "mtg": {
+      "before": 11924,
+      "after": 15229,
+      "added": 3305,
+      "represented_sets": 113,
+      "sha256": "40c040c2dfed99d7044cbcfbc108feb2ba1e6f25b7be8909b7953cdf600638ad",
+      "existing_records_unchanged": true
+    }
+  },
+  "sets": [
+    {
+      "game": "pokemon",
+      "set": "ecard2",
+      "added": 0,
+      "failed": [],
+      "name": "Aquapolis",
+      "provider_cards": 182,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:ecard2&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "cf9cc805f359642713ead8dc47f02c09e75b457cdc2388ea0756475454c979d5"
+        }
+      ],
+      "already_present": 182,
+      "covered_provider_cards": 182,
+      "added_in_release": 1
+    },
+    {
+      "game": "pokemon",
+      "set": "ex5",
+      "added": 0,
+      "failed": [],
+      "name": "Hidden Legends",
+      "provider_cards": 102,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:ex5&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "8e57c882c3967efff40a8a1b16dfe04867373e21f235a3dc5fc7a2ad46023df8"
+        }
+      ],
+      "already_present": 102,
+      "covered_provider_cards": 102,
+      "added_in_release": 1
+    },
+    {
+      "game": "pokemon",
+      "set": "hsp",
+      "added": 0,
+      "failed": [
+        {
+          "id": "hsp-HGSS18",
+          "reason": "https://images.pokemontcg.io/hsp/HGSS18.png: HTTP Error 404: Not Found"
+        }
+      ],
+      "name": "HGSS Black Star Promos",
+      "provider_cards": 25,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:hsp&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "61c9be891da983745a2b921d00ca8d51aed305ecd2caa3a3566377f1da0efad2"
+        }
+      ],
+      "already_present": 24,
+      "covered_provider_cards": 24,
+      "added_in_release": 0
+    },
+    {
+      "game": "pokemon",
+      "set": "mcd14",
+      "added": 0,
+      "failed": [
+        {
+          "id": "mcd14-2",
+          "reason": "https://images.pokemontcg.io/mcd14/2.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-5",
+          "reason": "https://images.pokemontcg.io/mcd14/5.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-6",
+          "reason": "https://images.pokemontcg.io/mcd14/6.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-12",
+          "reason": "https://images.pokemontcg.io/mcd14/12.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-1",
+          "reason": "https://images.pokemontcg.io/mcd14/1.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-4",
+          "reason": "https://images.pokemontcg.io/mcd14/4.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-7",
+          "reason": "https://images.pokemontcg.io/mcd14/7.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-8",
+          "reason": "https://images.pokemontcg.io/mcd14/8.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-10",
+          "reason": "https://images.pokemontcg.io/mcd14/10.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-11",
+          "reason": "https://images.pokemontcg.io/mcd14/11.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-9",
+          "reason": "https://images.pokemontcg.io/mcd14/9.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd14-3",
+          "reason": "https://images.pokemontcg.io/mcd14/3.png: HTTP Error 404: Not Found"
+        }
+      ],
+      "name": "McDonald's Collection 2014",
+      "provider_cards": 12,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:mcd14&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "577004d5f898a3927050a4d5cf1294373b9b8d524647686e9f50934e699f996d"
+        }
+      ],
+      "already_present": 0,
+      "covered_provider_cards": 0,
+      "added_in_release": 0
+    },
+    {
+      "game": "pokemon",
+      "set": "mcd15",
+      "added": 0,
+      "failed": [
+        {
+          "id": "mcd15-1",
+          "reason": "https://images.pokemontcg.io/mcd15/1.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-2",
+          "reason": "https://images.pokemontcg.io/mcd15/2.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-6",
+          "reason": "https://images.pokemontcg.io/mcd15/6.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-11",
+          "reason": "https://images.pokemontcg.io/mcd15/11.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-3",
+          "reason": "https://images.pokemontcg.io/mcd15/3.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-9",
+          "reason": "https://images.pokemontcg.io/mcd15/9.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-10",
+          "reason": "https://images.pokemontcg.io/mcd15/10.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-5",
+          "reason": "https://images.pokemontcg.io/mcd15/5.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-8",
+          "reason": "https://images.pokemontcg.io/mcd15/8.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-4",
+          "reason": "https://images.pokemontcg.io/mcd15/4.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-7",
+          "reason": "https://images.pokemontcg.io/mcd15/7.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd15-12",
+          "reason": "https://images.pokemontcg.io/mcd15/12.png: HTTP Error 404: Not Found"
+        }
+      ],
+      "name": "McDonald's Collection 2015",
+      "provider_cards": 12,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:mcd15&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "00c4f03a4af6f8fc87ffe9dc14e673ca9b8c9c82ae0faccaa322c099ab870a7c"
+        }
+      ],
+      "already_present": 0,
+      "covered_provider_cards": 0,
+      "added_in_release": 0
+    },
+    {
+      "game": "pokemon",
+      "set": "mcd18",
+      "added": 0,
+      "failed": [
+        {
+          "id": "mcd18-3",
+          "reason": "https://images.pokemontcg.io/mcd18/3.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-2",
+          "reason": "https://images.pokemontcg.io/mcd18/2.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-1",
+          "reason": "https://images.pokemontcg.io/mcd18/1.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-4",
+          "reason": "https://images.pokemontcg.io/mcd18/4.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-5",
+          "reason": "https://images.pokemontcg.io/mcd18/5.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-6",
+          "reason": "https://images.pokemontcg.io/mcd18/6.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-7",
+          "reason": "https://images.pokemontcg.io/mcd18/7.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-10",
+          "reason": "https://images.pokemontcg.io/mcd18/10.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-8",
+          "reason": "https://images.pokemontcg.io/mcd18/8.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-9",
+          "reason": "https://images.pokemontcg.io/mcd18/9.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-11",
+          "reason": "https://images.pokemontcg.io/mcd18/11.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd18-12",
+          "reason": "https://images.pokemontcg.io/mcd18/12.png: HTTP Error 404: Not Found"
+        }
+      ],
+      "name": "McDonald's Collection 2018",
+      "provider_cards": 12,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:mcd18&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "acce6f3d2d520c3b4b07469df96fadbeb07482187cb4f77c907f30e77ceb7025"
+        }
+      ],
+      "already_present": 0,
+      "covered_provider_cards": 0,
+      "added_in_release": 0
+    },
+    {
+      "game": "pokemon",
+      "set": "mcd17",
+      "added": 0,
+      "failed": [
+        {
+          "id": "mcd17-7",
+          "reason": "https://images.pokemontcg.io/mcd17/7.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-2",
+          "reason": "https://images.pokemontcg.io/mcd17/2.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-4",
+          "reason": "https://images.pokemontcg.io/mcd17/4.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-8",
+          "reason": "https://images.pokemontcg.io/mcd17/8.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-1",
+          "reason": "https://images.pokemontcg.io/mcd17/1.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-3",
+          "reason": "https://images.pokemontcg.io/mcd17/3.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-5",
+          "reason": "https://images.pokemontcg.io/mcd17/5.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-6",
+          "reason": "https://images.pokemontcg.io/mcd17/6.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-10",
+          "reason": "https://images.pokemontcg.io/mcd17/10.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-9",
+          "reason": "https://images.pokemontcg.io/mcd17/9.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-11",
+          "reason": "https://images.pokemontcg.io/mcd17/11.png: HTTP Error 404: Not Found"
+        },
+        {
+          "id": "mcd17-12",
+          "reason": "https://images.pokemontcg.io/mcd17/12.png: HTTP Error 404: Not Found"
+        }
+      ],
+      "name": "McDonald's Collection 2017",
+      "provider_cards": 12,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:mcd17&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "032d474357389a3552b047f687f0684af871829017b299d83dd5be840642717b"
+        }
+      ],
+      "already_present": 0,
+      "covered_provider_cards": 0,
+      "added_in_release": 0
+    },
+    {
+      "game": "pokemon",
+      "set": "me55",
+      "added": 161,
+      "failed": [],
+      "name": "30th Celebration",
+      "provider_cards": 161,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:me55&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "c66fcfccc31e08139a4b5b60b41730680191ef65521cd8b2c1f5522cf9e001b9"
+        }
+      ],
+      "already_present": 0,
+      "covered_provider_cards": 161,
+      "added_in_release": 161
+    },
+    {
+      "game": "pokemon",
+      "set": "me55c",
+      "added": 30,
+      "failed": [],
+      "name": "30th Celebration: Classic Collection",
+      "provider_cards": 30,
+      "sources": [
+        {
+          "url": "https://api.pokemontcg.io/v2/cards?q=set.id:me55c&pageSize=250&page=1&select=id,name,number,rarity,images,set",
+          "sha256": "e4aa1740745c06349fc90a2386abf0bdba4e17ec45054e148932611f0e441486"
+        }
+      ],
+      "already_present": 0,
+      "covered_provider_cards": 30,
+      "added_in_release": 30
+    },
+    {
+      "game": "mtg",
+      "set": "fra",
+      "added": 0,
+      "failed": [],
+      "name": "Reality Fracture",
+      "provider_cards": 452,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Afra+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "de8a350f20ec47e45d44c17e62c3c9537e4620f04f8eae3910fee3dcd17f7e5c"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Afra+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "5b687a6d881dd1df26fd616de3b63b37474ef6780b0ff5a7718703fbbfe47c73"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Afra+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "80358d38815a1b618297950daf46f365157e0fc9b5e57809616620aade7ce33b"
+        }
+      ],
+      "source_query_count": 462,
+      "excluded_future_printings": [
+        "ee609b68-5c9c-43e0-aff4-eb1bbc8b2911",
+        "236b2024-9141-4a91-b5f8-2180ecc3a761",
+        "65e9f4df-02e5-4ac7-86da-795688bfb66f",
+        "f1a15a83-2f74-4513-ae4b-4cdc17016a84",
+        "29a7f3e8-efcd-42bb-b315-9e9c0794dddb",
+        "16c5f0f3-2578-40d3-9012-6eaef17fa0b1",
+        "f28b1518-8347-4385-9f34-a9c48818c770",
+        "60b9f969-694a-4445-9b0f-525c259edfc8",
+        "3d580fa2-954d-4de6-a64c-369c5ab8e03f",
+        "91e787cb-a9b0-4353-86b4-a4340122fd2f"
+      ],
+      "already_present": 452,
+      "covered_provider_cards": 452,
+      "added_in_release": 418
+    },
+    {
+      "game": "mtg",
+      "set": "hob",
+      "added": 0,
+      "failed": [],
+      "name": "The Hobbit",
+      "provider_cards": 321,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Ahob+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "1b63e556130bee4df6023d3451c8ab411096b6ee63d3edaedc742a61aeaa30fd"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Ahob+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "934fd4932ca933d02f8b39dbd9f9d83885d947099b0c8422148ddb1065bc0b33"
+        }
+      ],
+      "source_query_count": 321,
+      "excluded_future_printings": [],
+      "already_present": 321,
+      "covered_provider_cards": 321,
+      "added_in_release": 67
+    },
+    {
+      "game": "mtg",
+      "set": "msh",
+      "added": 0,
+      "failed": [],
+      "name": "Marvel Super Heroes",
+      "provider_cards": 453,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Amsh+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "b03632eb591ff0b8c5d6906375a5d8e8d153fea54eeb25c2a9ca2fc06ae4133b"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Amsh+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "bcfaac565364dfac1c41596f4a564df1874f87d6047efa1aea469ab8f30b6ce8"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Amsh+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "532fae100364f2c9dd599c1de867dc6665193e1eb07ee5a7f6d80928aaa635ad"
+        }
+      ],
+      "source_query_count": 453,
+      "excluded_future_printings": [],
+      "already_present": 453,
+      "covered_provider_cards": 453,
+      "added_in_release": 52
+    },
+    {
+      "game": "mtg",
+      "set": "tmt",
+      "added": 0,
+      "failed": [],
+      "name": "Teenage Mutant Ninja Turtles",
+      "provider_cards": 320,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Atmt+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "0ed54e44af4ddfcbcd64509f519596abe3a107a08a380e899665b76dc0dd6793"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Atmt+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "5802925d167c2c7f3a17e5643b4bd340ca84c494e390645e9d560ee183f0cf09"
+        }
+      ],
+      "source_query_count": 320,
+      "excluded_future_printings": [],
+      "already_present": 320,
+      "covered_provider_cards": 320,
+      "added_in_release": 43
+    },
+    {
+      "game": "mtg",
+      "set": "ecl",
+      "added": 0,
+      "failed": [],
+      "name": "Lorwyn Eclipsed",
+      "provider_cards": 408,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Aecl+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "ff1ed70e8b3992be47e5d1df67a931015ff0366d02ceb5a7c5d80f690109403e"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Aecl+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "ef3de8db38affa1206ed325e1b1ba588d656ea64577f7916d9ca26852728f3d1"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Aecl+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "053a3a87839d8d8052b47ad03d49897eaa9462d6f79d04dbc0e8aa17d802aecd"
+        }
+      ],
+      "source_query_count": 408,
+      "excluded_future_printings": [],
+      "already_present": 408,
+      "covered_provider_cards": 408,
+      "added_in_release": 44
+    },
+    {
+      "game": "mtg",
+      "set": "fdc",
+      "added": 0,
+      "failed": [],
+      "name": "Foundations Commander",
+      "provider_cards": 319,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Afdc+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "c1520863200da2c17cfbb5d2ba131c0f6c49a0e3c5ecff4f87ae6803d6b079c9"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Afdc+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "d0a186155ead1e7e07bd92c076f868569fe604d68341facfda295e6f3137402e"
+        }
+      ],
+      "source_query_count": 319,
+      "excluded_future_printings": [],
+      "already_present": 319,
+      "covered_provider_cards": 319,
+      "added_in_release": 319
+    },
+    {
+      "game": "mtg",
+      "set": "woe",
+      "added": 0,
+      "failed": [],
+      "name": "Wilds of Eldraine",
+      "provider_cards": 381,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Awoe+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "b376c55e60ccb72c3b0e64efd87a726a400fb06d737f11aeab4ab20a7e17a000"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Awoe+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "95cd5faabea272c76ef5ff86911d62e6a0df6a0001ec23cb4cb59978beb66296"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Awoe+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "70ab0d19c1cc3c4625c4e9b0f676a3eaafee88f434f771454b744db4ba1c3662"
+        }
+      ],
+      "source_query_count": 381,
+      "excluded_future_printings": [],
+      "already_present": 381,
+      "covered_provider_cards": 381,
+      "added_in_release": 381
+    },
+    {
+      "game": "mtg",
+      "set": "cmm",
+      "added": 0,
+      "failed": [],
+      "name": "Commander Masters",
+      "provider_cards": 1067,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "1593a4c231641c9b21bb719c8471f3d76ed8bdab1eadd6464b053b5bf8501466"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "28b1e317333b322b1299215a14fcdc492de90473842b380bf1b39ee74df3f278"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "e7f5f759d543f39034aa100f3d07a6b12a8fbe60626337c31dc5198f01307531"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=4&q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "cb62cafb6f46eacd501fba8b0567a8a5470692759af915674966b43919134c3e"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=5&q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "8a3f37ca7735ae1b1816040964b04006bd0f0cdee95fd66be569e53a30408a84"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=6&q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "cb5d2c85193ebe94ff61a50e8d94fd4383e14ecb373fa83aa865f155282beecf"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=7&q=set%3Acmm+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "8b15fcb4a9160f439914deef6b357a8f4c0f99f1e8244ce8b8d5651c2b76b074"
+        }
+      ],
+      "source_query_count": 1067,
+      "excluded_future_printings": [],
+      "already_present": 1067,
+      "covered_provider_cards": 1067,
+      "added_in_release": 1067
+    },
+    {
+      "game": "mtg",
+      "set": "ltr",
+      "added": 0,
+      "failed": [],
+      "name": "The Lord of the Rings: Tales of Middle-earth",
+      "provider_cards": 853,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Altr+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "4cd0f47fb36145344b0f0df15e8a1219d01408c8f73776100090d570c7d5566f"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Altr+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "ef2ff3427456446395ee777cb10369610d970b8116fe9670758d4e03e875f436"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Altr+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "7d21467b039b5606ca2cfb3aa16fe79d01b1759da13321b2ef39a11d5005fe3d"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=4&q=set%3Altr+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "394ff574fc6c67c59f23fef57c5628ed8e9d7cae9543bb9e181ff78d53522eae"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=5&q=set%3Altr+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "0348c4f25dd2fd247f31d56329a437c440d499ad9c66ff77aad3b3ce6c5b6997"
+        }
+      ],
+      "source_query_count": 853,
+      "excluded_future_printings": [],
+      "already_present": 853,
+      "covered_provider_cards": 853,
+      "added_in_release": 853
+    },
+    {
+      "game": "mtg",
+      "set": "sos",
+      "added": 0,
+      "failed": [],
+      "name": "Secrets of Strixhaven",
+      "provider_cards": 368,
+      "sources": [
+        {
+          "url": "https://api.scryfall.com/cards/search?q=set%3Asos+game%3Apaper+lang%3Aen&unique=prints&include_extras=true&include_variations=true&order=set",
+          "sha256": "43d70c24d723b1b7db2520fbcfe71882d537522b0e51ef6eda0d26165dadea85"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=2&q=set%3Asos+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "c01d978eb01430bb88f05602a90d283c729ae48f255662003cfc7f5ac3c2cd2e"
+        },
+        {
+          "url": "https://api.scryfall.com/cards/search?format=json&include_extras=true&include_multilingual=false&include_variations=true&order=set&page=3&q=set%3Asos+game%3Apaper+lang%3Aen&unique=prints",
+          "sha256": "dbdaf00f9362f0112992ed5577e65a3635c738d8f588f991a8e2b1d2c8259c78"
+        }
+      ],
+      "source_query_count": 368,
+      "excluded_future_printings": [],
+      "already_present": 368,
+      "covered_provider_cards": 368,
+      "added_in_release": 61
+    }
+  ],
+  "coverage_audit": {
+    "as_of": "2026-10-08",
+    "scope": "local image-hash indexes, not total searchable catalog",
+    "indexes": {
+      "pokemon": {
+        "rows": 20699,
+        "unique_ids": 20699,
+        "represented_sets": 173
+      },
+      "mtg": {
+        "rows": 15229,
+        "unique_ids": 15229,
+        "represented_sets": 113
+      }
+    },
+    "pokemon_comparison": {
+      "scope": "Set-count gaps only; matching counts do not prove every ID or finish is covered.",
+      "released_provider_sets": 176,
+      "sets_with_count_gaps": 5,
+      "missing_record_count": 49,
+      "gaps": [
+        {
+          "id": "hsp",
+          "name": "HGSS Black Star Promos",
+          "provider_count": 25,
+          "local_count": 24
+        },
+        {
+          "id": "mcd14",
+          "name": "McDonald's Collection 2014",
+          "provider_count": 12,
+          "local_count": 0
+        },
+        {
+          "id": "mcd15",
+          "name": "McDonald's Collection 2015",
+          "provider_count": 12,
+          "local_count": 0
+        },
+        {
+          "id": "mcd18",
+          "name": "McDonald's Collection 2018",
+          "provider_count": 12,
+          "local_count": 0
+        },
+        {
+          "id": "mcd17",
+          "name": "McDonald's Collection 2017",
+          "provider_count": 12,
+          "local_count": 0
+        }
+      ]
+    },
+    "mtg_comparison": {
+      "types": [
+        "commander",
+        "core",
+        "draft_innovation",
+        "expansion",
+        "masters"
+      ],
+      "released_physical_sets": 224,
+      "represented_sets": 46,
+      "absent_sets": 178,
+      "absent": [
+        {
+          "code": "h2r",
+          "name": "Modern Horizons 2 Timeshifts",
+          "released_at": "2024-06-14",
+          "card_count": 16
+        },
+        {
+          "code": "lcc",
+          "name": "The Lost Caverns of Ixalan Commander",
+          "released_at": "2023-11-17",
+          "card_count": 370
+        },
+        {
+          "code": "who",
+          "name": "Doctor Who",
+          "released_at": "2023-10-13",
+          "card_count": 1178
+        },
+        {
+          "code": "woc",
+          "name": "Wilds of Eldraine Commander",
+          "released_at": "2023-09-08",
+          "card_count": 173
+        },
+        {
+          "code": "ltc",
+          "name": "Tales of Middle-earth Commander",
+          "released_at": "2023-06-23",
+          "card_count": 591
+        },
+        {
+          "code": "mat",
+          "name": "March of the Machine: The Aftermath",
+          "released_at": "2023-05-12",
+          "card_count": 230
+        },
+        {
+          "code": "moc",
+          "name": "March of the Machine Commander",
+          "released_at": "2023-04-21",
+          "card_count": 450
+        },
+        {
+          "code": "mom",
+          "name": "March of the Machine",
+          "released_at": "2023-04-21",
+          "card_count": 387
+        },
+        {
+          "code": "onc",
+          "name": "Phyrexia: All Will Be One Commander",
+          "released_at": "2023-02-10",
+          "card_count": 174
+        },
+        {
+          "code": "one",
+          "name": "Phyrexia: All Will Be One",
+          "released_at": "2023-02-10",
+          "card_count": 479
+        },
+        {
+          "code": "dmr",
+          "name": "Dominaria Remastered",
+          "released_at": "2023-01-13",
+          "card_count": 457
+        },
+        {
+          "code": "scd",
+          "name": "Starter Commander Decks",
+          "released_at": "2022-12-02",
+          "card_count": 352
+        },
+        {
+          "code": "j22",
+          "name": "Jumpstart 2022",
+          "released_at": "2022-12-02",
+          "card_count": 835
+        },
+        {
+          "code": "brc",
+          "name": "The Brothers' War Commander",
+          "released_at": "2022-11-18",
+          "card_count": 209
+        },
+        {
+          "code": "bro",
+          "name": "The Brothers' War",
+          "released_at": "2022-11-18",
+          "card_count": 387
+        },
+        {
+          "code": "40k",
+          "name": "Warhammer 40,000 Commander",
+          "released_at": "2022-10-07",
+          "card_count": 617
+        },
+        {
+          "code": "dmc",
+          "name": "Dominaria United Commander",
+          "released_at": "2022-09-09",
+          "card_count": 240
+        },
+        {
+          "code": "2x2",
+          "name": "Double Masters 2022",
+          "released_at": "2022-07-08",
+          "card_count": 579
+        },
+        {
+          "code": "clb",
+          "name": "Commander Legends: Battle for Baldur's Gate",
+          "released_at": "2022-06-10",
+          "card_count": 936
+        },
+        {
+          "code": "snc",
+          "name": "Streets of New Capenna",
+          "released_at": "2022-04-29",
+          "card_count": 469
+        },
+        {
+          "code": "ncc",
+          "name": "New Capenna Commander",
+          "released_at": "2022-04-29",
+          "card_count": 447
+        },
+        {
+          "code": "neo",
+          "name": "Kamigawa: Neon Dynasty",
+          "released_at": "2022-02-18",
+          "card_count": 515
+        },
+        {
+          "code": "nec",
+          "name": "Neon Dynasty Commander",
+          "released_at": "2022-02-18",
+          "card_count": 179
+        },
+        {
+          "code": "dbl",
+          "name": "Innistrad: Double Feature",
+          "released_at": "2022-01-28",
+          "card_count": 535
+        },
+        {
+          "code": "vow",
+          "name": "Innistrad: Crimson Vow",
+          "released_at": "2021-11-19",
+          "card_count": 412
+        },
+        {
+          "code": "voc",
+          "name": "Crimson Vow Commander",
+          "released_at": "2021-11-19",
+          "card_count": 188
+        },
+        {
+          "code": "mic",
+          "name": "Midnight Hunt Commander",
+          "released_at": "2021-09-24",
+          "card_count": 187
+        },
+        {
+          "code": "mid",
+          "name": "Innistrad: Midnight Hunt",
+          "released_at": "2021-09-24",
+          "card_count": 392
+        },
+        {
+          "code": "afc",
+          "name": "Forgotten Realms Commander",
+          "released_at": "2021-07-23",
+          "card_count": 331
+        },
+        {
+          "code": "afr",
+          "name": "Adventures in the Forgotten Realms",
+          "released_at": "2021-07-23",
+          "card_count": 402
+        },
+        {
+          "code": "mh2",
+          "name": "Modern Horizons 2",
+          "released_at": "2021-06-18",
+          "card_count": 492
+        },
+        {
+          "code": "h1r",
+          "name": "Modern Horizons 1 Timeshifts",
+          "released_at": "2021-06-18",
+          "card_count": 40
+        },
+        {
+          "code": "c21",
+          "name": "Commander 2021",
+          "released_at": "2021-04-23",
+          "card_count": 409
+        },
+        {
+          "code": "stx",
+          "name": "Strixhaven: School of Mages",
+          "released_at": "2021-04-23",
+          "card_count": 383
+        },
+        {
+          "code": "tsr",
+          "name": "Time Spiral Remastered",
+          "released_at": "2021-03-19",
+          "card_count": 411
+        },
+        {
+          "code": "khc",
+          "name": "Kaldheim Commander",
+          "released_at": "2021-02-05",
+          "card_count": 119
+        },
+        {
+          "code": "khm",
+          "name": "Kaldheim",
+          "released_at": "2021-02-05",
+          "card_count": 407
+        },
+        {
+          "code": "cmr",
+          "name": "Commander Legends",
+          "released_at": "2020-11-20",
+          "card_count": 718
+        },
+        {
+          "code": "plst",
+          "name": "The List",
+          "released_at": "2020-09-26",
+          "card_count": 5663
+        },
+        {
+          "code": "znc",
+          "name": "Zendikar Rising Commander",
+          "released_at": "2020-09-25",
+          "card_count": 142
+        },
+        {
+          "code": "znr",
+          "name": "Zendikar Rising",
+          "released_at": "2020-09-25",
+          "card_count": 392
+        },
+        {
+          "code": "2xm",
+          "name": "Double Masters",
+          "released_at": "2020-08-07",
+          "card_count": 384
+        },
+        {
+          "code": "jmp",
+          "name": "Jumpstart",
+          "released_at": "2020-07-17",
+          "card_count": 496
+        },
+        {
+          "code": "m21",
+          "name": "Core Set 2021",
+          "released_at": "2020-07-03",
+          "card_count": 397
+        },
+        {
+          "code": "iko",
+          "name": "Ikoria: Lair of Behemoths",
+          "released_at": "2020-04-24",
+          "card_count": 389
+        },
+        {
+          "code": "c20",
+          "name": "Commander 2020",
+          "released_at": "2020-04-17",
+          "card_count": 322
+        },
+        {
+          "code": "thb",
+          "name": "Theros Beyond Death",
+          "released_at": "2020-01-24",
+          "card_count": 358
+        },
+        {
+          "code": "eld",
+          "name": "Throne of Eldraine",
+          "released_at": "2019-10-04",
+          "card_count": 397
+        },
+        {
+          "code": "c19",
+          "name": "Commander 2019",
+          "released_at": "2019-08-23",
+          "card_count": 302
+        },
+        {
+          "code": "m20",
+          "name": "Core Set 2020",
+          "released_at": "2019-07-12",
+          "card_count": 345
+        },
+        {
+          "code": "mh1",
+          "name": "Modern Horizons",
+          "released_at": "2019-06-14",
+          "card_count": 255
+        },
+        {
+          "code": "war",
+          "name": "War of the Spark",
+          "released_at": "2019-05-03",
+          "card_count": 311
+        },
+        {
+          "code": "rna",
+          "name": "Ravnica Allegiance",
+          "released_at": "2019-01-25",
+          "card_count": 273
+        },
+        {
+          "code": "uma",
+          "name": "Ultimate Masters",
+          "released_at": "2018-12-07",
+          "card_count": 254
+        },
+        {
+          "code": "grn",
+          "name": "Guilds of Ravnica",
+          "released_at": "2018-10-05",
+          "card_count": 273
+        },
+        {
+          "code": "c18",
+          "name": "Commander 2018",
+          "released_at": "2018-08-10",
+          "card_count": 307
+        },
+        {
+          "code": "m19",
+          "name": "Core Set 2019",
+          "released_at": "2018-07-13",
+          "card_count": 314
+        },
+        {
+          "code": "cm2",
+          "name": "Commander Anthology Volume II",
+          "released_at": "2018-06-08",
+          "card_count": 312
+        },
+        {
+          "code": "bbd",
+          "name": "Battlebond",
+          "released_at": "2018-06-08",
+          "card_count": 256
+        },
+        {
+          "code": "dom",
+          "name": "Dominaria",
+          "released_at": "2018-04-27",
+          "card_count": 280
+        },
+        {
+          "code": "a25",
+          "name": "Masters 25",
+          "released_at": "2018-03-16",
+          "card_count": 249
+        },
+        {
+          "code": "rix",
+          "name": "Rivals of Ixalan",
+          "released_at": "2018-01-19",
+          "card_count": 205
+        },
+        {
+          "code": "ima",
+          "name": "Iconic Masters",
+          "released_at": "2017-11-17",
+          "card_count": 249
+        },
+        {
+          "code": "xln",
+          "name": "Ixalan",
+          "released_at": "2017-09-29",
+          "card_count": 289
+        },
+        {
+          "code": "c17",
+          "name": "Commander 2017",
+          "released_at": "2017-08-25",
+          "card_count": 309
+        },
+        {
+          "code": "hou",
+          "name": "Hour of Devastation",
+          "released_at": "2017-07-14",
+          "card_count": 209
+        },
+        {
+          "code": "cma",
+          "name": "Commander Anthology",
+          "released_at": "2017-06-09",
+          "card_count": 320
+        },
+        {
+          "code": "akh",
+          "name": "Amonkhet",
+          "released_at": "2017-04-28",
+          "card_count": 287
+        },
+        {
+          "code": "mm3",
+          "name": "Modern Masters 2017",
+          "released_at": "2017-03-17",
+          "card_count": 249
+        },
+        {
+          "code": "aer",
+          "name": "Aether Revolt",
+          "released_at": "2017-01-20",
+          "card_count": 197
+        },
+        {
+          "code": "c16",
+          "name": "Commander 2016",
+          "released_at": "2016-11-11",
+          "card_count": 351
+        },
+        {
+          "code": "kld",
+          "name": "Kaladesh",
+          "released_at": "2016-09-30",
+          "card_count": 278
+        },
+        {
+          "code": "cn2",
+          "name": "Conspiracy: Take the Crown",
+          "released_at": "2016-08-26",
+          "card_count": 222
+        },
+        {
+          "code": "emn",
+          "name": "Eldritch Moon",
+          "released_at": "2016-07-22",
+          "card_count": 208
+        },
+        {
+          "code": "ema",
+          "name": "Eternal Masters",
+          "released_at": "2016-06-10",
+          "card_count": 249
+        },
+        {
+          "code": "soi",
+          "name": "Shadows over Innistrad",
+          "released_at": "2016-04-08",
+          "card_count": 302
+        },
+        {
+          "code": "ogw",
+          "name": "Oath of the Gatewatch",
+          "released_at": "2016-01-22",
+          "card_count": 187
+        },
+        {
+          "code": "c15",
+          "name": "Commander 2015",
+          "released_at": "2015-11-13",
+          "card_count": 342
+        },
+        {
+          "code": "bfz",
+          "name": "Battle for Zendikar",
+          "released_at": "2015-10-02",
+          "card_count": 299
+        },
+        {
+          "code": "ori",
+          "name": "Magic Origins",
+          "released_at": "2015-07-17",
+          "card_count": 288
+        },
+        {
+          "code": "mm2",
+          "name": "Modern Masters 2015",
+          "released_at": "2015-05-22",
+          "card_count": 249
+        },
+        {
+          "code": "dtk",
+          "name": "Dragons of Tarkir",
+          "released_at": "2015-03-27",
+          "card_count": 264
+        },
+        {
+          "code": "frf",
+          "name": "Fate Reforged",
+          "released_at": "2015-01-23",
+          "card_count": 191
+        },
+        {
+          "code": "c14",
+          "name": "Commander 2014",
+          "released_at": "2014-11-07",
+          "card_count": 337
+        },
+        {
+          "code": "ktk",
+          "name": "Khans of Tarkir",
+          "released_at": "2014-09-26",
+          "card_count": 293
+        },
+        {
+          "code": "m15",
+          "name": "Magic 2015",
+          "released_at": "2014-07-18",
+          "card_count": 284
+        },
+        {
+          "code": "cns",
+          "name": "Conspiracy",
+          "released_at": "2014-06-06",
+          "card_count": 210
+        },
+        {
+          "code": "jou",
+          "name": "Journey into Nyx",
+          "released_at": "2014-05-02",
+          "card_count": 165
+        },
+        {
+          "code": "bng",
+          "name": "Born of the Gods",
+          "released_at": "2014-02-07",
+          "card_count": 165
+        },
+        {
+          "code": "c13",
+          "name": "Commander 2013",
+          "released_at": "2013-11-01",
+          "card_count": 356
+        },
+        {
+          "code": "ths",
+          "name": "Theros",
+          "released_at": "2013-09-27",
+          "card_count": 249
+        },
+        {
+          "code": "m14",
+          "name": "Magic 2014",
+          "released_at": "2013-07-19",
+          "card_count": 249
+        },
+        {
+          "code": "mma",
+          "name": "Modern Masters",
+          "released_at": "2013-06-07",
+          "card_count": 229
+        },
+        {
+          "code": "dgm",
+          "name": "Dragon's Maze",
+          "released_at": "2013-05-03",
+          "card_count": 156
+        },
+        {
+          "code": "gtc",
+          "name": "Gatecrash",
+          "released_at": "2013-02-01",
+          "card_count": 249
+        },
+        {
+          "code": "rtr",
+          "name": "Return to Ravnica",
+          "released_at": "2012-10-05",
+          "card_count": 274
+        },
+        {
+          "code": "m13",
+          "name": "Magic 2013",
+          "released_at": "2012-07-13",
+          "card_count": 249
+        },
+        {
+          "code": "avr",
+          "name": "Avacyn Restored",
+          "released_at": "2012-05-04",
+          "card_count": 244
+        },
+        {
+          "code": "dka",
+          "name": "Dark Ascension",
+          "released_at": "2012-02-03",
+          "card_count": 158
+        },
+        {
+          "code": "isd",
+          "name": "Innistrad",
+          "released_at": "2011-09-30",
+          "card_count": 264
+        },
+        {
+          "code": "m12",
+          "name": "Magic 2012",
+          "released_at": "2011-07-15",
+          "card_count": 249
+        },
+        {
+          "code": "cmd",
+          "name": "Commander 2011",
+          "released_at": "2011-06-17",
+          "card_count": 318
+        },
+        {
+          "code": "nph",
+          "name": "New Phyrexia",
+          "released_at": "2011-05-13",
+          "card_count": 175
+        },
+        {
+          "code": "mbs",
+          "name": "Mirrodin Besieged",
+          "released_at": "2011-02-04",
+          "card_count": 155
+        },
+        {
+          "code": "som",
+          "name": "Scars of Mirrodin",
+          "released_at": "2010-10-01",
+          "card_count": 249
+        },
+        {
+          "code": "m11",
+          "name": "Magic 2011",
+          "released_at": "2010-07-16",
+          "card_count": 249
+        },
+        {
+          "code": "roe",
+          "name": "Rise of the Eldrazi",
+          "released_at": "2010-04-23",
+          "card_count": 248
+        },
+        {
+          "code": "wwk",
+          "name": "Worldwake",
+          "released_at": "2010-02-05",
+          "card_count": 145
+        },
+        {
+          "code": "zen",
+          "name": "Zendikar",
+          "released_at": "2009-10-02",
+          "card_count": 269
+        },
+        {
+          "code": "m10",
+          "name": "Magic 2010",
+          "released_at": "2009-07-17",
+          "card_count": 249
+        },
+        {
+          "code": "arb",
+          "name": "Alara Reborn",
+          "released_at": "2009-04-30",
+          "card_count": 145
+        },
+        {
+          "code": "con",
+          "name": "Conflux",
+          "released_at": "2009-02-06",
+          "card_count": 145
+        },
+        {
+          "code": "ala",
+          "name": "Shards of Alara",
+          "released_at": "2008-10-03",
+          "card_count": 250
+        },
+        {
+          "code": "eve",
+          "name": "Eventide",
+          "released_at": "2008-07-25",
+          "card_count": 180
+        },
+        {
+          "code": "shm",
+          "name": "Shadowmoor",
+          "released_at": "2008-05-02",
+          "card_count": 302
+        },
+        {
+          "code": "mor",
+          "name": "Morningtide",
+          "released_at": "2008-02-01",
+          "card_count": 150
+        },
+        {
+          "code": "lrw",
+          "name": "Lorwyn",
+          "released_at": "2007-10-12",
+          "card_count": 301
+        },
+        {
+          "code": "10e",
+          "name": "Tenth Edition",
+          "released_at": "2007-07-13",
+          "card_count": 510
+        },
+        {
+          "code": "fut",
+          "name": "Future Sight",
+          "released_at": "2007-05-04",
+          "card_count": 180
+        },
+        {
+          "code": "plc",
+          "name": "Planar Chaos",
+          "released_at": "2007-02-02",
+          "card_count": 165
+        },
+        {
+          "code": "tsp",
+          "name": "Time Spiral",
+          "released_at": "2006-10-06",
+          "card_count": 301
+        },
+        {
+          "code": "tsb",
+          "name": "Time Spiral Timeshifted",
+          "released_at": "2006-10-06",
+          "card_count": 121
+        },
+        {
+          "code": "csp",
+          "name": "Coldsnap",
+          "released_at": "2006-07-21",
+          "card_count": 155
+        },
+        {
+          "code": "dis",
+          "name": "Dissension",
+          "released_at": "2006-05-05",
+          "card_count": 180
+        },
+        {
+          "code": "gpt",
+          "name": "Guildpact",
+          "released_at": "2006-02-03",
+          "card_count": 167
+        },
+        {
+          "code": "rav",
+          "name": "Ravnica: City of Guilds",
+          "released_at": "2005-10-07",
+          "card_count": 306
+        },
+        {
+          "code": "9ed",
+          "name": "Ninth Edition",
+          "released_at": "2005-07-29",
+          "card_count": 710
+        },
+        {
+          "code": "sok",
+          "name": "Saviors of Kamigawa",
+          "released_at": "2005-06-03",
+          "card_count": 165
+        },
+        {
+          "code": "bok",
+          "name": "Betrayers of Kamigawa",
+          "released_at": "2005-02-04",
+          "card_count": 165
+        },
+        {
+          "code": "chk",
+          "name": "Champions of Kamigawa",
+          "released_at": "2004-10-01",
+          "card_count": 307
+        },
+        {
+          "code": "5dn",
+          "name": "Fifth Dawn",
+          "released_at": "2004-06-04",
+          "card_count": 165
+        },
+        {
+          "code": "dst",
+          "name": "Darksteel",
+          "released_at": "2004-02-06",
+          "card_count": 165
+        },
+        {
+          "code": "mrd",
+          "name": "Mirrodin",
+          "released_at": "2003-10-02",
+          "card_count": 306
+        },
+        {
+          "code": "8ed",
+          "name": "Eighth Edition",
+          "released_at": "2003-07-28",
+          "card_count": 711
+        },
+        {
+          "code": "scg",
+          "name": "Scourge",
+          "released_at": "2003-05-26",
+          "card_count": 143
+        },
+        {
+          "code": "lgn",
+          "name": "Legions",
+          "released_at": "2003-02-03",
+          "card_count": 145
+        },
+        {
+          "code": "ons",
+          "name": "Onslaught",
+          "released_at": "2002-10-07",
+          "card_count": 351
+        },
+        {
+          "code": "jud",
+          "name": "Judgment",
+          "released_at": "2002-05-27",
+          "card_count": 143
+        },
+        {
+          "code": "tor",
+          "name": "Torment",
+          "released_at": "2002-02-04",
+          "card_count": 143
+        },
+        {
+          "code": "ody",
+          "name": "Odyssey",
+          "released_at": "2001-10-01",
+          "card_count": 353
+        },
+        {
+          "code": "apc",
+          "name": "Apocalypse",
+          "released_at": "2001-06-04",
+          "card_count": 143
+        },
+        {
+          "code": "7ed",
+          "name": "Seventh Edition",
+          "released_at": "2001-04-11",
+          "card_count": 708
+        },
+        {
+          "code": "pls",
+          "name": "Planeshift",
+          "released_at": "2001-02-05",
+          "card_count": 146
+        },
+        {
+          "code": "inv",
+          "name": "Invasion",
+          "released_at": "2000-10-02",
+          "card_count": 354
+        },
+        {
+          "code": "pcy",
+          "name": "Prophecy",
+          "released_at": "2000-06-05",
+          "card_count": 144
+        },
+        {
+          "code": "nem",
+          "name": "Nemesis",
+          "released_at": "2000-02-14",
+          "card_count": 143
+        },
+        {
+          "code": "mmq",
+          "name": "Mercadian Masques",
+          "released_at": "1999-10-04",
+          "card_count": 350
+        },
+        {
+          "code": "uds",
+          "name": "Urza's Destiny",
+          "released_at": "1999-06-07",
+          "card_count": 143
+        },
+        {
+          "code": "6ed",
+          "name": "Classic Sixth Edition",
+          "released_at": "1999-04-21",
+          "card_count": 351
+        },
+        {
+          "code": "ulg",
+          "name": "Urza's Legacy",
+          "released_at": "1999-02-15",
+          "card_count": 143
+        },
+        {
+          "code": "usg",
+          "name": "Urza's Saga",
+          "released_at": "1998-10-12",
+          "card_count": 357
+        },
+        {
+          "code": "exo",
+          "name": "Exodus",
+          "released_at": "1998-06-15",
+          "card_count": 143
+        },
+        {
+          "code": "sth",
+          "name": "Stronghold",
+          "released_at": "1998-03-02",
+          "card_count": 143
+        },
+        {
+          "code": "tmp",
+          "name": "Tempest",
+          "released_at": "1997-10-14",
+          "card_count": 350
+        },
+        {
+          "code": "wth",
+          "name": "Weatherlight",
+          "released_at": "1997-06-09",
+          "card_count": 167
+        },
+        {
+          "code": "5ed",
+          "name": "Fifth Edition",
+          "released_at": "1997-03-24",
+          "card_count": 460
+        },
+        {
+          "code": "vis",
+          "name": "Visions",
+          "released_at": "1997-02-03",
+          "card_count": 167
+        },
+        {
+          "code": "mir",
+          "name": "Mirage",
+          "released_at": "1996-10-08",
+          "card_count": 353
+        },
+        {
+          "code": "all",
+          "name": "Alliances",
+          "released_at": "1996-06-10",
+          "card_count": 199
+        },
+        {
+          "code": "hml",
+          "name": "Homelands",
+          "released_at": "1995-10-01",
+          "card_count": 140
+        },
+        {
+          "code": "ren",
+          "name": "Renaissance",
+          "released_at": "1995-08-01",
+          "card_count": 122
+        },
+        {
+          "code": "rin",
+          "name": "Rinascimento",
+          "released_at": "1995-08-01",
+          "card_count": 69
+        },
+        {
+          "code": "bchr",
+          "name": "Chronicles Foreign Black Border",
+          "released_at": "1995-07-01",
+          "card_count": 125
+        },
+        {
+          "code": "chr",
+          "name": "Chronicles",
+          "released_at": "1995-07-01",
+          "card_count": 125
+        },
+        {
+          "code": "ice",
+          "name": "Ice Age",
+          "released_at": "1995-06-03",
+          "card_count": 383
+        },
+        {
+          "code": "4bb",
+          "name": "Fourth Edition Foreign Black Border",
+          "released_at": "1995-04-01",
+          "card_count": 378
+        },
+        {
+          "code": "4ed",
+          "name": "Fourth Edition",
+          "released_at": "1995-04-01",
+          "card_count": 380
+        },
+        {
+          "code": "fem",
+          "name": "Fallen Empires",
+          "released_at": "1994-11-01",
+          "card_count": 187
+        },
+        {
+          "code": "drk",
+          "name": "The Dark",
+          "released_at": "1994-08-01",
+          "card_count": 122
+        },
+        {
+          "code": "sum",
+          "name": "Summer Magic / Edgar",
+          "released_at": "1994-06-21",
+          "card_count": 306
+        },
+        {
+          "code": "leg",
+          "name": "Legends",
+          "released_at": "1994-06-01",
+          "card_count": 310
+        },
+        {
+          "code": "fbb",
+          "name": "Foreign Black Border",
+          "released_at": "1994-04-11",
+          "card_count": 307
+        },
+        {
+          "code": "3ed",
+          "name": "Revised Edition",
+          "released_at": "1994-04-11",
+          "card_count": 306
+        },
+        {
+          "code": "atq",
+          "name": "Antiquities",
+          "released_at": "1994-03-04",
+          "card_count": 102
+        },
+        {
+          "code": "arn",
+          "name": "Arabian Nights",
+          "released_at": "1993-12-17",
+          "card_count": 92
+        },
+        {
+          "code": "2ed",
+          "name": "Unlimited Edition",
+          "released_at": "1993-12-01",
+          "card_count": 302
+        },
+        {
+          "code": "leb",
+          "name": "Limited Edition Beta",
+          "released_at": "1993-10-04",
+          "card_count": 302
+        },
+        {
+          "code": "lea",
+          "name": "Limited Edition Alpha",
+          "released_at": "1993-08-05",
+          "card_count": 295
+        }
+      ]
+    }
+  }
+}
