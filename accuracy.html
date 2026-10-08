@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="/assets/brand/cardresell-mark-180.png">
   <meta name="theme-color" content="#111009">
 <title>Accuracy · CardResell</title>
 <meta name="description" content="How CardResell calculates net payout, verifies marketplace fees, sanity-checks graded prices, and estimates raw-card grades. Our methodology, our data sources, our known limits.">
@@ -21,7 +21,7 @@
 <meta name="twitter:title" content="How CardResell calculates accuracy">
 <meta name="twitter:description" content="How CardResell calculates net payout, verifies marketplace fees, sanity-checks graded prices, and estimates raw-card grades. Our methodology, our data sources, our known limits.">
 <meta name="twitter:image" content="https://www.cardresell.org/og-image.png">
-<link rel="icon" href="/favicon.ico">
+<link rel="icon" href="/assets/brand/cardresell-mark-32.png" type="image/png">
 <style>
 :root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#71717a;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--green:#4ade80;--red:#f87171;--radius-md:8px;--radius-xl:14px}
 *{box-sizing:border-box}
@@ -71,10 +71,11 @@ table.fee-table td:first-child{color:var(--text);font-weight:600}
 footer.site{border-top:1px solid var(--border);padding:1rem;text-align:center;font-size:.75rem;color:var(--text-faint)}
 footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 </style>
+<link rel="stylesheet" href="/assets/brand-ui.22082085.css">
 </head>
 <body>
 <header class="site">
-  <a class="brand" href="/">Card<span>Resell</span></a>
+  <a class="brand brand-lockup" href="/"><img class="brand-mark" src="/assets/brand/cardresell-mark-128.webp" width="36" height="36" alt=""><span>Card<span>Resell</span></span></a>
   <nav>
     <a href="/">Home</a>
     <a href="/pricing.html">Pricing</a>
@@ -152,7 +153,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 
 <h2 id="fees">Marketplace fees</h2>
 <p>We track the exact fee schedule for every venue in the payout ranking and re-verify it on the cadence below. Every fee row on a card's Net Payout tile carries a <span class="pill-verified">• Fee schedule verified &lt;date&gt;</span> pill that links here. That pill dates the <em>fee schedule</em> we read &mdash; it is not a statement about a card's price, which we never verify. If a fee has changed and we haven't caught it yet, <a href="/contact.html">tell us</a>.</p>
-<table class="fee-table">
+<div class="table-scroll" role="region" aria-label="Accuracy data table — scroll horizontally" tabindex="0"><table class="fee-table">
 <!-- 2026-09-07: THESE DATES ARE A SECOND COPY. The shipped fee model carries its
      own `feeAuditedOn` per venue in PLATFORMS (js/core.<hash>.js); the "Last
      verified" column below and that field are two hand-maintained copies of one
@@ -180,7 +181,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
     <tr><td>CardNexus</td><td>Flat 8% North America seller commission charged on the <em>order total</em> (items&nbsp;+ shipping) &middot; no seller processing or payout fee &middot; French operator, region locked at signup</td><td>Sep 1, 2026</td><td><a href="https://help.cardnexus.com/articles/9938652-fee-structure-overview" target="_blank" rel="noopener">CardNexus fee structure</a></td></tr>
     <tr><td>TCG Bulk (aggregator)</td><td>Compares offers from multiple US buylist buyers &middot; <strong>10% TCG Bulk service fee</strong> deducted from seller proceeds &middot; optional 3.5% shipment protection &middot; seller pays outbound shipping</td><td>Sep 1, 2026</td><td><a href="https://tcgbulk.com/page/terms-of-service" target="_blank" rel="noopener">TCG Bulk terms</a></td></tr>
   </tbody>
-</table>
+</table></div>
 
 <h3>Sales tax and the fee base</h3>
 <p>A venue's fee rate is only half the number. The other half is <em>what the rate is charged on</em> &mdash; and on some venues that base includes the sales tax the buyer paid, which is money you never receive but are charged a percentage of. <strong>We do not model sales tax anywhere on this site.</strong> We do not know the buyer's jurisdiction when we show you an estimate, and we would rather show you a caveat than invent a rate. So where a fee is charged on a tax-inclusive base, <strong>our estimate can run low &mdash; on the orders where the buyer actually paid tax</strong>, and by a share of that tax rather than the whole of it. On an order with no tax, there is nothing missing. The fee breakdown says which of those two situations you are in on that venue's row.</p>
@@ -194,7 +195,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
      the model, in both directions, and also holds the three counts in the
      paragraph above to what PLATFORMS actually contains -- so a venue answered
      here but not in the code, or answered differently, is a red run. -->
-<table class="fee-table">
+<div class="table-scroll" role="region" aria-label="Accuracy data table — scroll horizontally" tabindex="0"><table class="fee-table">
   <thead><tr><th>Venue</th><th>Can a fee we charge you be charged on buyer-paid tax?</th><th>How we know</th></tr></thead>
   <tbody>
     <tr><td>eBay</td><td><strong>Yes</strong></td><td>The fee is charged on the &ldquo;total amount of the sale&rdquo;, which the schedule states includes sales tax. Published, and confirmed against eBay's own worked example. <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees?id=4822" target="_blank" rel="noopener">eBay selling fees</a></td></tr>
@@ -213,12 +214,12 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
     <tr><td>CardNexus</td><td><strong>No</strong></td><td>The fee is charged on an &ldquo;order total&rdquo; that the help centre defines as the item subtotal plus shipping. Tax is not in that definition. <a href="https://help.cardnexus.com/articles/9938652-fee-structure-overview" target="_blank" rel="noopener">CardNexus fee structure</a></td></tr>
     <tr><td>TCG Bulk</td><td><strong>Unknown</strong></td><td>Corrected on this pass. We had grouped it with the buylists, but its own terms say it &ldquo;does not take legal title to the Products and is not the seller or buyer&rdquo; &mdash; it is an intermediary between you and a business buyer, so the &ldquo;the venue is the buyer&rdquo; reasoning does not apply. It also does charge a fee: &ldquo;a 10% TCG Bulk service fee applies to the transaction and is deducted from the Seller's proceeds&rdquo;. The terms never state what &ldquo;the transaction&rdquo; is composed of, so the base of that 10% &mdash; and whether tax could be in it &mdash; is unestablished. <a href="https://tcgbulk.com/page/terms-of-service" target="_blank" rel="noopener">TCG Bulk terms</a></td></tr>
   </tbody>
-</table>
+</table></div>
 <p class="fee-note">Showing this caveat does not make the estimate complete &mdash; it tells you which input is missing, not what the number would have been with it. These answers are about the <strong>fee base</strong> only. They say nothing about how much tax a buyer pays, who remits it, or what you owe &mdash; tax collected and remitted, the amount subject to fees, and your revenue are three separate quantities and we keep them separate. Verifying the tax base is also not the same as re-verifying a fee schedule, so <strong>the &ldquo;Last verified&rdquo; dates above did not move for this pass</strong>: we re-read all fifteen pages, but only for this question. Not one rate, cap or tier was re-checked.</p>
 
 <h3>International &amp; cross-border selling</h3>
 <p>Every payout figure on this site models a <strong>US seller shipping to a US buyer</strong>. The moment a border is involved the number changes, and on two of the fifteen venues you are not even contracting with an American company. Rather than bury that, each venue tile carries its own cross-border line &mdash; on locked rows too, so you know before you pay to unlock one.</p>
-<table class="fee-table">
+<div class="table-scroll" role="region" aria-label="Accuracy data table — scroll horizontally" tabindex="0"><table class="fee-table">
   <thead><tr><th>Venue</th><th>Operator</th><th>Cross-border cost to you</th></tr></thead>
   <tbody>
     <tr><td>eBay</td><td>🇺🇸 United States</td><td><strong>+1.65%</strong> international fee on item&nbsp;+ shipping&nbsp;+ tax (waived via eBay International Shipping) and <strong>3%</strong> currency conversion</td></tr>
@@ -234,7 +235,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
     <tr><td>Cardsphere</td><td>🇺🇸 Settles in USD</td><td>No platform fee, but you bear <strong>all</strong> international shipping cost and loss risk</td></tr>
     <tr><td>Card Kingdom &middot; CoolStuffInc &middot; Star City Games &middot; TCG Bulk</td><td>🇺🇸 United States</td><td>US buyers, USD, no cross-border fee &middot; shipping in from abroad must go Delivery&nbsp;Duties&nbsp;Paid, and returns outside the continental US are largely on you</td></tr>
   </tbody>
-</table>
+</table></div>
 
 <h2 id="grading">Estimated grade scans</h2>
 <p>Our AI grading estimate is a <strong>screening tool</strong>, not a PSA replacement. It scores four sub-grades — Centering, Corners, Edges, Surface — and outputs an overall estimate on the PSA 1–10 scale. Two rules keep it honest:</p>
