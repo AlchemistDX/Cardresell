@@ -4,6 +4,7 @@ import { gradeWithXimilar } from '../api/_ximilar_grade.js';
 import { observeProviderAttempt } from '../api/_providerUsage.js';
 import { summarizeProviderUsage } from '../tools/provider-usage-report.mjs';
 import { readFileSync } from 'node:fs';
+import { GRADE_MODEL_CANDIDATES, GRADE_FALLBACK_MODEL } from '../api/_gradeModel.js';
 
 const original = { fetch: globalThis.fetch, setTimeout, clearTimeout, warn: console.warn, log: console.log };
 let cases = 0;
@@ -106,6 +107,23 @@ try {
   assert.equal(openai.usage.prompt_tokens.reported_total, 300, 'retain usage on empty/parse failure');
   assert.equal(openai.usage.prompt_tokens.unknown_attempts, 3, 'missing usage is unknown, not free');
   assert.equal(openai.cost_usd, null);
+  cases++;
+  for (const model of new Set([...GRADE_MODEL_CANDIDATES, GRADE_FALLBACK_MODEL])) {
+    await observeProviderAttempt({ provider: 'openai', operation: 'chat_completion', mode: 'grade', model }, async observe => {
+      observe({ status: 200, usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } });
+      return { ok: true };
+    });
+    const entry = observations.at(-1);
+    const measured = summarizeProviderUsage([JSON.stringify(entry), JSON.stringify(entry)]);
+    assert.equal(measured.attempts, 1, `${model} usage must not disappear`);
+    assert.equal(measured.duplicates, 1);
+    assert.equal(measured.groups[0].key, `openai/chat_completion/grade/${model}`);
+    assert.equal(measured.groups[0].usage.total_tokens.reported_total, 120);
+    assert.equal(measured.groups[0].cost_usd, null, 'token counts are not an invoice');
+    cases++;
+  }
+  const unsupported = { ...observations.at(-1), model: 'unrecognized-model' };
+  assert.equal(summarizeProviderUsage([JSON.stringify(unsupported)]).attempts, 0);
   cases++;
   console.log = () => { throw Error('log unavailable'); };
   assert.equal(await observeProviderAttempt({}, async () => result), result);

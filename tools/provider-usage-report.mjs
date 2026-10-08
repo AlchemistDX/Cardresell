@@ -3,6 +3,9 @@
 // Exported logs can be incomplete: this is not an invoice or profit report.
 import { pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline';
+import { GRADE_MODEL_CANDIDATES, GRADE_FALLBACK_MODEL } from '../api/_gradeModel.js';
+
+const supportedModels = new Set([null, ...GRADE_MODEL_CANDIDATES, GRADE_FALLBACK_MODEL]);
 
 const fields = ['prompt_tokens', 'cached_prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'total_tokens'];
 export function summarizeProviderUsage(lines) {
@@ -27,7 +30,7 @@ export function summarizeProviderUsage(lines) {
           !['openai', 'ximilar'].includes(record.provider) ||
           !['identify', 'grade', 'deep_grade', 'unknown'].includes(record.mode) ||
           !['tcg_id', 'sport_id', 'card_grade', 'chat_completion', 'unknown'].includes(record.operation) ||
-          ![null, 'gpt-5', 'gpt-4o'].includes(record.model) ||
+          !supportedModels.has(record.model) ||
           !['success', 'failure'].includes(record.outcome)) { ignored++; continue; }
     } catch { ignored++; continue; }
     if (seen.has(record.attempt_id)) { duplicates++; continue; }
