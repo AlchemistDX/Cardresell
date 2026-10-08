@@ -2,7 +2,7 @@
 
 ## Changes
 
-- Quick and Deep Grade offer Take photo / Upload photo for front, back and each edge. Uploads use the existing resolution/body budgets and validation; iOS HEIC files still require JPEG export if the picker does not convert them.
+- Quick and Deep Grade ask Take photo / Upload photo once per session. Upload opens one checklist: Front/Back for Quick; Front/Back/Top/Bottom/Left/Right for Deep. Slots open the library directly, accept any order and show replaceable thumbnails. Uploads use the existing resolution/body budgets and validation; iOS HEIC files still require JPEG export if the picker does not convert them.
 - Quick Grade reviews front/back with replacement controls and an explicit 1-credit submit. Deep retains its existing explicit submit and minimum two edge views (four recommended).
 - Successful single ID scans retain the result screen and offer Create draft. This uses the same card mapper, server validation, idempotent draft creation and local scan-photo attachment as bulk drafts. No condition or price is invented. Each scan gets a separate copy identity; repeated taps/retries retain it.
 - Subscription cards explain intended use, payout-comparison access and pack discounts. Starter has Free's venue tools; Business has Pro's venue tools. Dormant storage quotas, unverified support promises and grading-accuracy upgrades are not advertised.
@@ -20,7 +20,7 @@
 
 1. Open Quick Grade → Upload photo. Pick a camera-app front photo, then a back photo. Verify no charge until Submit Quick Grade.
 2. Replace either photo; cancel a photo picker and reopen it. Verify the correct photo remains assigned.
-3. Open Deep Grade. Upload front, back, top, bottom, left and right individually. Mix an upload with Take photo and verify slot labels/checkmarks.
+3. Open Deep Grade. Upload front, back, top, bottom, left and right individually. Add the slots in any order and replace one. Verify no repeated source-choice popup.
 4. Try an unsupported or unreadable file. Verify a clear error and no grading request.
 5. Run a single ID scan. Confirm the identity, tap Create draft, and check its details/photo in draft review. Enter condition and price yourself. Nothing should publish automatically.
 6. Retry the same draft request after a simulated failure in a test environment; verify one draft. A separate scan of another copy should be separate.

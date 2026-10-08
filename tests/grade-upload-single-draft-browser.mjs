@@ -10,10 +10,10 @@ const root = new URL('../', import.meta.url);
 const html = readFileSync(new URL('index.html', root), 'utf8');
 const core = readFileSync(new URL(html.match(/src="\/([^\"]*core\.[a-f0-9]+\.js)"/)[1], root),'utf8');
 const ui = readFileSync(new URL(html.match(/src="\/([^\"]*ui\.[a-f0-9]+\.js)"/)[1], root),'utf8');
-const names = new Set(['_chooseGradePhoto','_startGradeFrontCapture','_startGradeBackCapture','_startGradeEdgeCapture','_launchQuickGrade','_launchDeepGrade','processGradeImage','processGradeBack','processGradeEdge','showDeepGradeEdgeUI','showQuickGradeReview','_validateScanFile','_gradeCaptureSpec','compressImage','_prepareSingleScanDraft','createSingleScanDraft','_setScanBtns','_scheduleScanAutoAdvance','_clearScanAutoAdvance','_scanPhotoSnapshot','_bulkScanRowToCard']);
+const names = new Set(['_chooseGradePhoto','showGradeUploadChecklist','_pickGradeUpload','_gradeUploadSlots','_gradeUploadValue','_startGradeFrontCapture','_startGradeBackCapture','_startGradeEdgeCapture','_launchQuickGrade','_launchDeepGrade','processGradeImage','processGradeBack','processGradeEdge','showDeepGradeEdgeUI','showQuickGradeReview','_validateScanFile','_gradeCaptureSpec','compressImage','_prepareSingleScanDraft','createSingleScanDraft','_setScanBtns','_scheduleScanAutoAdvance','_clearScanAutoAdvance','_scanPhotoSnapshot','_bulkScanRowToCard']);
 const extracted = [core,ui].map(source => parse(source,{ecmaVersion:'latest',sourceType:'script'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.has(n.id.name)).map(n=>source.slice(n.start,n.end)).join('\n')).join('\n');
 const boot = `const SCAN_MAX_BYTES=15*1024*1024; const SCAN_MIME_TYPES=new Set(['image/jpeg','image/png','image/webp']); window.googleUser={uid:'test'};window._googleIdToken='fixture';window.submissions=[];window.drafts=[];window.cameraCalls=[];
-function _dialogOpened(){} function _dialogClosed(){} function showToast(m){window.toast=m} function detectCardBounds(){return null}
+function cancelDeepGrade(){window._gradeUploadSession++;window._gradeUploadBusy=null;document.getElementById('scanOverlay').style.display='none'} function _dialogOpened(){} function _dialogClosed(){} function showToast(m){window.toast=m} function detectCardBounds(){return null}
 function _takeGradeFrontPhoto(){cameraCalls.push('front')}function _takeGradeBackPhoto(){cameraCalls.push('back')}function _takeGradeEdgePhoto(e){cameraCalls.push(e)}
 async function submitGradeScan(deep){submissions.push({deep,front:window._gradeFrontBase64,back:window._gradeBackBase64})}
 function _catalogueArtworkUrl(r){return r.imageUrl||null}function _crCreateIdemKey(a,b,c){return [a,b,c].join(':')}
@@ -29,19 +29,40 @@ try {for(const size of [{width:390,height:844},{width:844,height:390}]) {
  await page.goto(origin);
  const jpeg=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=900;c.height=1200;const x=c.getContext('2d');x.fillStyle='#bbaaff';x.fillRect(0,0,900,1200);return c.toDataURL('image/jpeg').split(',')[1]});
  const file={name:'phone.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')};
- const upload=async()=>{const chooserPromise=page.waitForEvent('filechooser');await page.locator('#gradeUploadPhoto').click();await (await chooserPromise).setFiles(file);await page.waitForFunction(()=>!document.getElementById('gradePhotoSource').open)};
+ const upload=async(slot)=>{const chooserPromise=page.waitForEvent('filechooser');await page.locator('[data-grade-slot="'+slot+'"]').click();await (await chooserPromise).setFiles(file);await page.waitForFunction(()=>!window._gradeUploadBusy)};
  await page.evaluate(()=>_launchQuickGrade());assert.equal(await page.locator('#gradeLibraryInput').getAttribute('capture'),null);
  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>submissions.length+cameraCalls.length),0);
- await page.evaluate(()=>_startGradeFrontCapture());await upload();await page.waitForFunction(()=>!!window._gradeFrontBase64);
- await page.getByRole('button',{name:'Add Back Photo'}).click();await upload();await page.getByRole('button',{name:'Submit Quick Grade — 1 credit'}).waitFor();
+ await page.evaluate(()=>_startGradeFrontCapture());await page.locator('#gradeUploadPhoto').click();
+ assert.equal(await page.locator('[data-grade-slot]').count(),2);assert.equal(await page.locator('#gradeUploadSubmit').isDisabled(),true);
+ await upload('back');assert.equal(await page.locator('#gradeUploadSubmit').isDisabled(),true);await upload('front');
+ assert.equal(await page.locator('#gradePhotoSource').evaluate(e=>e.open),false);
  assert.equal(await page.evaluate(()=>submissions.length),0);
- await page.getByRole('button',{name:'Replace back'}).click();await upload();await page.getByRole('button',{name:'Submit Quick Grade — 1 credit'}).click();
+ await upload('back');await page.locator('#gradeUploadSubmit').click();
  assert.equal(await page.evaluate(()=>submissions.length),1);assert.equal(await page.evaluate(()=>cameraCalls.length),0);
- await page.evaluate(()=>_launchDeepGrade());await upload();await page.waitForFunction(()=>!!window._gradeFrontBase64);
- await page.evaluate(()=>_startGradeBackCapture());await upload();await page.waitForFunction(()=>!!window._gradeBackBase64);
- for(const edge of ['top','bottom','left','right']){await page.evaluate(e=>_startGradeEdgeCapture(e),edge);await upload();await page.waitForFunction(e=>!!window._gradeEdges[e],edge)}
+ await page.evaluate(()=>_launchDeepGrade());await page.locator('#gradeUploadPhoto').click();
+ assert.equal(await page.locator('[data-grade-slot]').count(),6);
+ for(const slot of ['right','back','top','left','bottom','front']) await upload(slot);
  assert.equal(await page.evaluate(()=>Object.keys(_gradeEdges).length),4);assert.equal(await page.evaluate(()=>submissions.length),1);
- await page.evaluate(()=>_startGradeEdgeCapture('top'));await page.locator('#gradeTakePhoto').click();assert.deepEqual(await page.evaluate(()=>cameraCalls),['top']);
+ assert.equal(await page.locator('[data-grade-slot] img').count(),6);assert.equal(await page.locator('#gradeUploadSubmit').isEnabled(),true);
+ assert.equal(await page.locator('#scanResult').evaluate(e=>e.scrollWidth>e.clientWidth),false);
+ if(process.env.CR_SHOT_DIR) await page.screenshot({path:process.env.CR_SHOT_DIR+'/upload-checklist-'+size.width+'.png'});
+ // Invalid replacement preserves the previous photo and does not charge.
+ const before=await page.evaluate(()=>_gradeEdges.top);
+ const badChooser=page.waitForEvent('filechooser');await page.locator('[data-grade-slot="top"]').click();
+ await (await badChooser).setFiles({name:'bad.pdf',mimeType:'application/pdf',buffer:Buffer.from('bad')});
+ assert.equal(await page.evaluate(()=>_gradeEdges.top),before);assert.equal(await page.evaluate(()=>submissions.length),1);
+ // Cancel during compression must not repopulate a closed or new session.
+ await page.evaluate(()=>{window.originalCompress=compressImage;compressImage=()=>new Promise(r=>window.resolvePhoto=r)});
+ const pendingChooser=page.waitForEvent('filechooser');await page.locator('[data-grade-slot="front"]').click();await (await pendingChooser).setFiles(file);
+ await page.waitForFunction(()=>!!window.resolvePhoto);await page.getByRole('button',{name:'Cancel — no grading charge'}).click();
+ await page.evaluate(()=>{resolvePhoto('stale');compressImage=originalCompress});
+ assert.equal(await page.locator('#scanOverlay').evaluate(e=>e.style.display),'none');
+ assert.notEqual(await page.evaluate(()=>_gradeFrontBase64),'stale');
+ await page.evaluate(()=>_launchDeepGrade());await page.locator('#gradeTakePhoto').click();
+ await page.evaluate(()=>{_startGradeBackCapture();_startGradeEdgeCapture('top')});
+ assert.deepEqual(await page.evaluate(()=>cameraCalls),['front','back','top']);
+ assert.equal(await page.locator('#gradePhotoSource').evaluate(e=>e.open),false);
+ await page.evaluate(()=>{_gradeFrontBase64='synthetic-photo';document.getElementById('scanOverlay').style.display='flex'});
  await page.evaluate(()=>{_pendingIdScanCard={name:'Example',number:'1',setName:'Example set',cardType:'mtg'};_lastScanFrontBase64=_gradeFrontBase64;_setScanBtns('success');_scheduleScanAutoAdvance()});
  assert.equal(await page.evaluate(()=>window._scanAutoAdvanceTimer||null),null);
  await page.locator('#scanCreateDraftBtn').click();await page.waitForFunction(()=>!_singleScanDraft.busy);
@@ -52,7 +73,7 @@ try {for(const size of [{width:390,height:844},{width:844,height:390}]) {
  assert.notEqual(await page.evaluate(()=>drafts[2].instanceId),first.instanceId);
  await page.evaluate(()=>{draftSucceeds=true;createSingleScanDraft()});await page.waitForFunction(()=>!_singleScanDraft.busy);
  assert.equal(await page.evaluate(()=>_pendingIdScanCard),null);assert.equal(await page.locator('#scanOverlay').evaluate(e=>e.style.display),'none');
- console.log(`${size.width}x${size.height}: uploads, cancellation, Quick review, six Deep slots, camera choice, stable retry/double-click, separate copies, draft navigation passed`);
+ console.log(`${size.width}x${size.height}: one source choice, two/six upload slots, arbitrary order, replacement, validation, cancellation race, camera persistence and draft regression passed`);
  await page.route('**/api/membership-catalogue', r=>r.fulfill({json:publicMembershipCatalogue()}));
  await page.evaluate(()=>{window.googleUser=null});
  await page.addScriptTag({content:readFileSync(new URL(html.match(/src="\/([^\"]*membership-shop\.[a-f0-9]+\.js)"/)[1],root),'utf8')});
