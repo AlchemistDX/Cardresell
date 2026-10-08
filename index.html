@@ -3422,48 +3422,49 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
          viewer can mentally rotate it. All lazy-loaded (~166 KB total). -->
     <div style="margin-top:1rem;padding-top:.9rem;border-top:1px solid rgba(255,255,255,.08)">
       <div style="color:var(--gold-text);font-weight:800;font-size:.85rem;text-align:center;margin-bottom:.15rem">The 6 photos Deep Grade needs</div>
-      <div style="color:rgba(255,255,255,.6);font-size:.7rem;text-align:center;line-height:1.4;margin-bottom:.75rem">Front, back, and each of the four edges close-up. Here's what each should look like:</div>
+      <div style="color:rgba(255,255,255,.6);font-size:.7rem;text-align:center;line-height:1.4;margin-bottom:.75rem">Front, back, and each of the four edges close-up. Here's what each should look like. Tap any example to see the full image:</div>
       <style>
         .pt-angle-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:.45rem; }
-        .pt-angle { position:relative; border-radius:8px; overflow:hidden; background:#000; outline:1px solid rgba(255,255,255,.08); }
-        .pt-angle img { display:block; width:100%; height:auto; aspect-ratio:1/1; object-fit:cover; }
+        .pt-angle { padding:0; border:0; min-width:0; cursor:zoom-in; font:inherit; position:relative; border-radius:8px; overflow:hidden; background:#000; outline:1px solid rgba(255,255,255,.08); }
+        .pt-angle img { display:block; width:100%; height:auto; aspect-ratio:1/1; object-fit:contain; }
+        .pt-angle:focus-visible { outline:3px solid var(--gold); outline-offset:3px; }
         .pt-angle .pt-angle-label { position:absolute; left:0; right:0; bottom:0; padding:.28rem .35rem; background:linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0)); color:#fff; font-size:.62rem; font-weight:700; text-align:center; letter-spacing:.02em; }
         .pt-angle .pt-angle-num { position:absolute; top:.3rem; left:.3rem; width:1.15rem; height:1.15rem; border-radius:50%; background:var(--gold); color:#000; font-size:.65rem; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.4); }
         @media (max-width:380px) { .pt-angle-grid { grid-template-columns:repeat(2, 1fr); } }
       </style>
       <div class="pt-angle-grid">
-        <figure class="pt-angle" style="margin:0">
+        <button type="button" class="pt-angle" aria-haspopup="dialog">
           <img loading="lazy" data-src="/photo-tips/photo_tips_angle_1_front.webp" alt="Reference: card front, centered and filling frame">
           <span class="pt-angle-num">1</span>
-          <div class="pt-angle-label">Front</div>
-        </figure>
-        <figure class="pt-angle" style="margin:0">
+          <span class="pt-angle-label">Front</span>
+        </button>
+        <button type="button" class="pt-angle" aria-haspopup="dialog">
           <img loading="lazy" data-src="/photo-tips/photo_tips_angle_2_back.webp" alt="Reference: card back, centered and filling frame">
           <span class="pt-angle-num">2</span>
-          <div class="pt-angle-label">Back</div>
-        </figure>
-        <figure class="pt-angle" style="margin:0">
+          <span class="pt-angle-label">Back</span>
+        </button>
+        <button type="button" class="pt-angle" aria-haspopup="dialog">
           <img loading="lazy" data-src="/photo-tips/photo_tips_angle_3_top_edge.webp" alt="Reference: top edge of card in sharp macro focus">
           <span class="pt-angle-num">3</span>
-          <div class="pt-angle-label">Top edge</div>
-        </figure>
-        <figure class="pt-angle" style="margin:0">
+          <span class="pt-angle-label">Top edge</span>
+        </button>
+        <button type="button" class="pt-angle" aria-haspopup="dialog">
           <img loading="lazy" data-src="/photo-tips/photo_tips_angle_4_bottom_edge.webp" alt="Reference: bottom edge of card in sharp macro focus">
           <span class="pt-angle-num">4</span>
-          <div class="pt-angle-label">Bottom edge</div>
-        </figure>
-        <figure class="pt-angle" style="margin:0">
+          <span class="pt-angle-label">Bottom edge</span>
+        </button>
+        <button type="button" class="pt-angle" aria-haspopup="dialog">
           <img loading="lazy" data-src="/photo-tips/photo_tips_angle_5_left_edge.webp" alt="Reference: left edge of card in sharp macro focus">
           <span class="pt-angle-num">5</span>
-          <div class="pt-angle-label">Left edge</div>
-        </figure>
-        <figure class="pt-angle" style="margin:0">
+          <span class="pt-angle-label">Left edge</span>
+        </button>
+        <button type="button" class="pt-angle" aria-haspopup="dialog">
           <img loading="lazy" data-src="/photo-tips/photo_tips_angle_6_right_edge.webp" alt="Reference: right edge of card in sharp macro focus">
           <span class="pt-angle-num">6</span>
-          <div class="pt-angle-label">Right edge</div>
-        </figure>
+          <span class="pt-angle-label">Right edge</span>
+        </button>
       </div>
-      <div style="color:rgba(255,255,255,.5);font-size:.65rem;text-align:center;line-height:1.4;margin-top:.55rem">Quick Grade only needs #1 &amp; #2. Deep Grade uses all 6 for corner + edge inspection.</div>
+      <div style="color:rgba(255,255,255,.5);font-size:.65rem;text-align:center;line-height:1.4;margin-top:.55rem">Illustrative examples. Quick Grade only needs #1 &amp; #2. Deep Grade uses all 6 for corner + edge inspection.</div>
     </div>
 
     <!-- Primary CTA -->
@@ -3477,6 +3478,66 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <button class="scan-gate-cancel" onclick="closePhotoTipsModal()">Close</button>
   </div>
 </div>
+
+<style>
+  #photoExampleViewer { margin:auto; box-sizing:border-box; width:calc(100% - 24px); max-width:960px; height:calc(100vh - 24px); height:calc(100dvh - 24px); max-height:none; padding:12px; border:1px solid #555; border-radius:14px; background:#111; color:#fff; overflow:hidden; }
+  #photoExampleViewer::backdrop { background:rgba(0,0,0,.88); }
+  #photoExampleViewer[open] { display:flex; flex-direction:column; gap:10px; }
+  .pt-viewer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; }
+  #photoExampleTitle { margin:0; font-size:1rem; }
+  #photoExampleClose { min-height:44px; padding:8px 16px; border:1px solid #888; border-radius:8px; background:#222; color:#fff; font:inherit; cursor:pointer; }
+  #photoExampleFullCard { width:100%; min-height:0; flex:1; }
+  #photoExampleImage { display:block; width:100%; min-height:0; flex:1; object-fit:contain; }
+</style>
+<dialog id="photoExampleViewer" aria-labelledby="photoExampleTitle">
+  <div class="pt-viewer-header">
+    <h2 id="photoExampleTitle">Photo example</h2>
+    <button type="button" id="photoExampleClose" autofocus>Close</button>
+  </div>
+  <img id="photoExampleImage" alt="">
+  <svg id="photoExampleFullCard" role="img" aria-label="Illustrative full card reference" style="display:none" xmlns="http://www.w3.org/2000/svg"><image id="photoExampleFullCardImage" width="1499" height="1049" /></svg>
+</dialog>
+<script id="photoExampleViewerScript">
+(function () {
+  const viewer = document.getElementById('photoExampleViewer');
+  const fullImage = document.getElementById('photoExampleImage');
+  const fullCard = document.getElementById('photoExampleFullCard');
+  let trigger = null;
+  let guideScroll = 0;
+  const guide = document.querySelector('#photoTipsOverlay .scan-gate-box');
+  document.querySelectorAll('.pt-angle').forEach(function (button) {
+    const label = button.querySelector('.pt-angle-label').textContent;
+    button.setAttribute('aria-label', 'View full ' + label.toLowerCase() + ' example');
+    button.addEventListener('click', function () {
+      const image = button.querySelector('img');
+      trigger = button;
+      guideScroll = guide.scrollTop;
+      fullImage.src = image.dataset.src || image.src;
+      fullImage.alt = image.alt;
+      const wholeCard = label === 'Front' || label === 'Back';
+      fullImage.style.display = wholeCard ? 'none' : 'block';
+      fullCard.style.display = wholeCard ? 'block' : 'none';
+      if (wholeCard) {
+        fullCard.setAttribute('viewBox', label === 'Front' ? '0 0 750 1049' : '749 0 750 1049');
+        fullCard.setAttribute('aria-label', label + ' of illustrative card, with all four corners visible');
+        document.getElementById('photoExampleFullCardImage').setAttribute('href', '/photo-tips/full-card-reference.webp');
+      }
+      document.getElementById('photoExampleTitle').textContent = label + ' — full example';
+      viewer.showModal();
+    });
+  });
+  document.getElementById('photoExampleClose').addEventListener('click', function () { viewer.close(); });
+  viewer.addEventListener('click', function (event) {
+    if (event.target !== viewer) return;
+    const bounds = viewer.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) viewer.close();
+  });
+  viewer.addEventListener('close', function () {
+    if (trigger) trigger.focus({ preventScroll:true });
+    guide.scrollTop = guideScroll;
+  });
+})();
+</script>
 
 <!-- ============================================================
      PRICING / SHOP MODAL
