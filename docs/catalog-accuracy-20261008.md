@@ -55,11 +55,32 @@ announce no new account registrations and existing-key service through
 2027-03-01. Plan a replacement before expanding dependence on that API. No new
 provider account, subscription or migration was created.
 
+## Client printing repair — 2026-10-08
+
+Local artwork matching now produces a diagnostic candidate only; it cannot
+accept an exact printing, even with zero hash distance and a large runner-up
+gap. All successful ID scans use the normal server lookup and credit rules.
+The old instant, no-credit artwork bypass is removed.
+
+Client hydration requires exact normalized name, game, collector number and
+consistent set aliases. Numeric padding can normalize; alpha prefixes and
+suffixes remain distinct. Explicit language conflicts and a different server
+canonical ID are refused. Multiple matches stay unresolved. Name-only fallback,
+set substring matching, newer-set preferences and artwork tiebreak overrides
+are removed. Optional index failure preserves the server result and clears
+stale suggestions. The correction picker can still show name-matched choices.
+
+Validation: 155 isolated checks passed across client-printing-evidence (28),
+scanner-fastpath (16), catalog-printing-evidence (23), grade-upside-identity (12),
+grade-evidence-honesty (48), and grade-capture-resolution (28). Browser regression
+passed at 390×844 and 844×390: one photo-source choice, labeled front/back/edge
+upload slots, replacements, cancellation race, camera persistence, single draft
+creation/retry, and subscription benefits. Synthetic services only; no customer
+credits or paid scans. These changes prevent client override errors; they do not
+certify upstream recognition, OCR rescue, finish pricing or grading accuracy.
+
 ## Remaining accuracy work
 
-- The client image-hash fast path still accepts some results automatically.
-  The Magic index uses a limited unique-artwork selection; a large distance gap
-  within that selection cannot certify a printing absent from the index.
 - Measure same-art reprints, finish variants and language coverage with labeled
   photos, including examples absent from the local index. Reference-image
   self-matches are not a substitute for phone-photo accuracy.

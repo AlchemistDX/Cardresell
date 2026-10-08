@@ -13,7 +13,9 @@
 // must be re-run by hand if you touch hashing, cropping, or the thresholds.
 //
 // Measured after the fix (n=30 reference images, tools/fastpath_calibration.mjs):
-//   accepted 26/30, wrong-accepted 0, mean pHash self-distance 2.5 bits.
+//   artwork candidates 26/30, wrong candidates 0, mean pHash self-distance 2.5 bits.
+// This small self-match sample does not establish printing or phone-photo accuracy.
+// Every local candidate now requires server verification.
 
 import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('scanner-fastpath');
@@ -57,15 +59,15 @@ console.log('\u2500'.repeat(60));
     /dCrop\s*<\s*dRaw\s*\?\s*dCrop\s*:\s*dRaw/.test(code),
     'scoring must consider both hash variants');
 
-  // ── 3. Calibrated thresholds ──
+  // ── 3. Historical artwork-candidate thresholds (not printing proof) ──
   const cm = code.match(/const\s+CONFIDENCE_MAX\s*=\s*(\d+)/);
-  check('CONFIDENCE_MAX is the calibrated 20',
+  check('CONFIDENCE_MAX preserves reference candidate threshold 20',
     cm && cm[1] === '20',
     `found ${cm ? cm[1] : 'nothing'}; 20 is the conservative end of the ` +
     'measured zero-false-accept plateau. Re-run tools/fastpath_calibration.mjs ' +
     'before changing it — a false accept shows a confidently WRONG card.');
   const gm = code.match(/const\s+GAP_MIN\s*=\s*(\d+)/);
-  check('GAP_MIN still 6 (the rule that prevents false accepts)',
+  check('GAP_MIN preserves reference candidate gap 6',
     gm && gm[1] === '6',
     `found ${gm ? gm[1] : 'nothing'}; the gap rule is what eliminates ` +
     'wrong accepts on near-duplicate arts. Do not lower it.');

@@ -70,6 +70,8 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'grade-upload-single-draft-browser.mjs':
+    'Required grading/draft/shop browser gate: CR_CHROMIUM=<binary> node tests/grade-upload-single-draft-browser.mjs. Real shipped DOM/functions, synthetic services, external network blocked.',
   'photo-guide-browser.mjs':
     'Required camera release browser check: supply PLAYWRIGHT_MODULE and CHROMIUM_EXECUTABLE; real local canvas/worker scenes, no accounts or provider calls.',
   'membership-environment.mjs':
