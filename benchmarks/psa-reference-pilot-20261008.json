@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "purpose": "Development pilot only. Not independent accuracy validation.",
+  "inference_status": "not_run",
+  "records": [
+    {
+      "sample_id": "R01",
+      "cert_number": "85267142",
+      "reference_grade": 10,
+      "reference_grader": "PSA",
+      "reference_type": "certified",
+      "capture_type": "slabbed",
+      "split": "development",
+      "title": "1999 Pokemon Game Bulbasaur #44",
+      "source_url": "https://www.psacard.com/en-CA/cert/85267142/psa",
+      "verified_date": "2026-10-08",
+      "verification": "Official cert page plus visually matching front/back certificate labels",
+      "images": {
+        "front": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/151623145/large/joPyGjx4t0m7B3rqS1hJ0w_638ae.jpg",
+          "sha256": "ce6eebb3068125fb7b2f14bed26b71bb12037ef57adece7a66f8736963a10ce8",
+          "width": 1140,
+          "height": 1903,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1463
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        },
+        "back": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/151623145/large/i9NvjOBkMkub2i1LmsLFHg.jpg",
+          "sha256": "8262333c15934b0b9f861938ce06706550c2155f181beac532c9019d3c89e250",
+          "width": 1140,
+          "height": 1916,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1476
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        }
+      }
+    },
+    {
+      "sample_id": "R02",
+      "cert_number": "148380808",
+      "reference_grade": 9,
+      "reference_grader": "PSA",
+      "reference_type": "certified",
+      "capture_type": "slabbed",
+      "split": "development",
+      "title": "1996 Pokemon Japanese Basic Pikachu #25",
+      "source_url": "https://www.psacard.com/cert/148380808/psa",
+      "verified_date": "2026-10-08",
+      "verification": "Official cert page plus visually matching front/back certificate labels",
+      "images": {
+        "front": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/200864337/large/_hwsZHFB9EWHv33IZsjaHw.jpg",
+          "sha256": "b8dedc0a95e2e091cb42d53980bea312d75f39aa6fe27e1a23ec2dd3525ea131",
+          "width": 1140,
+          "height": 1873,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1433
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        },
+        "back": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/200864337/large/pafmbJRs1ka1fO84TURdQg.jpg",
+          "sha256": "9f67f0acd12674d95c913a12c5f02c2712bc4d9f5ce0b7eb67cfe700566bc029",
+          "width": 1140,
+          "height": 1913,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1473
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        }
+      }
+    },
+    {
+      "sample_id": "R03",
+      "cert_number": "83901498",
+      "reference_grade": 8,
+      "reference_grader": "PSA",
+      "reference_type": "certified",
+      "capture_type": "slabbed",
+      "split": "development",
+      "title": "1999 Pokemon Jungle Nidoqueen holo #7 1st Edition",
+      "source_url": "https://www.psacard.com/en-CA/cert/83901498/psa",
+      "verified_date": "2026-10-08",
+      "verification": "Official cert page plus visually matching front/back certificate labels",
+      "images": {
+        "front": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/149721630/large/Oy48OGr1QkKl6aK4uLKouQ.jpg",
+          "sha256": "97516273f334c3e0b67b8dc3773b0d91383418d42bc2af82577671da5423e723",
+          "width": 1140,
+          "height": 1907,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1467
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        },
+        "back": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/149721630/large/Yp1uqA6CbkqtXeIiLiSl0Q.jpg",
+          "sha256": "5fc83669241d4696425fd692044a08be68c13be98dc1c196969356777ef8ee58",
+          "width": 1140,
+          "height": 1915,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1475
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        }
+      }
+    },
+    {
+      "sample_id": "R04",
+      "cert_number": "107900940",
+      "reference_grade": 6,
+      "reference_grader": "PSA",
+      "reference_type": "certified",
+      "capture_type": "slabbed",
+      "split": "development",
+      "title": "1999 Pokemon Game Mewtwo holo #10",
+      "source_url": "https://www.psacard.com/cert/107900940/psa",
+      "verified_date": "2026-10-08",
+      "verification": "Official cert page plus visually matching front/back certificate labels",
+      "images": {
+        "front": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/174716411/large/UJ7GnXEfh0ia4FlpyZv47Q.jpg",
+          "sha256": "0385eb118477ccf14e303656248f621f0608d1673b073cea223457412623e7a5",
+          "width": 1140,
+          "height": 1905,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1465
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        },
+        "back": {
+          "url": "https://d1htnxwo4o0jhw.cloudfront.net/cert/174716411/large/JAcUnxmPV0yOpO5z4rpEeg.jpg",
+          "sha256": "5f592e6cb7021b78dd8ba8fe1ebd58e65e174ea8ee0d35c3d3a61e5e210aac37",
+          "width": 1140,
+          "height": 1919,
+          "crop": {
+            "left": 0,
+            "top": 440,
+            "width": 1140,
+            "height": 1479
+          },
+          "reviewed_labels_removed": true,
+          "reviewed_card_complete": true
+        }
+      }
+    }
+  ]
+}
