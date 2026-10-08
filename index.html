@@ -1958,7 +1958,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       if (!wasFired) setTimeout(function() { window.trackEvent('page_view'); }, 200);
     })();
   </script>
-<link rel="stylesheet" href="/assets/brand-ui.0ecd0524.css">
+<link rel="stylesheet" href="/assets/brand-ui.162d7d21.css">
 </head>
 <body data-game-theme="pokemon">
 <div class="theme-bg" aria-hidden="true"></div>
@@ -2111,12 +2111,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 
 <!-- VIEW TABS -->
-<div class="view-tabs" id="viewTabs">
-  <button type="button" class="view-tab active" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</button>
-  <button type="button" class="view-tab" data-view="flips" onclick="switchView('flips')">📈 My Flips</button>
-  <button type="button" class="view-tab" data-view="collection" onclick="switchView('collection')">📦 Collection</button>
+<nav class="view-tabs" id="viewTabs" aria-label="Main sections">
+  <button type="button" class="view-tab active" aria-pressed="true" data-view="lookup" onclick="switchView('lookup')">🔍 Card Lookup</button>
+  <button type="button" class="view-tab" aria-pressed="false" data-view="flips" onclick="switchView('flips')">📈 My Flips</button>
+  <button type="button" class="view-tab" aria-pressed="false" data-view="collection" onclick="switchView('collection')">📦 Collection</button>
   <button type="button" class="view-tab" data-view="admin" id="adminTab" onclick="switchView('admin')" style="display:none">⚙ Admin</button>
-</div>
+</nav>
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
 
@@ -2951,14 +2951,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div style="font-size:1.05rem;font-weight:800;color:var(--text);margin-bottom:.4rem">Track your card flips</div>
     <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Log every buy &amp; sell, see your total profit,<br>and track cards you still own — all free.</div>
     <div style="display:flex;flex-direction:column;gap:.6rem;max-width:260px;margin:0 auto 1.5rem">
-      <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--gold-text);font-weight:700"><span style="font-weight:700">🎁</span> 10 free ID scans + 1 grade scan on sign up</div>
+      <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--gold-text);font-weight:700"><span style="font-weight:700">🎁</span> 10 ID scans + 1 grade after email verification</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Flip log with profit/loss per card</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Portfolio tracker for cards you own</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Export your flip history as CSV</div>
-      <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#60a5fa;font-weight:700">★</span> Pro: unlimited flips + all platforms</div>
+      <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#60a5fa;font-weight:700">★</span> Compare membership benefits in Subscriptions</div>
     </div>
-    <a href="/signin?next=flips" style="width:100%;max-width:260px;padding:.75rem 1.5rem;background:#2563eb;border:none;border-radius:12px;color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;-webkit-tap-highlight-color:transparent;text-decoration:none;display:inline-block;text-align:center;box-sizing:border-box">Sign in with Google — it's free</a>
-    <div style="font-size:.68rem;color:var(--text-muted);margin-top:.6rem">No password needed &middot; Takes 5 seconds</div>
+    <a href="/signin?next=flips" style="width:100%;max-width:260px;padding:.75rem 1.5rem;background:#2563eb;border:none;border-radius:12px;color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;-webkit-tap-highlight-color:transparent;text-decoration:none;display:inline-block;text-align:center;box-sizing:border-box">Sign in to track your flips</a>
+    <div style="font-size:.68rem;color:var(--text-muted);margin-top:.6rem">Your flip history stays with your account.</div>
   </div>
 
   <!-- P&L Summary -->
@@ -3053,12 +3053,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <div id="draftsView" style="display:none">
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.4rem">
-    <div style="font-size:.95rem;font-weight:800;color:var(--text);letter-spacing:-.01em">All drafts</div>
+    <h1 class="workspace-title">All drafts</h1>
     <div style="display:flex;align-items:center;gap:.6rem">
       <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
       <!-- A draft always starts from a card, so "new draft" routes to the card
            list rather than opening a blank form there is no way to complete. -->
-      <button type="button" onclick="switchCollectionSection('cards')" style="padding:.45rem .75rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:9px;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap">＋ New draft</button>
+      <button type="button" onclick="switchCollectionSection('cards')" style="padding:.45rem .75rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:9px;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap" title="Choose a card from your collection to start a draft">＋ Choose a card</button>
     </div>
   </div>
   <div id="draftsWrap"></div>
@@ -3091,6 +3091,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
   <!-- CONTENT (signed-in) -->
   <div id="collectionContent">
+    <h1 class="workspace-title">Your collection</h1>
+    <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
 
     <!-- Value Stats -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:1rem">
@@ -3116,15 +3118,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button onclick="openAddFlip('hold')" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.78rem;font-weight:800;cursor:pointer">+ Add Card</button>
       <button onclick="exportCollection()" style="padding:.42rem .85rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">⬇ Export CSV</button>
       <button onclick="refreshCollectionPrices()" id="colRefreshBtn" style="padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">↻ Refresh Prices</button>
-      <button onclick="clearCollection()" id="colClearBtn" title="Remove all cards from your Collection (irreversible)" style="padding:.42rem .85rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:#f87171;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">🗑 Clear</button>
+      <details class="collection-more"><summary>More</summary><div>      <button onclick="clearCollection()" id="colClearBtn" title="Remove all cards from your Collection (irreversible)" style="padding:.42rem .85rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:#f87171;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">Clear collection</button></div></details>
       <span id="colLastUpdated" style="font-size:.65rem;color:var(--text-muted);margin-left:auto"></span>
     </div>
 
     <!-- Collection table -->
     <!-- Pro nudge for free users with 5+ cards -->
     <div id="colProNudge" style="display:none;margin:.5rem 0;padding:.6rem .9rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.22);border-radius:10px;align-items:center;justify-content:space-between;gap:.5rem;cursor:pointer" onclick="openPricingModal('collection_nudge')">
-      <span style="font-size:.75rem;color:rgba(196,122,0,.9)">Pro unlocks P&amp;L chart, grading ROI &amp; unlimited tracking</span>
-      <span style="font-size:.72rem;font-weight:800;color:var(--gold-text);white-space:nowrap">See Pro →</span>
+      <span style="font-size:.75rem;color:rgba(196,122,0,.9)">Compare monthly scans, grades and membership benefits</span>
+      <span style="font-size:.72rem;font-weight:800;color:var(--gold-text);white-space:nowrap">Compare plans →</span>
     </div>
     <div id="collectionWrap"></div>
 
@@ -4150,7 +4152,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.85449a0d.js"></script>
+<script defer src="/js/core.7208454f.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }

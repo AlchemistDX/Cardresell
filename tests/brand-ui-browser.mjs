@@ -58,6 +58,28 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  if(shots)await page.screenshot({path:`${shots}/tips-${theme}-${viewport.width}.png`});
  await page.evaluate(()=>closePhotoTipsModal());
  for(const view of ['collection','drafts','flips','lookup']){await page.evaluate(v=>switchView(v),view);check(view+' fits viewport',await fit(),true)}
+ await page.evaluate(()=>{switchView('collection');switchCollectionSection('cards')});
+ check('Collection navigation is announced',await page.locator('.view-tab[data-view="collection"]').getAttribute('aria-pressed'),'true');
+ check('Clear is tucked under More',await page.locator('#colClearBtn').isVisible(),false);
+ await page.locator('.collection-more summary').click();check('More reveals Clear',await page.locator('#colClearBtn').isVisible(),true);
+ check('More menu fits screen',await page.locator('.collection-more>div').evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}),true);
+ if(shots)await page.screenshot({path:`${shots}/collection-${theme}-${viewport.width}.png`});
+ await page.locator('.collection-more summary').click();
+ await page.locator('#collectionWrap .empty-primary').click();
+ check('empty collection leads to search',await page.evaluate(()=>document.activeElement.id),'searchInput');
+ check('Lookup navigation is announced',await page.locator('.view-tab[data-view="lookup"]').getAttribute('aria-pressed'),'true');
+ await page.evaluate(()=>{switchView('collection');switchCollectionSection('cards')});
+ await page.locator('#collectionWrap .empty-actions button').last().click();
+ check('manual collection entry opens',await page.locator('#flipModal').isVisible(),true);
+ await page.evaluate(()=>document.getElementById('flipModal').classList.remove('open'));
+ await page.evaluate(()=>switchView('drafts'));
+ await page.waitForFunction(()=>!_draftsState.loading);
+ await page.evaluate(()=>{_draftsState.signedIn=false;_draftsState.error=null;_draftsState.loading=false;_draftsPaint()});
+ check('signed-out drafts offer sign in',await page.locator('#draftsWrap a[href="/signin"]').isVisible(),true);
+ await page.evaluate(()=>{_draftsState.signedIn=true;_draftsState.total=0;_draftsState.rows=[];_draftsPaint()});
+ await page.locator('#draftsWrap .empty-primary').click();
+ check('empty drafts lead to ID scanner menu',await page.locator('#scanMenuTabId').getAttribute('aria-selected'),'true');
+ await page.keyboard.press('Escape');
  await page.evaluate(()=>_launchDeepGrade());await page.locator('#gradeUploadPhoto').click();
  check('deep grade has six upload slots',await page.locator('[data-grade-slot]').count(),6);
  check('deep upload fits viewport',await fit(),true);
