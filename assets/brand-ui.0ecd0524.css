@@ -1,0 +1,109 @@
+/* CardResell identity and navigation polish. Preserve existing feature layout. */
+.logo .brand-mark,.brand .brand-mark,.logo-bar .brand-mark{width:40px;height:40px;object-fit:contain;flex:none}
+.hdr .logo{gap:8px;text-decoration:none;color:var(--text);flex-shrink:0}
+.brand-lockup{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:800}
+.brand-lockup .brand-mark{width:36px;height:36px;object-fit:contain}
+.theme-bg{display:none!important}
+.hdr{padding-top:18px;padding-bottom:18px;margin-bottom:20px;gap:20px}
+.hdr #getProBtn,.hdr #googleSignInBtn{box-shadow:none}
+.hdr .settings-btn,.hdr .theme-btn,.hdr #shopBtn{min-width:44px;min-height:44px}
+.hdr .settings-btn::after,.hdr #shopBtn::after{display:none}
+.view-tab,.col-subtab{min-height:44px}
+.view-tabs{gap:4px}
+#scanGuaranteeBar{color:var(--text-muted)!important;background:var(--surface)!important;border-bottom:1px solid var(--border)!important;padding:10px 14px!important;font-size:.8rem!important}
+#scanGuaranteeBar a,#scanGuaranteeBar>span{color:var(--green)!important}
+#photoTipsOverlay .pt-rule{background:var(--surface-2);border-color:var(--border);padding:12px}
+#photoTipsOverlay .pt-rule-caption .pt-title{color:var(--green);font-size:.9rem;line-height:1.4}
+#photoTipsOverlay .pt-rule-caption .pt-sub{color:var(--text-muted);font-size:.85rem;line-height:1.5}
+#photoTipsOverlay .scan-gate-box{max-height:90dvh;overscroll-behavior:contain}
+#bulkModePickerOverlay{--text-muted:#b8b8b8;--gold-text:#f2be59;--gold:#f0aa20}
+#bulkModePickerOverlay [role=tab]{min-height:44px}
+#bulkModePickerOverlay [role=tab][aria-selected=true]{background:#f0aa20!important;color:#111!important}
+#bulkModePickerOverlay [role=tab][aria-selected=false]{background:transparent!important;color:#b8b8b8!important}
+#bulkModePickerOverlay button[aria-label="Close scan menu"]{width:44px;height:44px;padding:0;flex:none}
+#bulkScanOverlay button[aria-label="Close bulk scan"]{width:44px!important;height:44px!important}
+#scanOverlay{scroll-padding-top:72px}
+#scanOverlay>button[aria-label="Close scanner"]{position:relative!important;top:auto!important}
+#scanOverlay #scanResult{width:100%;min-width:0}
+@media(max-width:680px){
+ .hdr{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,44px);gap:10px 8px;padding:14px 0;margin-bottom:16px}
+ .hdr .logo{grid-row:1;grid-column:1/3;min-width:0;justify-self:start}
+ .hdr .logo-text{font-size:1.1rem}
+ .hdr .brand-mark{width:34px;height:34px}
+ .hdr .hdr-right{display:contents}
+ .hdr #googleSignInBtn,.hdr #googleUserBtn{grid-row:1;grid-column:3/5;justify-self:end}
+ .hdr #googleUserBtn{max-width:112px}
+ .hdr #googleName{max-width:60px!important}
+ .hdr #getProBtn{grid-row:2;grid-column:1;justify-self:start;min-height:44px;padding:10px 14px;font-size:.8rem}
+ .hdr #shopBtn{grid-row:2;grid-column:2;padding:0}
+ .hdr .settings-btn{grid-row:2;grid-column:3;width:44px;height:44px}
+ .hdr .theme-btn{grid-row:2;grid-column:4;display:flex!important;width:44px;height:44px}
+ .hdr #shopBtn span{display:none}
+ input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea{font-size:16px!important}
+ #photoTipsOverlay .scan-gate-box{padding:20px 16px}
+}
+@media(prefers-reduced-motion:reduce){
+ html{scroll-behavior:auto!important}
+ *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+.modal-box input,.modal-box select,.modal-box textarea{min-width:0;max-width:100%}
+#markSoldModal .modal-box div{min-width:0}
+@media(max-width:680px){
+ #viewTabs{width:100%}
+ #viewTabs .view-tab{flex:1;min-width:0;padding:.55rem .25rem;font-size:.75rem}
+}
+.view-tab.active,.col-subtab.active,.search-btn{color:#111}
+button[onclick="exportCollection()"],#exportGradingLogBtn{color:var(--green)!important}
+#colClearBtn{color:var(--danger-text)!important}
+.table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+header.site{flex-wrap:wrap;gap:8px 20px}
+header.site .brand{white-space:nowrap}
+header.site .brand>span{color:var(--text)}
+header.site nav{display:flex;flex-wrap:wrap;gap:8px 18px}
+header.site nav a{margin-left:0;display:inline-flex;align-items:center;min-height:44px}
+@media(max-width:480px){header.site nav{width:100%;justify-content:space-between;gap:4px}header.site nav a{font-size:.8rem}}
+
+/* Compact account corner and a single membership entry. */
+.hdr{position:relative;gap:12px;padding:12px 0;margin-bottom:12px}
+.hdr .hdr-right{gap:8px}
+.hdr #googleName{display:none}
+.hdr .profile-avatar{position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:4px;border:0;border-radius:50%;background:transparent;cursor:pointer}
+.hdr #googleAvatar{width:34px!important;height:34px!important}
+.hdr #verifiedBadge{position:absolute;right:0;bottom:1px;width:15px!important;height:15px!important;box-shadow:0 0 0 2px var(--bg)}
+.hdr #shopBtn{display:flex;align-items:center;justify-content:center;padding:0;width:44px;height:44px}
+.hdr #shopBtn svg{width:20px;height:20px;flex:none}
+.hdr #shopBtn span{display:none}
+.hdr #getProBtn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 12px;font-size:.78rem;white-space:nowrap}
+.hdr #getProBtn>svg{display:none}
+.hdr #googleUserBtn,.hdr #googleSignInBtn{order:4}
+.settings-appearance{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;margin-bottom:12px;border-bottom:1px solid var(--border)}
+.settings-appearance .theme-btn{min-width:44px;min-height:44px}
+@media(max-width:680px){
+ .hdr{grid-template-columns:minmax(0,1fr) 44px 44px;gap:6px 8px;padding:8px 0;margin-bottom:10px}
+ .hdr .logo{grid-row:1;grid-column:1/3}
+ .hdr .logo-text{font-size:1.05rem}
+ .hdr .brand-mark{width:30px;height:30px}
+ .hdr #googleUserBtn,.hdr #googleSignInBtn{grid-row:1;grid-column:3;justify-self:end}
+ .hdr #googleSignInBtn{font-size:.68rem;padding:0 5px!important;min-width:44px}
+ .hdr #getProBtn{grid-row:2;grid-column:1;justify-self:start;padding:6px 12px;font-size:.78rem}
+ .hdr #shopBtn{grid-row:2;grid-column:2}
+ .hdr .settings-btn{grid-row:2;grid-column:3}
+}
+
+/* Put the seller's task first; supporting information follows the controls. */
+.lookup-heading{font-size:1.25rem;font-weight:800;line-height:1.2;margin:4px 0 6px;color:var(--text)}
+.lookup-intro{font-size:.82rem;line-height:1.4;color:var(--text-muted);margin:0 0 16px}
+.search-area{padding-top:8px}
+.scan-sub-btn:not(.bulk-sub):not(.grade-sub),.scan-btn,.view-tab:not(.active){color:var(--text)}
+#idScanSubCredits,#gradeScanSubCredits{opacity:1!important}
+#howItWorksBar{flex-wrap:wrap;padding:12px 0!important;margin-top:12px;background:none!important;border:0!important}
+#tryExampleBtn{min-height:44px;box-shadow:none!important;animation:none!important;background:var(--surface-2)!important;color:var(--text)!important;border:1px solid var(--border)!important}
+#scanGuaranteeBar{margin-top:4px;border:0!important;border-radius:10px;line-height:1.5!important;text-align:left!important;font-size:.74rem!important}
+#landingHero{padding:16px 0 8px!important;background:none!important;margin-top:16px}
+#landingHero>div:first-child{display:none}
+#landingHero h2{font-size:1rem!important}
+#landingHero>div:last-child{font-size:.75rem!important}
+#signInNudge{margin:16px 0 8px!important}
+#signInNudge>button{width:44px!important;height:44px!important;top:0!important;right:0!important}
+#signInNudge>div:nth-child(2){padding-right:44px!important;flex-wrap:wrap}
+@media(max-width:680px){.lookup-heading{font-size:1.15rem}.lookup-intro{margin-bottom:12px}.scan-sub-row{gap:8px}.scan-sub-btn{min-height:44px}}

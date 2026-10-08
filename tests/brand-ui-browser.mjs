@@ -34,6 +34,9 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  await page.locator('#getProBtn').click();await page.waitForFunction(()=>!!document.querySelector('.membership-shop[open]'));
  check('membership opens subscriptions',await page.locator('.membership-shop[open] h2').textContent(),'Subscriptions');
  await page.keyboard.press('Escape');
+ check('search precedes supporting banners',await page.evaluate(()=>{const search=document.getElementById('searchRow');return ['landingHero','howItWorksBar','scanGuaranteeBar'].every(id=>!!(search.compareDocumentPosition(document.getElementById(id))&Node.DOCUMENT_POSITION_FOLLOWING))}),true);
+ check('repeated upgrade banner removed',await page.locator('#promoBanner').count(),0);
+ check('search has an accessible label',await page.locator('#searchInput').getAttribute('aria-label'),'Search card name');
  check('brand loads',await page.locator('.hdr .brand-mark').evaluate(i=>i.complete&&i.naturalWidth>0),true);
  check('header has no overlap',await page.locator('.hdr').evaluate(h=>{const els=[h.querySelector('.logo'),...h.querySelector('.hdr-right').children].filter(e=>e.getBoundingClientRect().width>0);return els.every((a,i)=>els.slice(i+1).every(b=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return !(x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top)}))}),true);
  check('header controls have 44px targets',await page.locator('.hdr .settings-btn,.hdr #shopBtn,.hdr .profile-avatar').evaluateAll(es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44})),true);

@@ -1958,7 +1958,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       if (!wasFired) setTimeout(function() { window.trackEvent('page_view'); }, 200);
     })();
   </script>
-<link rel="stylesheet" href="/assets/brand-ui.0102eb1a.css">
+<link rel="stylesheet" href="/assets/brand-ui.0ecd0524.css">
 </head>
 <body data-game-theme="pokemon">
 <div class="theme-bg" aria-hidden="true"></div>
@@ -2120,74 +2120,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <!-- SEARCH -->
 <div id="lookupView" class="lookup-view">
 
-<!-- SIGN-IN OFFER BANNER — shown to guests only -->
-<div id="signInNudge" style="display:none;position:relative;margin:.55rem .75rem .45rem;border-radius:14px;background:linear-gradient(110deg,#1a1200,#2a1d00);border:1.5px solid var(--gold);overflow:hidden;-webkit-tap-highlight-color:transparent">
-  <!-- shimmer line -->
-  <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.5),transparent)"></div>
-  <div style="padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem">
-    <div style="flex:1;min-width:0">
-      <div style="font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.2rem">🎁 New user offer</div>
-      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in + verify email —<br>get <span style="color:var(--gold-text)">10 ID scans</span> + <span style="color:var(--gold-text)">1 AI Grade free</span></div>
-      <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Credits never expire</div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex-shrink:0">
-      <a href="/signin" style="padding:.5rem .9rem;background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;letter-spacing:.01em;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;user-select:none;text-decoration:none;display:inline-block">Sign in free →</a>
-    </div>
-  </div>
-  <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
-</div>
-
-<!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-31)
-     Positioning: "see the highest net payout across 15 venues".
-     eBay-friendly kicker — they're a top affiliate partner and often the winning
-     venue for a given card, so we never frame them as the enemy. -->
-<div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
-  <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
-  <h1 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h1>
-  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
-</div>
-
-<!-- SOCIAL PROOF BAR + Try-an-example CTA -->
-<!-- 2026-08-31: first-visit "Try Charizard →" attention pulse.
-     First-time visitors see: a "New here?" prefix + a gentle 3-cycle pulse
-     on the button so it's discoverable without hijacking their attention.
-     Once they've either clicked it or come back a second time, the pulse
-     drops and the label reverts to the neutral "Try an example". -->
-<style>
-  @keyframes _tryExamplePulse {
-    0%,100% { box-shadow: 0 2px 8px rgba(196,122,0,.35); transform: scale(1); }
-    50%     { box-shadow: 0 3px 14px rgba(196,122,0,.65), 0 0 0 4px rgba(196,122,0,.18); transform: scale(1.045); }
-  }
-  #tryExampleBtn.first-visit {
-    animation: _tryExamplePulse 1.9s ease-in-out 3;
-  }
-  #tryExampleFirstVisitPrefix { display:none }
-  #tryExampleBtn.first-visit + #tryExampleFirstVisitPrefix,
-  body.first-visit #tryExampleFirstVisitPrefix { display:inline }
-  @media (prefers-reduced-motion: reduce) {
-    #tryExampleBtn.first-visit { animation:none }
-  }
-</style>
-<div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
-  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold-text);font-weight:800"></span> <span id="socialProofLabel"></span></span>
-  <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
-    <span id="tryExampleFirstVisitPrefix" style="font-size:.68rem;color:var(--text-faint);font-weight:600;white-space:nowrap">New here? →</span>
-    <button id="tryExampleBtn" onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try Charizard →</button>
-  </div>
-</div>
-
-<!-- SCAN GUARANTEE LINE — subtle, appears once under social proof -->
-<div id="scanGuaranteeBar" style="padding:.35rem 1rem;text-align:center;font-size:.68rem;color:rgba(255,255,255,.42);letter-spacing:.01em;line-height:1.35;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(255,255,255,.04)">
-  <span style="color:rgba(74,222,128,.75)">✓</span> Scanner can't ID your card? Eligible failed scans receive a credit refund — automatic or one-tap.  <a href="/terms.html#refunds" style="color:rgba(74,222,128,.75);text-decoration:underline;text-underline-offset:2px">Details</a>
-</div>
-
-<section class="search-area">
+<section class="search-area" aria-label="Find and scan cards">
+  <h1 class="lookup-heading">Find your card</h1>
+  <p class="lookup-intro">Search by name, scan a card, or estimate its grade.</p>
   <div id="searchRow" class="search-row">
     <div class="search-box">
       <span class="search-icon">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       </span>
-      <input id="searchInput" class="search-input" type="text" placeholder="Search card name…" autocomplete="off" />
+      <input id="searchInput" aria-label="Search card name" class="search-input" type="text" placeholder="Search card name…" autocomplete="off" />
       <div id="dropList" class="drop-list" role="listbox"></div>
     </div>
     <!-- Desktop: Scan + Grade inline -->
@@ -2217,19 +2158,6 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       AI Grade <span id="gradeScanSubCredits" style="font-size:.68rem;opacity:.65;margin-left:.15rem"></span>
     </button>
-  </div>
-  <!-- Pro promo banner — shown to signed-in free users (dismissed per session).
-       Copy is honest about the ladder: Pro adds 3-5 marketplaces depending on
-       the card game (5 for MTG since it adds Mana Pool + Cardsphere), Pro Max
-       adds the rest. Never claim "7 more" at the $9.99 tier since that number
-       only lands with Pro Max on an MTG card. -->
-  <div id="promoBanner" class="promo-banner">
-    <div class="promo-banner-text">
-      <span>&#11088; Need more ID or Grade credits?</span><br>
-      <span style="font-size:.73rem;color:var(--text-muted)">Compare current monthly allowances and credit-pack discounts.</span>
-    </div>
-    <button class="promo-banner-cta" onclick="openPricingModal('banner')">Compare plans</button>
-    <button class="promo-banner-close" onclick="dismissPromoBanner()" title="Dismiss">&times;</button>
   </div>
   <!-- Camera scan overlay -->
   <!-- Hidden file input — opens native camera on mobile -->
@@ -2320,6 +2248,68 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </div>
   <div class="venue-chips" id="venueChips"></div>
   <div class="results-drop" style="display:none"></div>
+
+
+<!-- SIGN-IN OFFER BANNER — shown to guests only -->
+<div id="signInNudge" style="display:none;position:relative;margin:.55rem .75rem .45rem;border-radius:14px;background:linear-gradient(110deg,#1a1200,#2a1d00);border:1.5px solid var(--gold);overflow:hidden;-webkit-tap-highlight-color:transparent">
+  <!-- shimmer line -->
+  <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.5),transparent)"></div>
+  <div style="padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.2rem">🎁 New user offer</div>
+      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in + verify email —<br>get <span style="color:var(--gold-text)">10 ID scans</span> + <span style="color:var(--gold-text)">1 AI Grade free</span></div>
+      <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Credits never expire</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex-shrink:0">
+      <a href="/signin" style="padding:.5rem .9rem;background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;letter-spacing:.01em;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;user-select:none;text-decoration:none;display:inline-block">Sign in free →</a>
+    </div>
+  </div>
+  <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
+</div>
+
+<!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-31)
+     Positioning: "see the highest net payout across 15 venues".
+     eBay-friendly kicker — they're a top affiliate partner and often the winning
+     venue for a given card, so we never frame them as the enemy. -->
+<div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
+  <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
+  <h2 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h2>
+  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
+</div>
+
+<!-- SOCIAL PROOF BAR + Try-an-example CTA -->
+<!-- 2026-08-31: first-visit "Try Charizard →" attention pulse.
+     First-time visitors see: a "New here?" prefix + a gentle 3-cycle pulse
+     on the button so it's discoverable without hijacking their attention.
+     Once they've either clicked it or come back a second time, the pulse
+     drops and the label reverts to the neutral "Try an example". -->
+<style>
+  @keyframes _tryExamplePulse {
+    0%,100% { box-shadow: 0 2px 8px rgba(196,122,0,.35); transform: scale(1); }
+    50%     { box-shadow: 0 3px 14px rgba(196,122,0,.65), 0 0 0 4px rgba(196,122,0,.18); transform: scale(1.045); }
+  }
+  #tryExampleBtn.first-visit {
+    animation: _tryExamplePulse 1.9s ease-in-out 3;
+  }
+  #tryExampleFirstVisitPrefix { display:none }
+  #tryExampleBtn.first-visit + #tryExampleFirstVisitPrefix,
+  body.first-visit #tryExampleFirstVisitPrefix { display:inline }
+  @media (prefers-reduced-motion: reduce) {
+    #tryExampleBtn.first-visit { animation:none }
+  }
+</style>
+<div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+  <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold-text);font-weight:800"></span> <span id="socialProofLabel"></span></span>
+  <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
+    <span id="tryExampleFirstVisitPrefix" style="font-size:.68rem;color:var(--text-faint);font-weight:600;white-space:nowrap">New here? →</span>
+    <button id="tryExampleBtn" onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try Charizard →</button>
+  </div>
+</div>
+
+<!-- SCAN GUARANTEE LINE — subtle, appears once under social proof -->
+<div id="scanGuaranteeBar" style="padding:.35rem 1rem;text-align:center;font-size:.68rem;color:rgba(255,255,255,.42);letter-spacing:.01em;line-height:1.35;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(255,255,255,.04)">
+  <span style="color:rgba(74,222,128,.75)">✓</span> Scanner can't ID your card? Eligible failed scans receive a credit refund — automatic or one-tap.  <a href="/terms.html#refunds" style="color:rgba(74,222,128,.75);text-decoration:underline;text-underline-offset:2px">Details</a>
+</div>
 
 
   <!-- Sports card entry form (hidden by default) -->
