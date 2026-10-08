@@ -70,6 +70,8 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'photo-guide-browser.mjs':
+    'Required camera release browser check: supply PLAYWRIGHT_MODULE and CHROMIUM_EXECUTABLE; real local canvas/worker scenes, no accounts or provider calls.',
   'membership-environment.mjs':
     'Required scoped configuration gate: node tests/membership-environment.mjs; pure synthetic values, no I/O.',
   'membership-bootstrap.mjs':
