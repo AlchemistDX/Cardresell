@@ -17,9 +17,26 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  const page=await browser.newPage({viewport,colorScheme:theme,reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',r=>{const u=r.request().url();if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();return r.fulfill({status:503,contentType:'application/json',body:'{"error":"offline_fixture"}'})});
  await page.goto(origin);await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;window.googleUser={uid:'ui-fixture',displayName:'Review'};window._googleIdToken='fixture';document.getElementById('signInNudge').style.display='none';document.getElementById('googleSignInBtn').style.display='none';document.getElementById('googleUserBtn').style.display='flex';document.getElementById('googleName').textContent='Review';document.getElementById('dropList').style.display='none';},theme);
+ for(const [tier,label] of Object.entries({free:'Subscriptions',starter:'Starter',casual:'Casual',pro:'Pro',business:'Business'})){
+  await page.evaluate(t=>{window._userTier=t;updateTierUI(t);updateProUI()},tier);
+  check('membership label '+tier,await page.locator('#headerMembershipLabel').textContent(),label);
+  check('membership stays visible '+tier,await page.locator('#getProBtn').isVisible(),true);
+ }
+ await page.evaluate(()=>{window.googleUser=null;updateProUI()});
+ check('signed-out membership resets',await page.locator('#headerMembershipLabel').textContent(),'Subscriptions');
+ await page.evaluate(()=>{window.googleUser={sub:'fixture',emailVerified:true};updateProUI();document.getElementById('verifiedBadge').style.display='inline-flex'});
+ check('verified badge belongs to avatar',await page.locator('.profile-avatar #verifiedBadge').count(),1);
+ await page.locator('.profile-avatar').click();
+ check('profile opens account settings',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),true);
+ check('theme is in settings',await page.locator('#settingsPanel [data-theme-toggle]').isVisible(),true);
+ await page.locator('.settings-btn').click();
+ check('settings button closes account panel',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),false);
+ await page.locator('#getProBtn').click();await page.waitForFunction(()=>!!document.querySelector('.membership-shop[open]'));
+ check('membership opens subscriptions',await page.locator('.membership-shop[open] h2').textContent(),'Subscriptions');
+ await page.keyboard.press('Escape');
  check('brand loads',await page.locator('.hdr .brand-mark').evaluate(i=>i.complete&&i.naturalWidth>0),true);
  check('header has no overlap',await page.locator('.hdr').evaluate(h=>{const els=[h.querySelector('.logo'),...h.querySelector('.hdr-right').children].filter(e=>e.getBoundingClientRect().width>0);return els.every((a,i)=>els.slice(i+1).every(b=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return !(x.left<y.right&&x.right>y.left&&x.top<y.bottom&&x.bottom>y.top)}))}),true);
- check('header controls have 44px targets',await page.locator('.hdr .settings-btn,.hdr #shopBtn,.hdr .theme-btn').evaluateAll(es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44})),true);
+ check('header controls have 44px targets',await page.locator('.hdr .settings-btn,.hdr #shopBtn,.hdr .profile-avatar').evaluateAll(es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44})),true);
  const fit=()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth);
  if(!(await fit())){console.log(await page.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>innerWidth+1}).map(e=>({tag:e.tagName,id:e.id,class:e.className,width:e.getBoundingClientRect().width})).slice(0,20)));if(shots)await page.screenshot({path:shots+'/overflow.png'})}
  check('home fits viewport',await fit(),true);

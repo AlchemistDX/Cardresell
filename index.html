@@ -1958,7 +1958,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       if (!wasFired) setTimeout(function() { window.trackEvent('page_view'); }, 200);
     })();
   </script>
-<link rel="stylesheet" href="/assets/brand-ui.22082085.css">
+<link rel="stylesheet" href="/assets/brand-ui.0102eb1a.css">
 </head>
 <body data-game-theme="pokemon">
 <div class="theme-bg" aria-hidden="true"></div>
@@ -1994,19 +1994,16 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </a>
   <div class="hdr-right">
     <div id="googleUserBtn" style="display:none;align-items:center;gap:.5rem">
-      <span onclick="signOut()" style="display:flex;align-items:center;gap:.4rem;cursor:pointer" title="Tap to sign out">
+      <button class="profile-avatar" onclick="document.querySelector('.settings-btn').click()" aria-label="Your profile and account settings" title="Your profile and account settings">
         <img id="googleAvatar" src="" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid var(--gold-border)" />
         <span id="googleName" style="font-size:.75rem;font-weight:600;color:var(--text-muted);max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
         <span id="verifiedBadge" title="Email verified" style="display:none;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#22c55e;color:#000;font-size:.62rem;font-weight:900;line-height:1;flex-shrink:0">✓</span>
-      </span>
-      <button id="proBadge" class="pro-badge" onclick="openPricingModal('header_pro')" title="Manage subscription &amp; buy credits" style="cursor:pointer;border:none;font:inherit">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        PRO
       </button>
+
     </div>
     <button id="getProBtn" class="get-pro-btn" onclick="openPricingModal('header_upgrade')" title="Compare subscriptions and manage your membership">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-      Subscriptions
+      <span id="headerMembershipLabel">Subscriptions</span>
     </button>
     <a id="googleSignInBtn" href="/signin" style="display:flex;padding:.45rem 1rem;background:var(--gold);border:none;border-radius:99px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;text-decoration:none;align-items:center;gap:.3rem;box-shadow:0 2px 12px rgba(212,175,55,.35);-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;user-select:none">
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -2017,9 +2014,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <span>Shop</span>
     </button>
     <button class="settings-btn" data-settings-toggle aria-label="Settings">⚙</button>
-    <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    </button>
+
   </div>
 </header>
 
@@ -2027,6 +2022,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <!-- SETTINGS PANEL -->
 <div class="settings-panel" id="settingsPanel">
+  <div class="settings-appearance"><button onclick="signOut()" style="min-height:44px;padding:8px 12px">Sign out</button><span>Appearance</span>    <button class="theme-btn" data-theme-toggle aria-label="Toggle theme">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button></div>
   <!-- AI SCANNER — unified section -->
   <div class="settings-inner">
     <div class="settings-title">Card Identification Scanner</div>
@@ -4162,7 +4160,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.b974e6ed.js"></script>
+<script defer src="/js/core.85449a0d.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
