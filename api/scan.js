@@ -1,3 +1,4 @@
+import { catalogText, matchesCatalogPrinting, uniqueCatalogMatch, ygoPrinting } from './_catalogEvidence.js';
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
@@ -35,7 +36,7 @@ import { createMembershipScanIntents, scanIntentDigest } from './_membershipScan
 //   Tier 1: printed set_code (PHRA-EN012, CORI-EN031) → cardsetsinfo.php
 //   Tier 2: exact name → cardinfo.php?name=<name>
 //   Tier 3: fuzzy name → cardinfo.php?fname=<name>
-async function groundYugiohCardInfo(cardInfo) {
+export async function groundYugiohCardInfo(cardInfo) {
   if (!cardInfo || cardInfo.card_type !== 'yugioh') return;
   let ygoHit = null;
   const setCodeStrict = cardInfo.set_code &&
@@ -56,10 +57,11 @@ async function groundYugiohCardInfo(cardInfo) {
       if (r && r.ok) {
         const j = await r.json().catch(() => null);
         const card = j?.data?.[0];
-        if (card && card.name) {
-          const printing = (card.card_sets || [])[0] || {};
+        if (card && card.name && String(card.id) === String(Number(rawNum))) {
+          const printing = ygoPrinting(cardInfo, card.card_sets) || {};
           ygoHit = {
             source: 'passcode',
+            printingMatched: !!printing.set_code,
             id: card.id,
             name: card.name,
             set_name: printing.set_name || '',
@@ -67,7 +69,7 @@ async function groundYugiohCardInfo(cardInfo) {
             set_rarity: printing.set_rarity || '',
             image_url: card.card_images?.[0]?.image_url || null,
             image_small: card.card_images?.[0]?.image_url_small || null,
-            tcgplayer_price: parseFloat(card.card_prices?.[0]?.tcgplayer_price) || null,
+            tcgplayer_price: null, // card-wide price is not evidence for this printing
             type: card.type || '', archetype: card.archetype || '',
           };
         }
@@ -87,9 +89,10 @@ async function groundYugiohCardInfo(cardInfo) {
       clearTimeout(tt);
       if (r && r.ok) {
         const j = await r.json().catch(() => null);
-        if (j && j.name && j.set_name) {
+        if (j && j.name && j.set_name && String(j.set_code || '').toUpperCase() === String(cardInfo.set_code).toUpperCase() && (!cardInfo.card_name || catalogText(j.name) === catalogText(cardInfo.card_name))) {
           ygoHit = {
             source: 'set_code',
+            printingMatched: true,
             id: j.id, name: j.name, set_name: j.set_name,
             set_code: j.set_code || cardInfo.set_code,
             set_rarity: j.set_rarity,
@@ -117,19 +120,12 @@ async function groundYugiohCardInfo(cardInfo) {
       }
       clearTimeout(tt);
       if (j?.data?.length) {
-        let card = ygoHit?.name
-          ? j.data.find(c => c.name === ygoHit.name) || j.data[0]
-          : j.data[0];
-        let printing = null;
-        if (card.card_sets && card.card_sets.length) {
-          if (cardInfo.set_code) {
-            printing = card.card_sets.find(s =>
-              String(s.set_code || '').toUpperCase() === String(cardInfo.set_code).toUpperCase()
-            );
-          }
-          printing = printing || card.card_sets[0];
-        }
+        const expectedName = ygoHit?.name || cardInfo.card_name;
+        const card = uniqueCatalogMatch(j.data, c => catalogText(c.name) === catalogText(expectedName));
+        if (!card) return; // fuzzy candidates are not confirmed identities
+        const printing = ygoPrinting(cardInfo, card.card_sets);
         if (!ygoHit) ygoHit = { source: 'name' };
+        ygoHit.printingMatched = ygoHit.printingMatched || !!printing;
         ygoHit.id       = ygoHit.id       || card.id;
         ygoHit.name     = ygoHit.name     || card.name;
         ygoHit.set_name = ygoHit.set_name || printing?.set_name || '';
@@ -137,7 +133,7 @@ async function groundYugiohCardInfo(cardInfo) {
         ygoHit.set_rarity = ygoHit.set_rarity || printing?.set_rarity || '';
         ygoHit.image_url  = ygoHit.image_url || card.card_images?.[0]?.image_url || null;
         ygoHit.image_small= ygoHit.image_small || card.card_images?.[0]?.image_url_small || null;
-        ygoHit.tcgplayer_price = ygoHit.tcgplayer_price != null ? ygoHit.tcgplayer_price : (parseFloat(card.card_prices?.[0]?.tcgplayer_price) || null);
+        // Do not attach a card-wide market price to an unverified printing.
         ygoHit.type       = ygoHit.type       || card.type || '';
         ygoHit.archetype  = ygoHit.archetype  || card.archetype || '';
       }
@@ -146,21 +142,28 @@ async function groundYugiohCardInfo(cardInfo) {
     }
   }
 
-  // Apply the override
+  // A passcode/name match alone may fix the name, but cannot select a set,
+  // illustration, rarity or price. Preserve all original printing evidence.
+  if (ygoHit && !ygoHit.printingMatched) {
+    if (ygoHit.name) cardInfo.card_name = ygoHit.name;
+    cardInfo._ygo_grounded_by = ygoHit.source + '_card_only';
+    return;
+  }
+  // Apply only supported printing enrichment.
   if (ygoHit) {
     const before = { name: cardInfo.card_name, set: cardInfo.set_name };
     if (ygoHit.name)        cardInfo.card_name = ygoHit.name;
-    if (ygoHit.set_name)    cardInfo.set_name  = ygoHit.set_name;
-    if (ygoHit.set_code)    cardInfo.set_code  = ygoHit.set_code;
-    if (ygoHit.set_rarity && !cardInfo.rarity) cardInfo.rarity = ygoHit.set_rarity;
-    if (ygoHit.image_url)   cardInfo.image_url = ygoHit.image_url;
-    if (ygoHit.image_small) cardInfo.image_small = ygoHit.image_small;
+    if (ygoHit.printingMatched && ygoHit.set_name)    cardInfo.set_name  = ygoHit.set_name;
+    if (ygoHit.printingMatched && ygoHit.set_code)    cardInfo.set_code  = ygoHit.set_code;
+    if (ygoHit.printingMatched && ygoHit.set_rarity && !cardInfo.rarity) cardInfo.rarity = ygoHit.set_rarity;
+    if (ygoHit.printingMatched && ygoHit.image_url)   cardInfo.image_url = ygoHit.image_url;
+    if (ygoHit.printingMatched && ygoHit.image_small) cardInfo.image_small = ygoHit.image_small;
     if (ygoHit.tcgplayer_price != null) cardInfo._ygoprodeck_tcgplayer_price = ygoHit.tcgplayer_price;
     cardInfo.grounded = true;
     cardInfo.grounded_id = ygoHit.id ? String(ygoHit.id) : null;
     cardInfo._ygo_grounded_by = ygoHit.source;
     // Restore confidence — grounding via passcode/set_code is high-confidence
-    if ((ygoHit.source === 'passcode' || ygoHit.source === 'set_code') && cardInfo.confidence === 'low') {
+    if (ygoHit.printingMatched && cardInfo.confidence === 'low') {
       cardInfo.confidence = 'high';
     }
     console.log(`[scan] YGO grounded (${ygoHit.source}): "${before.name}" → "${cardInfo.card_name}" set=${cardInfo.set_name} img=${!!ygoHit.image_url}`);
@@ -178,7 +181,7 @@ async function groundYugiohCardInfo(cardInfo) {
 //   Tier 2: /cards/named?exact=<name>&set=<set>
 //   Tier 3: /cards/named?exact=<name>
 //   Tier 4: /cards/named?fuzzy=<name>
-async function groundMagicCardInfo(cardInfo) {
+export async function groundMagicCardInfo(cardInfo) {
   if (!cardInfo || (cardInfo.card_type !== 'mtg' && cardInfo.card_type !== 'magic')) return;
 
   const cleanName = String(cardInfo.card_name || '').trim();
@@ -186,7 +189,7 @@ async function groundMagicCardInfo(cardInfo) {
   const setCode   = /^[a-z0-9]{3,6}$/.test(rawSet) ? rawSet : '';
   const rawNum    = String(cardInfo.card_number || '').trim();
   // Scryfall collector numbers are digits, sometimes with a suffix like '10a' or '★'
-  const collNum   = rawNum.replace(/[^A-Za-z0-9\-\/]/g, '').replace(/\/.*$/, '');
+  const collNum   = rawNum; // Preserve suffixes, stars and separators; never manufacture a number.
 
   const fetchScry = async (url) => {
     try {
@@ -228,6 +231,11 @@ async function groundMagicCardInfo(cardInfo) {
     return;
   }
 
+  // A name endpoint may return a different reprint, even within the same set.
+  // Retain the provider's identity unless set, number, name and language agree.
+  if (!matchesCatalogPrinting(cardInfo, {name:hit.name,number:hit.collector_number,
+      setAliases:[hit.set,hit.set_name],language:hit.lang}, {languageRequired:true})) return;
+
   const before = { name: cardInfo.card_name, set: cardInfo.set_name };
   const imgFront = hit.image_uris?.normal || hit.card_faces?.[0]?.image_uris?.normal || null;
   const imgSmall = hit.image_uris?.small  || hit.card_faces?.[0]?.image_uris?.small  || null;
@@ -266,7 +274,7 @@ async function groundMagicCardInfo(cardInfo) {
 //   Tier 1: search by exact Name + Set_ID
 //   Tier 2: search by exact Name
 //   Tier 3: fuzzy name (contains)
-async function groundLorcanaCardInfo(cardInfo) {
+export async function groundLorcanaCardInfo(cardInfo) {
   if (!cardInfo || cardInfo.card_type !== 'lorcana') return;
 
   const cleanName = String(cardInfo.card_name || '').trim();
@@ -311,7 +319,10 @@ async function groundLorcanaCardInfo(cardInfo) {
     return;
   }
 
-  const card = hits[0];
+  const card = uniqueCatalogMatch(hits, c => matchesCatalogPrinting(cardInfo,
+    {name:c.Name,number:c.Card_Num,setAliases:[c.Set_ID,c.Set_Name],language:c.Language},
+    {total:true,languageRequired:true}), c => c.Unique_ID);
+  if (!card) return;
   const before = { name: cardInfo.card_name, set: cardInfo.set_name };
   cardInfo.card_name   = card.Name        || cardInfo.card_name;
   cardInfo.set_code    = card.Set_ID      || cardInfo.set_code;
@@ -373,7 +384,10 @@ export async function groundPokemonCardInfo(cardInfo) {
   // the community API is 502'ing.
   const kvUrl2   = process.env.KV_REST_API_URL;
   const kvToken2 = process.env.KV_REST_API_TOKEN;
-  const cacheKey = `ptcg:${cleanName.toLowerCase()}|${cleanNum}|${rawSet.toLowerCase()}`;
+  const cacheKey = `ptcg:v2:${encodeURIComponent(cleanName.toLowerCase())}|${encodeURIComponent(cleanNum)}|${encodeURIComponent(rawSet.toLowerCase())}|${encodeURIComponent(String(cardInfo.set_code || '').toLowerCase())}|${encodeURIComponent(String(cardInfo.language || (cardInfo.is_japanese ? 'ja' : 'unspecified')).toLowerCase())}`;
+  const matchesPokemon = c => matchesCatalogPrinting(cardInfo, {
+    name:c.name,number:c.number,setAliases:[c.set?.name,c.set?.id,c.set?.ptcgoCode],language:c.language
+  }, {total:true,languageRequired:true});
   let cached = null;
   if (kvUrl2 && kvToken2) {
     try {
@@ -383,7 +397,7 @@ export async function groundPokemonCardInfo(cardInfo) {
       if (cd?.result) cached = JSON.parse(cd.result);
     } catch(_) { /* KV best-effort */ }
   }
-  if (cached && cached.id) {
+  if (cached && cached.id && matchesPokemon({...cached,set:{name:cached.set_name,id:cached.set_id,ptcgoCode:cached.set_code}})) {
     cardInfo.card_name = cached.name || cardInfo.card_name;
     if (cached.number)   cardInfo.card_number = String(cached.number);
     if (cached.set_name) cardInfo.set_name    = cached.set_name;
@@ -415,26 +429,7 @@ export async function groundPokemonCardInfo(cardInfo) {
     return;
   }
 
-  const queries = [];
-  if (cleanName && cleanNum) {
-    queries.push(`name:"${cleanName}" number:${cleanNum}`);
-
-    const nameNoSuffix = cleanName
-      .replace(/\s+(ex|EX|VMAX|VSTAR|V|GX|Star|\u2605)$/i, '')
-      .trim();
-    if (nameNoSuffix && nameNoSuffix !== cleanName) {
-      queries.push(`name:"${nameNoSuffix}" number:${cleanNum}`);
-    }
-
-    const words = cleanName.split(/\s+/).filter(w => w && !/^(mega|dark|radiant|shining|team|light|ex|EX|VMAX|VSTAR|V|GX|Star|\u2605)$/i.test(w));
-    const identifier = words[words.length - 1] || words[0];
-    if (identifier && identifier !== cleanName && !queries.some(q => q.includes(`"${identifier}"`))) {
-      queries.push(`name:"${identifier}" number:${cleanNum}`);
-    }
-  }
-  if (cleanName && queries.length === 0) {
-    queries.push(`name:"${cleanName}"`);
-  }
+  const queries = [cleanNum ? `name:"${cleanName}" number:${cleanNum}` : `name:"${cleanName}"`];
 
   let best = null;
   const wantNum = cleanNum ? cleanNum.replace(/^0+/, '') || '0' : '';
@@ -458,11 +453,12 @@ export async function groundPokemonCardInfo(cardInfo) {
 
   for (const q of queries) {
     try {
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=25&select=id,name,set,number,rarity,hp,images`;
+      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=250&select=id,name,set,number,rarity,hp,images`;
       const r = await fetchWithRetry(url);
       if (!r || !r.ok) continue;
       const j = await r.json();
       let cards = (j.data || []);
+      if (Number(j.totalCount) > cards.length) continue; // incomplete result set is not unique evidence
 
       // Hard number filter when we have a number.
       if (wantNum) {
@@ -473,19 +469,9 @@ export async function groundPokemonCardInfo(cardInfo) {
       }
       if (cards.length === 0) continue;
 
-      // Prefer cards whose set name shares tokens with Ximilar's set_name.
-      const modelSetLo = rawSet.toLowerCase();
-      let ranked = cards;
-      if (modelSetLo && cards.length > 1) {
-        ranked = cards.map(c => {
-          const setLo = (c.set?.name || '').toLowerCase();
-          const setTokens = new Set(modelSetLo.split(/\W+/).filter(t => t.length >= 3));
-          let hit = 0;
-          for (const t of setTokens) if (setLo.includes(t)) hit++;
-          return { c, score: hit };
-        }).sort((a,b) => b.score - a.score).map(x => x.c);
-      }
-      best = ranked[0];
+      // Ambiguous reprints and contradictory evidence must never be resolved
+      // by provider ordering or token overlap. Keep the original scan instead.
+      best = uniqueCatalogMatch(cards, matchesPokemon);
       if (best) break;
     } catch(_) { /* try next query */ }
   }
@@ -499,6 +485,8 @@ export async function groundPokemonCardInfo(cardInfo) {
         id:          best.id,
         name:        best.name,
         number:      best.number,
+        set_id:      best.set?.id || '',
+        language:    best.language || '',
         set_name:    best.set?.name || '',
         set_code:    best.set?.ptcgoCode || best.set?.id || '',
         rarity:      best.rarity || '',
