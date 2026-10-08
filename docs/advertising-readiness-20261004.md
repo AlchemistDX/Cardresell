@@ -1,3 +1,7 @@
+## 2026-10-08: camera warnings survive missing outlines
+
+See `docs/camera-phone-acceptance-20261008.md` for the source diagnosis, focused validation and the six unpaid phone checks. View-level softness/darkness/detail checks no longer depend on finding a card outline; capture metadata remains localized-only. Analysis errors are visible, and changing hint wording invalidates stale displayed advice. Real-browser worker/canvas scenes pass locally. Phone acceptance remains open; pilot stays on; readiness approximately 85%.
+
 ## 2026-10-07: uncertain Deep-to-Quick settlement regression closed locally
 
 Found a real fault-path gap: after refunding the two-credit Deep operation, a

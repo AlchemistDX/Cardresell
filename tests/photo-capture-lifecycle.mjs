@@ -87,7 +87,7 @@ await test(async()=>{for(const config of [{box:[40,45,160,213]},{box:[40,45,160,
 }});
 await test(async()=>{assert.equal(guide.outline(pixels({box:[0,45,120,213]}),200,270),null);assert.equal(guide.outline(pixels({box:[40,70,160,170]}),200,270),null);});
 const g={x:.1,y:.05,w:.8,h:.9},blur={id:'soft',text:'soft'};
-await test(async()=>{assert.equal(guide.advice(null,g,blur,'face').id,'frame');assert.equal(guide.advice(null,g,blur,'edge').id,'edge');});
+await test(async()=>{assert.equal(guide.advice(null,g,blur,'face').id,'soft');assert.equal(guide.advice(null,g,blur,'edge').id,'edge');});
 await test(async()=>{assert.equal(guide.advice({x:.3,y:.3,w:.2,h:.3},g,blur,'face').id,'small');
  const fit=guide.advice({x:.01,y:.05,w:.85,h:.9},g,blur,'face');assert.equal(fit.id,'fit');assert.equal(fit.kind,'neutral');assert.doesNotMatch(fit.text,/move back/i);
  assert.equal(guide.advice({x:.15,y:.1,w:.7,h:.8},g,blur,'face').id,'soft');
@@ -104,26 +104,42 @@ await test(async()=>{for(const [w,h,bannerBottom,footerTop] of [[390,740,132,578
  const top=parseFloat(nodes.liveCapFrameArea.style.top),bottom=h-parseFloat(nodes.liveCapFrameArea.style.bottom),fw=parseFloat(nodes.liveCapFrame.style.width);
  assert.ok(top>bannerBottom);assert.ok(bottom<footerTop);assert.ok(fw*3.5/2.5<=bottom-top+.01);
 }});
-// The actual QA loop must not compute card sharpness without an outline;
-// framing has priority even when a quality check would warn about blur.
+// The real QA loop retains view-level safety hints when no outline is found,
+// without attaching that uncertain score to card capture metadata.
 await test(async()=>{
  const rect={left:0,top:0,width:200,height:270},fr={left:20,top:13.5,width:160,height:243};
- let calls=0,rendered=null,box=null,frames=0,reflection=false;
+ let calls=0,rendered=null,box=null,frames=0,reflection=false,sharp=30,mean=100,fail=false;
  const nodes={liveCapVideo:{videoWidth:200,videoHeight:270,getBoundingClientRect:()=>rect},liveCapOverlay:{style:{display:'flex'}},
   liveCapFrameArea:{getBoundingClientRect:()=>rect},liveCapFrame:{getBoundingClientRect:()=>fr}};
  const window={_liveCapState:{role:'face',active:true},_liveCapQACand:null,_liveCapQAStreak:0,_liveCapQAState:null,
   _liveCapQACanvas:{getContext:()=>({drawImage(){},getImageData:()=>({data:pixels()})})},
   CardResellPhotoGuide:{...guide,outline:()=>box,reflection:()=>reflection}};
  const c={window,document:{getElementById:id=>nodes[id]},_LIVECAP_SOFT_THRESHOLD:14,
-  _liveCapOutline:async()=>box,_liveCapCardSharpness(){calls++;return 1;},_liveCapRenderQA(h){rendered=h;},_liveCapLayout(){},_liveCapStopQA(){}};
+  _liveCapOutline:async()=>{if(fail)throw Error("analysis failed");return box;},_liveCapCardSharpness(){calls++;window._liveCapRegionQuality={mean,glare:0};return sharp;},_liveCapRenderQA(h){rendered=h;},_liveCapLayout(){},_liveCapStopQA(){}};
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('async function _liveCapQATick('),source.indexOf('function _liveCapRenderQA(')),c);
- for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'frame');
+ for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(calls,3);assert.equal(rendered.id,'frame');
  box={x:.3,y:.3,w:.2,h:.3};for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'small');
- box={x:.15,y:.1,w:.7,h:.8};await c._liveCapQATick();assert.equal(rendered,null);for(let i=0;i<2;i++)await c._liveCapQATick();assert.equal(rendered.id,'soft');
- box=null;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'frame');assert.equal(window._liveCapLastSharpness,null);
+ sharp=1;box={x:.15,y:.1,w:.7,h:.8};await c._liveCapQATick();assert.equal(rendered,null);for(let i=0;i<2;i++)await c._liveCapQATick();assert.equal(rendered.id,'soft');
+ box=null;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'soft');assert.match(rendered.text,/View looks soft/);assert.equal(window._liveCapLastSharpness,null);
  reflection=true;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'lighting');assert.doesNotMatch(rendered.text,/reflection/i);assert.equal(window._liveCapLastSharpness,null);
- reflection=false;await c._liveCapQATick();assert.equal(rendered,null);assert.equal(window._liveCapQAState,null);for(let i=0;i<2;i++)await c._liveCapQATick();assert.equal(rendered.id,'frame');
+ reflection=false;sharp=30;await c._liveCapQATick();assert.equal(rendered,null);assert.equal(window._liveCapQAState,null);for(let i=0;i<2;i++)await c._liveCapQATick();assert.equal(rendered.id,'frame');
+ mean=4;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'dark');assert.match(rendered.text,/uncover/);
+ mean=100;sharp=null;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'unknown');
+ fail=true;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'analysis');fail=false;
  window._liveCapState.role='edge';calls=0;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(calls,0);assert.equal(rendered.id,'edge');
+ delete window.CardResellPhotoGuide;for(let i=0;i<3;i++)await c._liveCapQATick();assert.equal(rendered.id,'analysis');
+});
+await test(async()=>{
+ for(const located of [true,false]) {
+  assert.equal(guide.qualityHint(30,{mean:5,glare:0},located).id,'dark');
+  assert.equal(guide.qualityHint(30,{mean:240,glare:0},located).id,'bright');
+  assert.equal(guide.qualityHint(null,{mean:100,glare:0},located).id,'unknown');
+  assert.equal(guide.qualityHint(4,{mean:100,glare:0},located).id,'soft');
+  assert.equal(guide.qualityHint(30,{mean:100,glare:0},located),null);
+  assert.equal(guide.qualityHint(null,null,located).id,'analysis');
+ }
+ assert.equal(guide.qualityHint(30,{mean:180,glare:.05},false).id,'lighting');
+ assert.doesNotMatch(guide.qualityHint(30,{mean:180,glare:.05},false).text,/reflection/);
 });
 // Small localized reflections must not be diluted by the whole image or
 // suppressed by missing outlines. Uniform white stock / colored art are not
