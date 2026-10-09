@@ -10,14 +10,14 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 // backend deploy. Rows are capped by size so a rogue client can't blow up
 // the KV row.
 //
-// Conflict handling (2026-08-19): if two devices race, we take the payload
-// whose `clientUpdatedAt` is newest. If the client didn't send that field,
-// we treat the POST as authoritative (opt-out of merge). Callers should
-// send `clientUpdatedAt: Date.now()` on every save.
+// Sync unions distinct IDs and uses explicit deletion tombstones. A bounded
+// compare-and-set loop prevents overlapping snapshots from losing additions.
+// Client snapshot timestamps retain the legacy same-ID conflict preference.
 //
 // Auth: Bearer <google_id_token>. Storage: KV key `userdata:<googleSub>`.
 
 const MAX_BLOB_BYTES = 900_000;      // ~900KB — well under KV row cap
+const RAW_RECORDS = new WeakMap();
 const MAX_ITEMS      = 2000;         // sanity cap so we don't store nonsense
 
 // Deletion tombstones (2026-09-04). _mergeById is a set union, and set union
@@ -27,7 +27,7 @@ const MAX_ITEMS      = 2000;         // sanity cap so we don't store nonsense
 // and we drop any row whose id is tombstoned unless the row's own updatedAt is
 // newer than the deletedAt (that is a delete-then-re-add, which must survive).
 const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
-const MAX_TOMBSTONES   = 500;                      // per collection
+const MAX_TOMBSTONES   = MAX_ITEMS;                      // per collection
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -51,7 +51,19 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
+  if (!googleSub) return res.status(401).json({ error: 'Sign in required' });
+  res.setHeader('Cache-Control', 'private, no-store');
   const key = `userdata:${googleSub}`;
+  try {
+
+  const duplicateIds = rows => {
+    const seen = new Set();
+    for (const row of rows) {
+      if (!row || row.id == null) continue;
+      const id = String(row.id); if (seen.has(id)) return true; seen.add(id);
+    }
+    return false;
+  };
 
   // ── GET: pull latest ──
   if (req.method === 'GET') {
@@ -71,82 +83,46 @@ export default async function handler(req, res) {
   // ── POST: push snapshot ──
   if (req.method === 'POST') {
     const body = req.body || {};
-    const portfolio        = Array.isArray(body.portfolio) ? body.portfolio.slice(0, MAX_ITEMS) : [];
-    const flips            = Array.isArray(body.flips)     ? body.flips.slice(0, MAX_ITEMS)     : [];
-    const clientUpdatedAt  = Number(body.clientUpdatedAt) || Date.now();
-    const clientTombstones = body.tombstones;
-
-    // Last-write-wins by clientUpdatedAt. Compare against the server's
-    // recorded timestamp; if the incoming is older, we still accept the
-    // union (client just came online after a stale save).
-    const existing = await kvGet(kvUrl, kvToken, key);
-    const serverUpdatedAt = existing ? Number(existing.serverUpdatedAt) || 0 : 0;
-
-    let finalPortfolio = portfolio;
-    let finalFlips     = flips;
-    let resolved       = 'client';
-
-    // Tombstones are cumulative and never lost by a stale push: union the
-    // client's marks with whatever the server already knows.
-    const marks = _mergeTombstones(existing && existing.tombstones, clientTombstones);
-
-    if (existing && clientUpdatedAt < serverUpdatedAt) {
-      // Client is behind — server keeps its data, but we take any NEW
-      // ids the client has (last-write union). This handles the case
-      // where a client that was offline for a while finally syncs and
-      // has added cards locally that the server never saw.
-      finalPortfolio = _mergeById(existing.portfolio || [], portfolio);
-      finalFlips     = _mergeById(existing.flips     || [], flips);
-      resolved       = 'merge';
-    } else if (existing) {
-      resolved = 'client'; // client is newer, its snapshot wins
+    if (!Array.isArray(body.portfolio) || !Array.isArray(body.flips))
+      return res.status(400).json({ error: 'invalid_snapshot' });
+    if (body.portfolio.length > MAX_ITEMS || body.flips.length > MAX_ITEMS)
+      return res.status(413).json({ error: 'too_many_items', message: 'No data was discarded. Reduce the collection before retrying.' });
+    if (duplicateIds(body.portfolio) || duplicateIds(body.flips))
+      return res.status(409).json({ error: 'ambiguous_collection_ids', message: 'Some collection records share an ID. Export a backup and resolve the duplicate IDs before syncing. Nothing was discarded.' });
+    const clientUpdatedAt = Number(body.clientUpdatedAt) || Date.now();
+    // Retry a bounded compare-and-set conflict against a fresh snapshot.
+    // Missing rows are not deletions: only explicit tombstones remove them.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const existing = await kvGet(kvUrl, kvToken, key);
+      if (existing && (duplicateIds(existing.portfolio) || duplicateIds(existing.flips)))
+        return res.status(409).json({ error: 'ambiguous_collection_ids', message: 'Cloud records share an ID. Export a backup and resolve the duplicate IDs before syncing. Nothing was discarded.' });
+      const marks = _mergeTombstones(existing?.tombstones, body.tombstones);
+      const preferIncoming = !existing || clientUpdatedAt >= Number(existing.serverUpdatedAt || 0);
+      const portfolio = _applyTombstones(_mergeById(existing?.portfolio || [], body.portfolio, preferIncoming), marks.portfolio);
+      const flips = _applyTombstones(_mergeById(existing?.flips || [], body.flips, preferIncoming), marks.flips);
+      if (portfolio.length > MAX_ITEMS || flips.length > MAX_ITEMS)
+        return res.status(413).json({ error: 'too_many_items', message: 'The combined collection exceeds the sync limit. Nothing was discarded.' });
+      const payload = { portfolio, flips, tombstones: marks, serverUpdatedAt: Date.now() };
+      const serialized = JSON.stringify(payload);
+      if (Buffer.byteLength(serialized) > MAX_BLOB_BYTES)
+        return res.status(413).json({ error: 'payload_too_large', message: 'Your collection exceeds the cloud sync size limit. It is still saved on this device.' });
+      const wrote = await kvSet(kvUrl, kvToken, key, serialized, existing ? RAW_RECORDS.get(existing) : null);
+      if (wrote) return res.status(200).json({ ok: true, ...payload, resolved: existing ? 'merge' : 'client' });
     }
-
-    // Subtract deletions AFTER the union, so a merge cannot reinstate a row
-    // the user deleted on any device.
-    finalPortfolio = _applyTombstones(finalPortfolio, marks.portfolio);
-    finalFlips     = _applyTombstones(finalFlips,     marks.flips);
-
-    const nowMs = Date.now();
-    const payload = {
-      portfolio: finalPortfolio,
-      flips:     finalFlips,
-      tombstones: marks,
-      serverUpdatedAt: nowMs,
-    };
-
-    const serialized = JSON.stringify(payload);
-    if (serialized.length > MAX_BLOB_BYTES) {
-      return res.status(413).json({
-        error: 'payload_too_large',
-        message: `Your data is ${(serialized.length / 1024).toFixed(0)}KB, which exceeds the ${(MAX_BLOB_BYTES / 1024).toFixed(0)}KB sync limit. Consider archiving old flips.`,
-      });
-    }
-
-    try {
-      await kvSet(kvUrl, kvToken, key, serialized);
-    } catch (e) {
-      console.error('user-data save failed:', e.message);
-      return res.status(502).json({ error: 'save_failed', message: 'Could not save your data. Please retry.' });
-    }
-    return res.status(200).json({
-      ok: true,
-      serverUpdatedAt: nowMs,
-      resolved,
-      portfolio: finalPortfolio,
-      flips:     finalFlips,
-      tombstones: marks,
-    });
+    return res.status(409).json({ error: 'sync_conflict', message: 'Another device is updating your collection. Please retry sync.' });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+  } catch {
+    return res.status(503).json({ error: 'storage_unavailable', message: 'Cloud collection could not be confirmed. Your device data is unchanged. Please retry sync.' });
+  }
 }
 
 // Union two arrays of {id, ...} rows by id. Later wins on conflict.
-function _mergeById(a, b) {
+function _mergeById(a, b, preferIncoming = true) {
   const map = new Map();
   for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), row);
-  for (const row of (b || [])) if (row && row.id != null) map.set(String(row.id), row);
+  for (const row of (b || [])) if (row && row.id != null && (preferIncoming || !map.has(String(row.id)))) map.set(String(row.id), row);
   return Array.from(map.values());
 }
 
@@ -198,28 +174,33 @@ export function _applyTombstones(rows, marks) {
 }
 
 async function kvGet(kvUrl, kvToken, key) {
-  try {
-    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
-    const d = await r.json();
-    if (!d.result) return null;
-    const parsed = typeof d.result === 'string' ? JSON.parse(d.result) : d.result;
-    return parsed;
-  } catch(e) {
-    console.warn('user-data kvGet error:', e.message);
-    return null;
-  }
+  const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${kvToken}` }
+  });
+  if (!r.ok) throw new Error('kv_read_failed');
+  const d = await r.json();
+  if (d.error || !Object.prototype.hasOwnProperty.call(d, 'result')) throw new Error('kv_read_failed');
+  if (d.result === null) return null;
+  const parsed = typeof d.result === 'string' ? JSON.parse(d.result) : d.result;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      !Array.isArray(parsed.portfolio) || !Array.isArray(parsed.flips)) throw new Error('kv_record_invalid');
+  RAW_RECORDS.set(parsed, typeof d.result === 'string' ? d.result : JSON.stringify(d.result));
+  return parsed;
 }
 
-async function kvSet(kvUrl, kvToken, key, serialized) {
-  const r = await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${kvToken}`,
-      'Content-Type': 'text/plain',
-    },
-    body: serialized,
+async function kvSet(kvUrl, kvToken, key, serialized, expected) {
+  const script = `local old = redis.call('GET', KEYS[1])
+if ARGV[1] == 'absent' then
+  if old then return 0 end
+elseif old ~= ARGV[2] then return 0 end
+redis.call('SET', KEYS[1], ARGV[3])
+return 1`;
+  const r = await fetch(kvUrl, {
+    method: 'POST', headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['EVAL', script, 1, key, expected === null ? 'absent' : 'present', expected || '', serialized]),
   });
-  if (!r.ok) throw new Error(`kv_write_failed:${r.status}`);
+  if (!r.ok) throw new Error('kv_write_failed');
+  const result = await r.json();
+  if (result.error || ![0,1].includes(result.result)) throw new Error('kv_write_unconfirmed');
+  return result.result === 1;
 }

@@ -348,10 +348,10 @@ try {
   // F1 — both providers fail: TPL rate-limited, PokemonTCG.io unreachable.
   const f1 = await withProvider('**://api.pokemontcg.io/**', r => r.abort('failed'),
     CALLERS[0], CONDITIONS[0].act);
-  T.check('F1: both providers failed — renders the unreachable-database state',
-    f1.reason === 'network', `reason=${f1.reason} :: ${f1.html.replace(/<[^>]*>/g, ' ').slice(0, 140)}`);
-  T.check('F1: and does not tell the seller the card was not found',
-    !NOT_FOUND_WORDING.test(f1.html.replace(/<[^>]*>/g, ' ')));
+  T.check('F1: failed live providers leave local identity choices',
+    /limited local catalog/.test(f1.html) && /drop-item/.test(f1.html));
+  T.check('F1: fallback does not invent live prices or claim a global miss',
+    /No live price/.test(f1.html) && !/drop-price/.test(f1.html));
   T.check('F1: the search box still holds "charizard"', f1.value === 'charizard',
     JSON.stringify(f1.value));
 

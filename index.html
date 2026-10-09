@@ -2177,7 +2177,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <input type="file" id="gradeEdgeRightInput"  accept="image/jpeg,image/png,image/webp,image/*" capture="environment" style="display:none" onchange="processGradeEdge(this,'right')" />
   <!-- Bulk scan file inputs -->
   <input type="file" id="bulkUploadInput" accept="image/jpeg,image/png,image/webp,image/*" multiple style="display:none" onchange="processBulkUploadFiles(this)" />
-  <!-- Bulk GRADE upload input (Pro Max / Ultimate only). Grades up to 25 cards -->
+  <!-- Bulk Grade upload: Pro / Business, up to 10 ordered cards -->
   <!-- in one session via /api/scan?mode=grade with concurrency=2 (Ximilar-safe). -->
   <input type="file" id="bulkGradeInput" accept="image/jpeg,image/png,image/webp,image/*" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
   <input type="file" id="bulkGradeCameraInput" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" multiple style="display:none" onchange="processBulkGradeFiles(this)" />
@@ -3067,6 +3067,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <!-- CONTENT (signed-in) -->
   <div id="collectionContent">
     <h1 class="workspace-title">Your collection</h1>
+    <p id="collectionSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
+    <button class="fl-sub-btn" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
   <div class="section-panel" style="margin-top:1.5rem">
     <div class="section-title">Saved AI grades</div>
@@ -4134,7 +4136,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.d9d75e68.js"></script>
+<script defer src="/js/core.f68fb7b6.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4188,10 +4190,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .membership-account-status:not([hidden]) { position:relative; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0; padding:14px 16px; border:1px solid var(--gold,#d4af37); border-radius:12px; background:var(--surface,#171717); color:var(--text,#fafafa); font-size:.875rem; line-height:1.5; }
 .membership-account-status button { min-height:44px; padding:10px 16px; border:1px solid var(--gold,#d4af37); border-radius:8px; background:var(--surface-2,#252525); color:inherit; font:inherit; cursor:pointer; }
 </style>
-<script defer src="/js/membership-shop.a9430c53.js"></script>
+<script defer src="/js/membership-shop.8e17314c.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.161ab8c0.js"></script>
-<script defer src="/js/grade-history.6d978fca.js"></script>
+<script defer src="/js/ui.0c7c3d4f.js"></script>
+<script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.033366b3.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.d7045eef.js"></script>
@@ -4657,21 +4659,18 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button onclick="closeBulkModePicker();startSingleGradeFlow('deep')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🔍</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:.9rem;font-weight:800">Deep Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
+          <div style="font-size:.9rem;font-weight:800">Deep Grade</div>
           <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">One card, tightest PSA estimate. <strong style="color:var(--gold-text)">2 credits</strong> · 6 photos (front, back, 4 edges)</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
 
-      <!-- Bulk Grade is intentionally not public until its tier/cap/server
-           contract and Collection persistence pass release QA. Keep the
-           work-in-progress implementation below for later completion, but do
-           not sell or expose it as a paid feature. -->
-      <button aria-hidden="true" tabindex="-1" onclick="closeBulkModePicker();openBulkGradeBatchPicker()" style="display:none;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(196,122,0,.06);border:1px solid rgba(196,122,0,.45);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.85)'" onmouseout="this.style.borderColor='rgba(196,122,0,.45)'">
+      <!-- Batch grade upload: authenticated, recoverable per-card requests. -->
+      <button id="openBulkGradeBtn" onclick="closeBulkModePicker();openBulkGradeBatchPicker()" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(196,122,0,.06);border:1px solid rgba(196,122,0,.45);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.85)'" onmouseout="this.style.borderColor='rgba(196,122,0,.45)'">
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🎯</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:.9rem;font-weight:800">Bulk Grade <span style="font-size:.55rem;background:var(--gold);color:#000;padding:.05rem .3rem;border-radius:3px;font-weight:900;margin-left:.2rem;vertical-align:middle">MAX</span></div>
-          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Grade a stack — up to 10 cards in one session. Pick Quick or Deep next.</div>
+          <div style="font-size:.9rem;font-weight:800">Bulk Grade <span style="font-size:.6rem">PRO / BUSINESS</span></div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Grade a stack — up to 10 cards in one session. Upload photos; pick Quick or Deep next.</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
@@ -4717,7 +4716,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
      Grades up to 10 cards in one session via /api/scan?mode=grade
      with concurrency=2 (Ximilar sync grader is ~3-8s per call).
      ===================================================================== -->
-<div id="bulkGradeOverlay" role="dialog" aria-modal="true" aria-label="Bulk grade" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:300;flex-direction:column;overflow:hidden">
+<div id="bulkGradeOverlay" role="dialog" aria-modal="true" aria-label="Bulk grade" tabindex="-1" style="--text-muted:#c4c4c4;--gold-text:#f5c95f;color:#f5f5f5;display:none;position:fixed;inset:0;background:#111;z-index:300;flex-direction:column;overflow:hidden">
   <!-- Header -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
     <div>
@@ -4774,7 +4773,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div id="bulkGradeCreditsInfo" style="font-size:.72rem;color:var(--text-muted)"></div>
     <div style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:280px">
-      <button id="bulkGradeCameraBtn" onclick="startBulkGradeCamera()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.72rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem">
+      <button id="bulkGradeCameraBtn" hidden aria-hidden="true" tabindex="-1" onclick="startBulkGradeCamera()" style="display:none">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         Take photos
       </button>
@@ -4786,12 +4785,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </div>
 
   <!-- ==================== CREDIT CONFIRM ==================== -->
-  <div id="bulkGradeCreditConfirm" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:2rem 1.5rem;text-align:center;gap:1rem">
+  <div id="bulkGradeCreditConfirm" style="overflow-y:auto;display:none;flex-direction:column;align-items:center;justify-content:flex-start;flex:1;padding:2rem 1.5rem;text-align:center;gap:1rem">
     <div style="font-size:2.5rem" id="bulkGradeCreditIcon">🎯</div>
     <div id="bulkGradeCreditMsg" style="font-size:.95rem;color:rgba(255,255,255,.85);line-height:1.5;max-width:340px"></div>
     <div id="bulkGradeCreditBudget" style="font-size:.76rem;color:var(--text-muted);line-height:1.5;max-width:340px"></div>
 
     <!-- Photo QA warnings box — populated by _bulkGradeRenderQAResults after processBulkGradeFiles -->
+    <div id="bulkGradePhotoReview" style="width:100%;max-width:550px;text-align:left;color:#fff"></div>
     <div id="bulkGradeQABox" style="display:none;width:100%;max-width:340px;text-align:left;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.6rem .7rem;margin-top:.15rem"></div>
 
     <div style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:280px;margin-top:.5rem">
@@ -4815,11 +4815,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <!-- Results list -->
     <div id="bulkGradeResultsList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:.5rem;padding-bottom:1rem"></div>
     <!-- Bottom bar -->
+    <p id="bulkGradeSaveStatus" role="status" style="font-size:.8rem;color:#fff"></p>
     <div id="bulkGradeBottomBar" style="display:none;flex-shrink:0;padding:.85rem 0 1rem;border-top:1px solid #1e1e1e;background:rgba(0,0,0,.95)">
       <div id="bulkGradeSummaryLine" style="font-size:.78rem;color:var(--text-muted);margin-bottom:.6rem;text-align:center"></div>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center">
+        <button id="bulkGradeRetryBtn" class="fl-sub-btn" onclick="runBulkGrade()" style="display:none">Recover / continue unfinished cards</button>
         <button id="bulkGradeExportBtn" onclick="exportBulkGradeCSV()" style="background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.55rem 1rem;font-weight:700;font-size:.8rem;cursor:pointer">📊 Export CSV</button>
-        <button id="bulkGradeSaveAllBtn" onclick="saveBulkGradeToCollection()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.55rem 1rem;font-weight:800;font-size:.8rem;cursor:pointer">💾 Save All to Collection</button>
+        <button id="bulkGradeSaveAllBtn" onclick="saveBulkGradeToCollection()" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.55rem 1rem;font-weight:800;font-size:.8rem;cursor:pointer">💾 Save grade reports</button>
         <button onclick="closeBulkGrade()" style="background:transparent;color:var(--text-muted);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:.55rem 1rem;font-weight:600;font-size:.8rem;cursor:pointer">Done</button>
       </div>
     </div>

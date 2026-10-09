@@ -20,7 +20,8 @@ return 1`;
 const FIELDS = ['card_name','set_name','card_number','card_type','psa_estimate','grade_label',
   'centering','centering_lr','centering_tb','corners','corners_desc','edges','edges_desc',
   'surface','surface_desc','eye_appeal','grade_notes','limiting_factor','grading_standard',
-  'deepGrade','cv_downgraded','creditsUsed','photoCount'];
+  'deepGrade','cv_downgraded','creditsUsed','credits_refunded','photoCount','analysis_id',
+  'confidence','eye_appeal_notes','centering_back','centering_ceiling','cv_source','centering_source'];
 export function normalizeGradeReport(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid report');
   const grade = Number(data.psa_estimate ?? data.grades?.final);
@@ -32,6 +33,7 @@ export function normalizeGradeReport(data) {
     else if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) report[key] = value;
   }
   report.psa_estimate = grade;
+  if (Array.isArray(data.confidence_drivers)) report.confidence_drivers = data.confidence_drivers.filter(x => typeof x === 'string').slice(0, 10).map(x => x.slice(0, 200));
   if (data.grades && typeof data.grades === 'object') {
     report.grades = {};
     for (const key of ['final','centering','corners','edges','surface']) {

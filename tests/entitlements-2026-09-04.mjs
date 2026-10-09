@@ -172,19 +172,16 @@ function grabFn(src, name) {
      (HTML.match(/mode: 'grade'/g) || []).length === 2);
 }
 {
-  // A 403 must stop the batch, not retry every remaining card.
-  const at = HTML.indexOf('resp.status === 403');
-  ok('the bulk grade worker handles 403', at !== -1);
-  const seg = HTML.slice(at, at + 700);
-  ok('a 403 stops the batch', /return 'STOP'/.test(seg));
-  ok('a 403 surfaces the server message', /e\.error/.test(seg));
-  ok('a 403 tells the user', /showToast\(/.test(seg));
-  ok('a 403 has a message even if the body is unparseable',
-     /Bulk Grade requires Pro or Business\./.test(seg));
-  // 402 and 401 handling must survive.
-  ok('the 402 out-of-credits path still exists', /resp\.status === 402/.test(HTML));
-  ok('the 401 auth path still exists in the grade worker',
-     /resp\.status === 401/.test(HTML));
+  // The browser suite drives an actual 403 through the visible batch path.
+  const seg = grabFn(HTML, '_bulkGradeOne');
+  ok('bulk uses durable scan recovery', /cardResellScanRequest\('\/api\/scan'/.test(seg));
+  ok('403 and 402 and 401 stop further cards', /\[401,402,403,429\]\.includes\(resp\.status\)/.test(seg));
+  ok('server error retained for inline display', /result\.error = data\.error/.test(seg));
+  ok('unparseable forbidden response has a useful message', /Bulk Grade requires Pro or Business\./.test(seg));
+  ok('current server estimate is consumed', /data\.psa_estimate/.test(seg));
+  ok('no automatic resolution-changing retry', !/attempts|Retrying at higher/.test(seg));
+  ok('uncertain outcome is explicitly recoverable', /result\.recoverable = true/.test(seg));
+
 }
 {
   // The client-side gate stays as a UX affordance — it just is no longer the

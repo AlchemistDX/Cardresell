@@ -91,17 +91,16 @@ function cssRule(sel) {
    ═══════════════════════════════════════════════════════════ */
 {
   const body = stripComments(grabFn(HTML, 'saveBulkGradeToCollection'));
-  ok('the bulk grade save reads through loadFlipsData', /const flips = loadFlipsData\(\)/.test(body));
-  ok('the bulk grade save writes through saveFlipsData', /saveFlipsData\(flips\)/.test(body));
+  ok('batch saving uses private grade history', /saveAiGradeReport\(result\.rawServer, result\.historyId, result\.owner\)/.test(body));
+  ok('save acknowledgement follows awaited storage', /await window\.saveAiGradeReport[\s\S]*result\.saved = true/.test(body));
   ok('the raw unscoped read is gone', !/localStorage\.getItem\('flips'\)/.test(body));
   ok('the raw unscoped write is gone', !/localStorage\.setItem\('flips'/.test(body));
-  ok('it calls the renderer that actually exists', /renderFlipsView\(\)/.test(body));
+  ok('AI grades do not create certified slab entries', !/isGraded|saveFlipsData/.test(body));
   ok('the nonexistent renderFlips call is gone', !/renderFlips\(\)/.test(body.replace(/renderFlipsView\(\)/g, '')));
   // Must sit inside THIS function, immediately after the flips renderer --
   // a call anywhere else in the file does not refresh the saved batch.
-  ok('it also refreshes the Collection surface',
-     /renderFlipsView\(\);[\s\S]{0,80}?_maybeRerenderCollection\(true\)/.test(body));
-  ok('the success toast still reports the count', /Saved ' \+ added \+ ' graded cards/.test(body));
+  ok('saved reports have a clear Collection destination', /Collection → Saved AI grades/.test(body));
+  ok('partial failure exposes saved count and retry', /of ' \+ results\.length \+ ' saved/.test(body) && /retry/.test(body));
   // The renderer it names must be a real top-level function.
   ok('renderFlipsView is defined', /\nfunction renderFlipsView\(/.test(HTML));
   ok('renderFlips is NOT defined under that name', !/\nfunction renderFlips\(/.test(HTML));

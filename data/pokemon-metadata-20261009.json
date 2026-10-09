@@ -1,0 +1,114 @@
+{
+  "as_of": "2026-10-09",
+  "scope": "Historical identity-only records from primary repository; no reference images, hashes or live prices",
+  "sets_source": {
+    "url": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json",
+    "sha256": "9df2f1e4de63037925ced583afc1fa7cf807e0f1240b21f292f0eea2782a3859"
+  },
+  "sets": [
+    {
+      "set": "hsp",
+      "name": "HGSS Black Star Promos",
+      "records": [
+        "hsp-HGSS18"
+      ],
+      "provider_count": 25,
+      "source": {
+        "url": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/hsp.json",
+        "sha256": "088103522f80dbf365f82370336652e6d2f8d95c5f5d50f637279bca98e6a6d0"
+      }
+    },
+    {
+      "set": "mcd14",
+      "name": "McDonald's Collection 2014",
+      "records": [
+        "mcd14-1",
+        "mcd14-2",
+        "mcd14-3",
+        "mcd14-4",
+        "mcd14-5",
+        "mcd14-6",
+        "mcd14-7",
+        "mcd14-8",
+        "mcd14-9",
+        "mcd14-10",
+        "mcd14-11",
+        "mcd14-12"
+      ],
+      "provider_count": 12,
+      "source": {
+        "url": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/mcd14.json",
+        "sha256": "25b26c71d1d079d1f31e7a3c8e0bb890bbf0ef22cb5af761fc1f7c9bf1c5f259"
+      }
+    },
+    {
+      "set": "mcd15",
+      "name": "McDonald's Collection 2015",
+      "records": [
+        "mcd15-1",
+        "mcd15-2",
+        "mcd15-3",
+        "mcd15-4",
+        "mcd15-5",
+        "mcd15-6",
+        "mcd15-7",
+        "mcd15-8",
+        "mcd15-9",
+        "mcd15-10",
+        "mcd15-11",
+        "mcd15-12"
+      ],
+      "provider_count": 12,
+      "source": {
+        "url": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/mcd15.json",
+        "sha256": "04b755f08d8217206ecccee38de7f5bde8e90ad060044575596a1903126bfceb"
+      }
+    },
+    {
+      "set": "mcd17",
+      "name": "McDonald's Collection 2017",
+      "records": [
+        "mcd17-1",
+        "mcd17-2",
+        "mcd17-3",
+        "mcd17-4",
+        "mcd17-5",
+        "mcd17-6",
+        "mcd17-7",
+        "mcd17-8",
+        "mcd17-9",
+        "mcd17-10",
+        "mcd17-11",
+        "mcd17-12"
+      ],
+      "provider_count": 12,
+      "source": {
+        "url": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/mcd17.json",
+        "sha256": "16280905cc910e10c999ee996934aa1ff00bd1d14a581a9a3108bc398ff80072"
+      }
+    },
+    {
+      "set": "mcd18",
+      "name": "McDonald's Collection 2018",
+      "records": [
+        "mcd18-1",
+        "mcd18-2",
+        "mcd18-3",
+        "mcd18-4",
+        "mcd18-5",
+        "mcd18-6",
+        "mcd18-7",
+        "mcd18-8",
+        "mcd18-9",
+        "mcd18-10",
+        "mcd18-11",
+        "mcd18-12"
+      ],
+      "provider_count": 12,
+      "source": {
+        "url": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/mcd18.json",
+        "sha256": "fdd410f0894ae320fe39b79082ba3aac8095e241eabcca51d4f46b3455a98608"
+      }
+    }
+  ]
+}

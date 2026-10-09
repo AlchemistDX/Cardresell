@@ -110,7 +110,7 @@ check(
 );
 check(
   'KV write failures are surfaced instead of returning false success',
-  userDataApi.includes('kv_write_failed:') &&
+  userDataApi.includes('kv_write_failed') && userDataApi.includes('kv_write_unconfirmed') &&
     collectionApi.includes('kv_write_failed:')
 );
 check(

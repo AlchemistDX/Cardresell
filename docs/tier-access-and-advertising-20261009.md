@@ -2,11 +2,11 @@
 
 ## Correction and saved-grade release
 
-The previous release verified batch entitlement admission by invoking internal functions but missed the hidden normal entry. Batch grading is NOT a launched benefit. Its UI also expects a response shape that still needs end-to-end review. Public pricing/shop claims have been withdrawn; the paid server capability remains preparatory only. Do not advertise it until the real user path, per-card response/billing and persistence pass acceptance.
+The prior release exposed a real gap: batch grading was hidden and used an obsolete API response. This release repairs the normal Grade → Bulk Grade → Upload path for Pro/Business, with up to 10 ordered photo sets per batch, a labeled photo review before charging, sequential processing and durable request recovery. Quick uses front/back; Deep uses six photos. Native batch camera capture remains unavailable. Credits are server-confirmed; uncertain responses pause the queue and recover the same operation without a second charge. Closing while processing waits for the current card.
 
-Private saved AI grades are now implemented: explicit Save grade after a single Quick/Deep result; Collection → Saved AI grades; authenticated account storage; report reopen, JSON download and delete. Included on every plan, at most 500 saved reports per account, no automatic expiry and no additional credits. Photos are excluded. Existing manual Grading Log is separate. Earlier unsaved AI results cannot be recovered. No claim of automatic save or bulk-report saving.
+Private saved AI grades are included on every plan: explicit Save grade after a single result or Save grade reports after a batch; Collection → Saved AI grades; authenticated storage; reopen, JSON download and delete. Maximum 500 reports per account, no automatic expiry and no additional credits. Photos are excluded. Existing manual Grading Log remains separate. Earlier unsaved results cannot be recovered. Saving is explicit, with failures visible and retryable. Stable analysis identifiers prevent duplicate recovered reports.
 
-Validation: 21 new API/browser checks using isolated real Redis and the actual grade-history handler, synthetic auth/results, no live scan charges. Covered concurrent idempotency/cap, account separation, no photo persistence, failed-save retry, delete tombstone, reload, text escaping, phone-width layout and account-switch cleanup. Asset fingerprints 107/0; existing brand/browser suite 590/0. Live authenticated save still requires a real user account.
+Validation includes 24 real browser-to-handler/Redis checks through the normal mobile entry, plus the 21-check grade-history suite. Authentication/provider responses are synthetic; no live customer credits were consumed. This is engineering verification, not physical phone or new authenticated production acceptance.
 
 Listing policy remains the default legacy 500 saved drafts per account, individual or selected bulk-scan draft creation, no separate ID/Grade charge for drafting. Proposed tier draft/monthly/storage limits remain disabled. eBay export prepares marketplace drafts; no automatic publishing or cross-posting is offered.
 
@@ -24,7 +24,7 @@ Continue from production fdf66b4. Ship consistent tier benefits and access, corr
 | Single-card ID, Quick/Deep estimates | Yes, using credits | Yes | Yes | Yes | Yes |
 | Existing local flip tracking | Up to 10 | Beyond 10 | Beyond 10 | Beyond 10 | Beyond 10 |
 | Grading Log export | Existing paid gate | Included | Included | Included | Included |
-| Quick/Deep batch grading | Not launched | Not launched | Not launched | Not launched | Not launched |
+| Quick/Deep batch uploads, up to 10 cards | No | No | No | Included | Included |
 | Private saved AI grade reports | Included | Included | Included | Included | Included |
 | Listing drafts | Existing account/technical limits on every plan; no new tier limits advertised |
 | Cloud photo allowance / automatic publishing | Not sold as operational plan benefits |
@@ -66,7 +66,7 @@ Outlook/school inbox placement remains unmeasured, but Gmail email/password onbo
 
 Production error review in the hour before this release showed eBay sold-search 403s and Node URL deprecation warnings. The interface must retain manual marketplace search and must not advertise guaranteed in-app eBay sold comps. These findings are not a new scanner/ledger outage.
 
-Qualitative readiness estimate: about 90% of the bounded advertising-launch effort after this release, not 90% of the entire product roadmap. Public paid advertising remains gated by the checks above.
+No percentage of overall product completeness is asserted. Public paid advertising remains gated by the checks above.
 
 ## Prepared message and attribution
 

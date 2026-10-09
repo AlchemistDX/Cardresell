@@ -74,4 +74,4 @@ try{
  check('new account sees own empty history',await page.getByText('Light corner wear',{exact:true}).count(),0);
  await context.close();
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r))}
-console.log(`${checks} checks passed`);process.exit(0);
+console.log(`SUITE COMPLETE: grade-history.mjs: ${checks} passed, 0 failed`);process.exit(0);

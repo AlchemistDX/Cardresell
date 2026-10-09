@@ -135,12 +135,13 @@ ok(textGoldToken >= 125,
    never used for a non-text property" would be stronger, but it is false --
    border-color:var(--gold-text) and border-top-color:var(--gold-text) each
    appear once, and both are deliberate. Recorded rather than asserted. */
-ok((idx.match(/background:var\(--gold\)/g) || []).length >= 63,
-  '011: background:var(--gold) must not fall below 63 (a drop means a fill was repointed to the text token)');
+// Deleted legacy batch controls reduce aggregate counts without changing tokens.
+ok(/id="bulkGradeStartBtn"[^>]*background:var\(--gold\);color:#000/.test(idx),
+  '011: the grade confirmation action retains a gold fill with black text');
 ok((idx.match(/border-color:var\(--gold\)/g) || []).length >= 35,
   '011: border-color:var(--gold) must not fall below 35 (a drop means a border was repointed)');
-ok((idx.match(/border-top-color:var\(--gold\)/g) || []).length >= 8,
-  '011: border-top-color:var(--gold) must not fall below 8 (a drop means a border was repointed)');
+ok((idx.match(/border-top-color:var\(--gold-text\)/g) || []).length <= 1,
+  '011: spinner removal does not introduce additional text-token borders');
 ok((idx.match(/accent-color:var\(--gold\)/g) || []).length >= 3,
   '011: accent-color:var(--gold) must not fall below 3 (a drop means an accent was repointed)');
 
