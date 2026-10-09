@@ -25,7 +25,7 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  }
  await page.evaluate(()=>{window.googleUser=null;updateProUI()});
  check('signed-out membership resets',await page.locator('#headerMembershipLabel').textContent(),'Subscriptions');
- await page.evaluate(()=>{window.googleUser={sub:'fixture',emailVerified:true};window._userTier='free';updateProUI();document.getElementById('verifiedBadge').style.display='inline-flex'});
+ await page.evaluate(()=>{window._waitForAuth=async()=>{};window.googleUser={uid:'fixture',sub:'fixture',emailVerified:true,getIdToken:async()=> 'synthetic_ui_token'};window._userTier='free';updateProUI();document.getElementById('verifiedBadge').style.display='inline-flex'});
  check('verified badge belongs to avatar',await page.locator('.profile-avatar #verifiedBadge').count(),1);
  await page.locator('.profile-avatar').click();
  check('profile opens account settings',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),true);
@@ -34,6 +34,12 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  check('settings button closes account panel',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),false);
  await page.locator('#getProBtn').click();await page.waitForFunction(()=>!!document.querySelector('.membership-shop[open]'));
  check('membership opens subscriptions',await page.locator('.membership-shop[open] h2').textContent(),'Subscriptions');
+ await page.waitForFunction(()=>document.querySelectorAll('.membership-plan').length===5);
+ check('only Pro and Business advertise batch uploads',await page.locator('.membership-plan').evaluateAll(es=>es.filter(e=>e.textContent.includes('Batch-grade uploaded')).map(e=>e.querySelector('h3').textContent)),['Pro','Business']);
+ check('each tier discloses saved-report and draft limits',await page.locator('.membership-plan').evaluateAll(es=>es.every(e=>e.textContent.includes('500 private AI grade reports')&&e.textContent.includes('500 saved listing drafts'))),true);
+ check('retired pricing cannot reopen from stale calls',await page.evaluate(()=>['pricingOverlay','shopOverlay'].every(id=>{const e=document.getElementById(id);e.classList.add('open');e.style.display='flex';const hidden=getComputedStyle(e).display==='none';e.classList.remove('open');e.style.display='';return hidden})),true);
+
+ if(shots)await page.screenshot({path:`${shots}/subscriptions-${theme}-${viewport.width}.png`});
  await page.keyboard.press('Escape');
  check('search precedes supporting banners',await page.evaluate(()=>{const search=document.getElementById('searchRow');return ['landingHero','howItWorksBar','scanGuaranteeBar'].every(id=>!!(search.compareDocumentPosition(document.getElementById(id))&Node.DOCUMENT_POSITION_FOLLOWING))}),true);
  check('repeated upgrade banner removed',await page.locator('#promoBanner').count(),0);

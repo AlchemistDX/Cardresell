@@ -1,0 +1,59 @@
+{
+  "as_of": "2026-10-09",
+  "scope": "local image-hash indexes, not total searchable catalog",
+  "indexes": {
+    "pokemon": {
+      "rows": 20699,
+      "unique_ids": 20699,
+      "represented_sets": 173
+    },
+    "mtg": {
+      "rows": 18618,
+      "unique_ids": 18618,
+      "represented_sets": 121
+    }
+  },
+  "pokemon_comparison": {
+    "scope": "Set-count gaps only; matching counts do not prove every ID or finish is covered.",
+    "released_provider_sets": 176,
+    "sets_with_count_gaps": 5,
+    "missing_record_count": 49,
+    "gaps": [
+      {
+        "id": "hsp",
+        "name": "HGSS Black Star Promos",
+        "provider_count": 25,
+        "local_count": 24
+      },
+      {
+        "id": "mcd14",
+        "name": "McDonald's Collection 2014",
+        "provider_count": 12,
+        "local_count": 0
+      },
+      {
+        "id": "mcd15",
+        "name": "McDonald's Collection 2015",
+        "provider_count": 12,
+        "local_count": 0
+      },
+      {
+        "id": "mcd17",
+        "name": "McDonald's Collection 2017",
+        "provider_count": 12,
+        "local_count": 0
+      },
+      {
+        "id": "mcd18",
+        "name": "McDonald's Collection 2018",
+        "provider_count": 12,
+        "local_count": 0
+      }
+    ],
+    "source": "https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json",
+    "source_kind": "Historical primary repository, not a current complete provider inventory",
+    "source_snapshot_sha256": "d585aaaa337be5a345424823c325c892709d5b79d10e84ca33bf2ff504ea9840"
+  },
+  "pokemon_metadata_only_records": 49,
+  "mtg_comparison_status": "Fresh Scryfall set inventory request returned HTTP 400 in this environment; no current completeness percentage asserted."
+}

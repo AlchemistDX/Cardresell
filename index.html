@@ -3526,7 +3526,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <!-- ============================================================
      PRICING / SHOP MODAL
      ============================================================ -->
-<div class="pricing-overlay" id="pricingOverlay" onclick="closePricingModal(event)"
+<div class="pricing-overlay" id="pricingOverlay" hidden inert aria-hidden="true" onclick="closePricingModal(event)"
      role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1">
   <div class="pricing-box" id="pricingBox">
     <div class="pricing-header">
@@ -3638,7 +3638,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
      here MUST stay in lockstep with /pricing.html's pack catalog, the gear
      panel buy buttons, api/stripe-id-checkout.js and api/stripe-grade-checkout.js.
      Do not edit one without the others. -->
-<div class="shop-overlay" id="shopOverlay" onclick="closeShop(event)" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+<div class="shop-overlay" id="shopOverlay" hidden inert aria-hidden="true" onclick="closeShop(event)" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
   <div class="shop-box" id="shopBox" onclick="event.stopPropagation()">
     <div class="shop-head">
       <div>
@@ -4136,7 +4136,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.2f23306f.js"></script>
+<script defer src="/js/core.4d28c536.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4189,8 +4189,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 .membership-account-status:not([hidden]) { position:relative; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0; padding:14px 16px; border:1px solid var(--gold,#d4af37); border-radius:12px; background:var(--surface,#171717); color:var(--text,#fafafa); font-size:.875rem; line-height:1.5; }
 .membership-account-status button { min-height:44px; padding:10px 16px; border:1px solid var(--gold,#d4af37); border-radius:8px; background:var(--surface-2,#252525); color:inherit; font:inherit; cursor:pointer; }
+
+/* Retired purchase screens must stay unavailable even through a stale caller. */
+#pricingOverlay, #shopOverlay { display:none !important; }
 </style>
-<script defer src="/js/membership-shop.8e17314c.js"></script>
+<script defer src="/js/membership-shop.6267e3cf.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/ui.0c7c3d4f.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>

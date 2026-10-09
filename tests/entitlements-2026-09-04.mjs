@@ -329,6 +329,29 @@ ok('the front/back-only cleanup no longer exists',
   }
 }
 
+/* A legacy success URL cannot mint client access or announce fake credits. */
+{
+  const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const asset = index.match(/src="\/(js\/core\.[a-f0-9]+\.js)"/)[1];
+  const source = fs.readFileSync(path.join(ROOT, asset), 'utf8');
+  const tree = parse(source, { ecmaVersion: 'latest' });
+  const statement = tree.body.find(n => n.type === 'ExpressionStatement'
+    && n.expression?.callee?.id?.name === 'handleStripeReturn');
+  const run = new Function('window','history','URLSearchParams','URL','showToast','checkProStatus','maybeShowProWelcome',source.slice(statement.start, statement.end));
+  const w = { _isPro:false, _freeScansLeft:0, location:{search:'?pro=1&cr_campaign=shop_qr',href:'https://cardresell.org/?pro=1&cr_campaign=shop_qr'} };
+  let release, checks=0, welcomes=0, returned=''; const messages=[];
+  const wait = new Promise(r => { release=r; });
+  run(w,{state:{},replaceState:(a,b,u)=>{returned=u;}},URLSearchParams,URL,
+    m=>messages.push(m),()=>{checks++;return wait;},()=>{welcomes++;});
+  eq('legacy return does not grant a paid plan',w._isPro,false);
+  eq('legacy return does not invent scan credits',w._freeScansLeft,0);
+  eq('legacy return asks server to confirm',checks,1);
+  ok('legacy return preserves acquisition parameters',returned.includes('cr_campaign=shop_qr')&&!returned.includes('pro='));
+  ok('legacy return reports checking, not fulfillment',messages[0].includes('Checking your subscription')&&!messages[0].includes('added'));
+  release(); await wait; await Promise.resolve();
+  eq('unconfirmed plan cannot show paid welcome',welcomes,0);
+}
+
 /* ── standing copy rules ── */
 ok('no maintenance wording', !/maintenance/i.test(HTML));
 ok('no beta wording', !/\bbeta\b/i.test(HTML));
