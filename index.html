@@ -4195,7 +4195,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </style>
 <script defer src="/js/membership-shop.d8e269e0.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.582410b3.js"></script>
+<script defer src="/js/ui.9b9b4a25.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.033366b3.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
@@ -4333,7 +4333,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
        ═══════════════════════════════════════════════════════════════ -->
   <div id="bulkScanOverlay" role="dialog" aria-modal="true" aria-label="Bulk scan" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;flex-direction:column;overflow:hidden">
     <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
+    <div id="bulkScanHeader" style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .75rem;border-bottom:1px solid #1e1e1e;flex-shrink:0">
       <div>
         <div style="font-size:1rem;font-weight:800;color:#fff">Bulk ID Scan</div>
         <div id="bulkScanSubtitle" style="font-size:.73rem;color:rgba(255,255,255,.45);margin-top:.1rem">1 credit per card</div>
@@ -4361,7 +4361,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <span style="font-size:1.5rem">⚡</span>
         <div style="flex:1">
           <div>Rapid Scan</div>
-          <div style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:400;margin-top:.15rem">Live camera — keep snapping cards, press Done when finished</div>
+          <div style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:400;margin-top:.15rem">Live camera — capture your stack, then review before scanning</div>
         </div>
       </button>
       <button onclick="startBulkUpload()" style="width:100%;max-width:320px;padding:1rem 1.5rem;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:14px;color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;gap:.9rem;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(139,92,246,.6)'" onmouseout="this.style.borderColor='#2a2a2a'">
@@ -4423,39 +4423,52 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button id="binderCancel" type="button">Back to scan options</button>
     </section>
 
-    <!-- Rapid Scan live camera view -->
+    <!-- Rapid Scan shares the current single-card camera guidance and capture geometry. -->
+    <style>
+      #bulkRapidCam { min-height:0; }
+      #bulkRapidHeader {position:absolute;top:0;left:0;right:0;padding:max(10px,env(safe-area-inset-top)) 12px 6px;background:linear-gradient(to bottom,rgba(0,0,0,.8),transparent);box-sizing:border-box}
+      #bulkRapidHeaderRow {display:flex;align-items:center;justify-content:space-between;gap:12px}
+      #bulkRapidStrip {display:none;gap:6px;overflow-x:auto;padding:8px 0 2px}
+      #bulkRapidGuidance {position:absolute;left:12px;right:12px;padding:6px 10px;color:#fff;background:rgba(0,0,0,.75);border-radius:10px;font-size:.75rem;line-height:1.35;pointer-events:none}
+      #bulkRapidControls {position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 12px max(14px,env(safe-area-inset-bottom));box-sizing:border-box;background:linear-gradient(to top,rgba(0,0,0,.8),transparent)}
+      #bulkRapidQABar {display:flex;justify-content:center;min-height:44px;align-items:center;pointer-events:none}
+      #bulkRapidQAPill {padding:8px 12px;background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.3);border-radius:14px;color:#fff;font-size:.75rem;line-height:1.35;display:flex;align-items:center;gap:6px;max-width:min(88vw,440px);box-sizing:border-box}
+      #bulkRapidCaptureRow {display:flex;align-items:center;justify-content:center;gap:26px}
+      #bulkRapidShutter {width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;flex-shrink:0}
+      #bulkRapidDoneBtn {width:80px;padding:12px 6px;background:#8b5cf6;color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.8rem;cursor:pointer}
+      #bulkRapidCam.rapid-landscape #bulkRapidHeader {right:170px;padding-top:6px}
+      #bulkRapidCam.rapid-landscape #bulkRapidGuidance {right:182px;font-size:.7rem;padding:4px 8px}
+      #bulkRapidCam.rapid-landscape #bulkRapidControls {left:auto;width:166px;top:0;justify-content:center;padding:8px;gap:8px;background:rgba(0,0,0,.7)}
+      #bulkRapidCam.rapid-landscape #bulkRapidCaptureRow {flex-direction:column;gap:10px}
+      #bulkRapidCam.rapid-landscape #bulkRapidQAPill {font-size:.7rem;padding:6px;max-width:150px}
+      #bulkRapidCam.rapid-landscape #bulkRapidStrip img {height:36px}
+      #bulkRapidCam.rapid-landscape #bulkRapidStrip > div {height:36px!important;width:28px!important}
+    </style>
     <div id="bulkRapidCam" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:#000;position:relative">
       <video id="bulkRapidVideo" playsinline autoplay muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000"></video>
       <canvas id="bulkRapidCanvas" style="display:none"></canvas>
-      <!-- Card-frame overlay -->
-      <div style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">
-        <div id="bulkRapidFrame" style="width:min(72vw,320px);aspect-ratio:2.5/3.5;border:2.5px dashed rgba(139,92,246,.75);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);transition:border-color .18s,box-shadow .18s"></div>
+      <div id="bulkRapidFrameArea" style="position:absolute;left:0;right:0;top:120px;bottom:165px;pointer-events:none;display:flex;align-items:center;justify-content:center">
+        <div id="bulkRapidFrame" style="width:min(72vw,320px);aspect-ratio:2.5/3.5;border:2.5px dashed rgba(255,255,255,.7);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.35)"></div>
       </div>
-      <!-- Live QA hint bar: shows above shutter when the current frame trips a threshold.
-           Advisory only — shutter always works. Sampled at ~4Hz off a downsampled
-           frame draw so we're not burning CPU on a full-res read every rAF tick. -->
-      <div id="bulkRapidQABar" style="position:absolute;bottom:112px;left:0;right:0;display:none;justify-content:center;padding:0 1rem;pointer-events:none">
-        <div id="bulkRapidQAPill" style="padding:.5rem .85rem;background:rgba(0,0,0,.75);border:1px solid rgba(255,255,255,.15);border-radius:99px;color:#fff;font-size:.72rem;font-weight:700;line-height:1.3;display:flex;align-items:center;gap:.4rem;box-shadow:0 4px 18px rgba(0,0,0,.45);max-width:88vw;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)"><span id="bulkRapidQAIcon">💡</span><span id="bulkRapidQAText">Looking good</span></div>
+      <div id="bulkRapidHeader">
+        <div id="bulkRapidHeaderRow">
+          <button onclick="closeBulkRapid()" style="padding:10px 14px;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:99px;font-weight:700;cursor:pointer">✕ Cancel</button>
+          <div id="bulkRapidCounter" role="status" style="padding:8px 12px;background:#6d28d9;color:#fff;border-radius:99px;font-size:.8rem;font-weight:800">0 queued</div>
+        </div>
+        <div id="bulkRapidStrip" aria-label="Captured cards"></div>
       </div>
-      <!-- Top bar: close + queue count -->
-      <div style="position:absolute;top:0;left:0;right:0;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);pointer-events:auto">
-        <button onclick="closeBulkRapid()" style="padding:.4rem .75rem;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:99px;font-size:.75rem;font-weight:700;cursor:pointer">✕ Cancel</button>
-        <div id="bulkRapidCounter" style="padding:.4rem .8rem;background:rgba(139,92,246,.85);color:#fff;border-radius:99px;font-size:.8rem;font-weight:800">0 queued</div>
+      <div id="bulkRapidGuidance">One card per photo. Capture your stack, then review ID credits before scanning.</div>
+      <div id="bulkRapidControls">
+        <div id="bulkRapidQABar"><div id="bulkRapidQAPill"><span id="bulkRapidQAIcon">📷</span><span id="bulkRapidQAText">Keep all four edges visible. Check text and reflections before capturing.</span></div></div>
+        <div id="bulkRapidCaptureRow">
+          <button id="bulkRapidShutter" onclick="bulkRapidSnap()" aria-label="Capture card photo"></button>
+          <button id="bulkRapidDoneBtn" onclick="bulkRapidDone()" disabled style="opacity:.5">Review →</button>
+        </div>
       </div>
-      <!-- Filmstrip of captured thumbs -->
-      <div id="bulkRapidStrip" style="position:absolute;top:60px;left:0;right:0;padding:.4rem .75rem;display:flex;gap:.35rem;overflow-x:auto;pointer-events:auto"></div>
-      <!-- Bottom bar: shutter + done -->
-      <div style="position:absolute;bottom:0;left:0;right:0;padding:1rem 1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);pointer-events:auto">
-        <div style="width:70px"></div>
-        <button id="bulkRapidShutter" onclick="bulkRapidSnap()" aria-label="Capture" style="width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.35);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .1s" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'"></button>
-        <button id="bulkRapidDoneBtn" onclick="bulkRapidDone()" style="width:70px;padding:.55rem .35rem;background:rgba(139,92,246,1);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.75rem;cursor:pointer;line-height:1.15;opacity:.5" disabled>Done ⚡</button>
+      <div id="bulkRapidZoomWrap" style="display:none;position:absolute;right:16px;top:45%;flex-direction:column;align-items:center;gap:.5rem">
+        <span id="bulkRapidZoomLabel" style="color:#fff;background:rgba(0,0,0,.65);padding:4px 8px;border-radius:99px;font-size:.7rem">1.0x</span>
+        <input id="bulkRapidZoomSlider" aria-label="Camera zoom" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="writing-mode:vertical-lr;direction:rtl;width:8px;height:140px;accent-color:#8b5cf6" />
       </div>
-      <!-- Zoom slider (vertical, right side - hidden on browsers without zoom capability) -->
-      <div id="bulkRapidZoomWrap" style="display:none;position:absolute;right:16px;top:50%;transform:translateY(-50%);flex-direction:column;align-items:center;gap:.5rem;pointer-events:auto">
-        <span style="font-size:.65rem;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:.2rem .5rem;border-radius:99px;min-width:36px;text-align:center" id="bulkRapidZoomLabel">1.0x</span>
-        <input id="bulkRapidZoomSlider" type="range" min="1" max="3" step="0.1" value="1" orient="vertical" style="writing-mode:vertical-lr;direction:rtl;width:8px;height:180px;background:rgba(255,255,255,.35);border-radius:99px;outline:none;accent-color:#8b5cf6" />
-      </div>
-      <!-- Flash effect -->
       <div id="bulkRapidFlash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .12s"></div>
     </div>
 
