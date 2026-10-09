@@ -1,3 +1,5 @@
+> October 8 correction: batch-grading entry is hidden and is not a launched benefit. Shop/pricing claims withdrawn. Private saved AI grade reports added separately; see `tier-access-and-advertising-20261009.md`. Do not treat the earlier readiness estimate as acceptance of batch grading.
+
 ## 2026-10-08 evening: tier access and launch-copy completion
 
 See `tier-access-and-advertising-20261009.md` for the current feature matrix, enforcement, validation and remaining live gates. Pro/Business batch access now follows server-validated paid-through authority. Active UI labels and public About/Terms/Contact/Accuracy copy match current offers; missing first enrollment reports setup rather than an outage. Listing/storage quotas remain unadvertised. Gmail onboarding is already accepted; the latest camera phone check and the recorded live fallback/public-admission conditions remain open. Approximately 90% of the bounded launch effort after verified release; not advertising-ready yet. No ad spend, new purchases, account mutation or admission change.
