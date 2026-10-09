@@ -471,4 +471,38 @@ await t.section('durable atomic legacy fencing and rollout rollback', async () =
   await redis(guardLegacyCommand(['SET', paid('identify'), 7]));
   t.check('legacy write works without durable cutover', await redis(['GET', paid('identify')]) === '7');
 });
+await t.section('launch paid batch access follows active invoice authority', async () => {
+  for (const [plan, price, allowed] of [['starter',499,false],['casual',999,false],['pro',1999,true],['business',4999,true]]) {
+    await reset('paid');
+    const now = Number((await redis(['TIME']))[0]);
+    const invoice = { owner, invoiceId: 'in_feature' + plan, subscriptionId: 'sub_localPeriod', plan,
+      periodStart: now - 10, periodEnd: now + 100, currency: 'usd', amountCents: price, paid: true };
+    await grantMembership(redis, 'period', invoice);
+    // New enrollments were provisioned false. Invoice policy, not this old
+    // flag or a client assertion, controls paid launch plans.
+    const enrollment = await read(membershipEnrollmentKey(owner));
+    await redis(['SET', membershipEnrollmentKey(owner), JSON.stringify({...enrollment, capabilities:{bulkGrade:!allowed}})]);
+    const context = ctx({mode:'grade', bulkGrade:true, paidFeatures:{[plan]:{bulkGrade:!allowed}}});
+    const before = await snapshot();
+    t.check(plan + ' reports canonical batch capability', (await invoke('snapshot', context)).bulk_grade === allowed);
+    const results = await Promise.all(Array.from({length:8},()=>invoke('debit',context)));
+    t.check(plan + ' concurrent requests follow plan policy', results.every(r=>allowed ? r.charged === 1 : r.code === 'membership_capability_denied'));
+    if (!allowed) {
+      t.check(plan + ' denial leaves all balances and receipts unchanged', await snapshot() === before);
+      t.check(plan + ' retains single-card grading', (await invoke('debit',ctx({mode:'grade'}))).charged === 1);
+    } else {
+      const remaining = (await invoke('snapshot',ctx({mode:'grade'}))).remaining;
+      t.check(plan + ' debits only one credit across duplicate requests', remaining === ({pro:40,business:100}[plan]-1));
+      await invoke('publish',{...context,scanRecord:{}});
+      const expired = at(now + 101);
+      t.check(plan + ' expiry removes batch access without expiring credits', (await expired('snapshot',ctx({mode:'grade'}))).bulk_grade === false
+        && (await expired('snapshot',ctx({mode:'grade'}))).remaining === remaining);
+      const retry=ctx({mode:'grade'});
+      t.check(plan + ' expired batch retry is denied', (await expired('claim_retry',{...context,retry_receipt:retry.receipt,retry_scan:retry.scan})).code === 'membership_capability_denied');
+      t.check(plan + ' completed debit still replays after expiry', (await expired('debit',context)).charged === 1);
+      await expired('refund',context);
+      t.check(plan + ' exact refund remains available after expiry', (await expired('snapshot',ctx({mode:'grade'}))).remaining === remaining+1);
+    }
+  }
+});
 t.done();

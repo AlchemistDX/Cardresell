@@ -387,8 +387,8 @@ await t.section('verification survives missing enrollment and repeated confirmat
       t.check('verification attempt ' + attempt + ' succeeds', result.statusCode === 200 && result.payload.verified);
       t.check('only first attempt reports new award ' + attempt, result.payload.bonusGranted === (attempt === 0));
       const restored = await call(status, 'GET');
-      t.check('reload retains verification while ledger unavailable ' + attempt,
-        restored.statusCode === 503 && restored.payload.emailVerified === true
+      t.check('reload retains verification while account setup is pending ' + attempt,
+        restored.statusCode === 409 && restored.payload.error === 'membership_setup_required' && restored.payload.emailVerified === true
         && restored.payload.verifiedEmail === email && restored.payload.creditsAvailable === false
         && !Object.hasOwn(restored.payload, 'idCredits'));
     }
@@ -478,5 +478,49 @@ await t.section('normal scan HTTP intent replay and immutable content', async ()
     t.check('concurrent request causes one additional debit', (await balance()).monthly === after.monthly - 1
       && (await redis(['KEYS', 'membership:launch-v2:consumption:*'])).length === 2);
   } finally { finish(h); }
+});
+await t.section('fresh accounts report setup without masking real ledger failures', async () => {
+  const h=billingHarness({balance:4});
+  try {
+    await seed();
+    await redis(['DEL',membershipEnrollmentKey(UID)]);
+    const before=await state();
+    for(const handler of [status,credits]){
+      const r=await call(handler,'GET');
+      t.check('missing enrollment is setup-needed, not an outage',r.statusCode===409&&r.payload.error==='membership_setup_required'&&r.payload.action==='complete_account_setup');
+      t.check('setup response never fabricates a zero credit balance',r.payload.creditsAvailable===false&&!Object.hasOwn(r.payload,'credits'));
+    }
+    t.check('status reads never enroll or grant an uninitialized account',await state()===before);
+    await redis(['SET',membershipEnrollmentKey(UID),'corrupt']);
+    for(const handler of [status,credits]){
+      const r=await call(handler,'GET');
+      t.check('corrupt enrollment still reports an outage',r.statusCode===503&&r.payload.error==='billing_unavailable');
+    }
+  }finally{finish(h)}
+});
+await t.section('current paid plans: status to normal batch request to ledger', async () => {
+  for(const [plan,price,allowance,allowed] of [['starter',499,5,false],['casual',999,15,false],['pro',1999,40,true],['business',4999,100,true]]){
+    const h=billingHarness({balance:4});
+    try{
+      await seed();
+      await redis(['SET',membershipEnrollmentKey(UID),JSON.stringify({version:'launch-v2',owner:UID,verified:true,plan:'paid',subscription:'sub_featureRoute',capabilities:{bulkGrade:false}})]);
+      const now=Number((await redis(['TIME']))[0]);
+      await grantMembership(redis,'period',{owner:UID,invoiceId:'in_route'+plan,subscriptionId:'sub_featureRoute',plan,periodStart:now-10,periodEnd:now+100,currency:'usd',amountCents:price,paid:true});
+      process.env.OPENAI_API_KEY='local-placeholder-not-a-credential';
+      const localFetch=globalThis.fetch;let calls=0;
+      globalThis.fetch=async(input,init)=>{
+        if(String(input).startsWith('https://api.openai.com/')){
+          calls++;return Response.json({choices:[{message:{content:JSON.stringify({card_name:'Synthetic Grade',centering:'55/45 L/R, 50/50 T/B',corners:'Near Mint',edges:'Mint',surface:'Mint',psa_estimate:9,grade_label:'Mint',grade_notes:'Synthetic',worth_grading:true,subgrades:{centering:9,corners:8.5,edges:9.5,surface:9.5},confidence:'high'})}}]});
+        }
+        return localFetch(input,init);
+      };
+      const account=await call(status,'GET');
+      t.check(plan+' status exposes the effective batch benefit',account.statusCode===200&&account.payload.tier===plan&&account.payload.capabilities.bulkGrade===allowed);
+      const r=await h.scan(exact(),{mode:'grade',bulkGrade:true,backBase64:'back',capabilities:{bulkGrade:!allowed}});
+      t.check(plan+' normal route enforces server access',r.statusCode===(allowed?200:403));
+      t.check(plan+' provider called only for allowed operation',calls===(allowed?1:0));
+      t.check(plan+' normal route debits the exact credit once', (await balance('grade')).remaining===allowance-(allowed?1:0));
+    }finally{finish(h)}
+  }
 });
 t.done();

@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { LAUNCH_PLANS, LAUNCH_WELCOME_CREDITS } from './_launchMembershipConfig.js';
 import { membershipWelcomeKeys, membershipIncludedHistoryKey } from './_membershipLedger.js';
 import { LEGACY_CONSUMPTION_PLANS } from './_membershipLegacyPlans.js';
+import { MEMBERSHIP_PAID_FEATURES } from './_membershipFeaturePolicy.js';
 const CONSUMPTION_PLANS = Object.freeze({ ...LAUNCH_PLANS, ...LEGACY_CONSUMPTION_PLANS });
 
 const hash = v => createHash('sha256').update(v).digest('hex');
@@ -86,12 +87,6 @@ local bulkGrade=cjson.null
 if type(enrollment.capabilities)=='table' and type(enrollment.capabilities.bulkGrade)=='boolean' then
   bulkGrade=enrollment.capabilities.bulkGrade
 end
--- Server-owned capability, never inferred from the price/tier or request.
--- Recheck at atomic debit/retry admission, not only at an earlier status read.
-if p.bulkGrade==true and ((p.action=='debit' and not rec) or p.action=='claim_retry') then
-  if bulkGrade==cjson.null then return fail('membership_capability_unavailable') end
-  if bulkGrade~=true then return fail('membership_capability_denied') end
-end
 local function replay()
   if type(rec.result_json)~='string' then error('corrupt_result') end
   local ok,v=pcall(cjson.decode,rec.result_json)
@@ -146,6 +141,21 @@ local function current()
       or now<allocation.start then error('corrupt_authority') end
   end
   return allocation
+end
+-- Versioned server policy for current paid plans. Resolve inside the same
+-- atomic operation as debit/retry, using validated invoice authority and TIME.
+-- Refund and completed-debit replay do not depend on current feature access.
+local function currentBulkGrade()
+  local a=current()
+  if enrollment.plan=='paid' and now>=a.finish then return false end
+  local features=p.paidFeatures[a.plan]
+  if features then return features.bulkGrade==true end
+  return bulkGrade
+end
+if p.bulkGrade==true and ((p.action=='debit' and not rec) or p.action=='claim_retry') then
+  local allowed=currentBulkGrade()
+  if allowed==cjson.null then return fail('membership_capability_unavailable') end
+  if allowed~=true then return fail('membership_capability_denied') end
 end
 local id=p.mode=='identify'
 local usedField=id and 'id_used' or 'grade_used'
@@ -282,7 +292,7 @@ if p.action=='snapshot' or p.action=='renew_free' then
   local m,w,b=balances()
   result={ok=true,monthly=m,welcome=w,purchased=b,remaining=m+w+b,
     period_start=allocation.start,period_end=allocation.finish,period_active=now<allocation.finish,
-    plan=allocation.plan,bulk_grade=bulkGrade,billing_version='launch-v2'}
+    plan=allocation.plan,bulk_grade=currentBulkGrade(),billing_version='launch-v2'}
   if p.action=='snapshot' then return encode(result) end
   if enrollment.plan~='free' then return fail('invalid_action') end
   if allocationNew then storeAllocation() end
@@ -429,7 +439,7 @@ export function createMembershipConsumption({ execute }) {
         membershipIncludedHistoryKey(owner),
         JSON.stringify({ action, owner, receipt, scan, mode, cost, monthStart, monthEnd,
           bulkGrade: mode === 'grade' && input.bulkGrade === true,
-          activeRaw, plans: CONSUMPTION_PLANS, welcome: LAUNCH_WELCOME_CREDITS,
+          activeRaw, plans: CONSUMPTION_PLANS, paidFeatures: MEMBERSHIP_PAID_FEATURES, welcome: LAUNCH_WELCOME_CREDITS,
           ...(action === 'offer' ? { candidates: input.candidates, candidate_set: input.candidate_set } : {}),
           ...(action === 'accept' ? { candidate_set: input.candidate_set, candidate: input.candidate } : {}),
           ...(action === 'claim_retry' ? { retry_receipt: input.retry_receipt, retry_scan: input.retry_scan } : {}),

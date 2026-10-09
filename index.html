@@ -3182,7 +3182,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="scan-gate-box">
     <div class="scan-gate-icon" id="scanGateIcon">&#128247;</div>
     <div class="scan-gate-title" id="scanGateTitle">Card Identification Scanner</div>
-    <div class="scan-gate-sub" id="scanGateSub">Take a photo of any card &mdash; our AI identifies it instantly and pulls live market prices for Pokémon, Magic, Yu-Gi-Oh!, Lorcana &amp; One Piece. Sports cards too — scan one and pick your exact parallel for a graded guide price.</div>
+    <div class="scan-gate-sub" id="scanGateSub">Take a photo of a supported card to identify it and look up available market prices. Confirm the set and variant before using the result. Sports cards may need you to select the exact parallel.</div>
     <div class="scan-gate-hint" id="scanGateHint" style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:-.35rem;margin-bottom:.6rem;line-height:1.4">Tip: remove reflective sleeves &mdash; glare hides the card number.</div>
     <!-- Grade scan packs (shown only in grade mode) -->
     <div class="scan-gate-packs" id="scanGatePacksSection" style="display:none">
@@ -3292,7 +3292,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="scan-gate-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
     <div class="scan-gate-icon">📸</div>
     <div class="scan-gate-title">How to take a great grading photo</div>
-    <div class="scan-gate-sub" style="line-height:1.5">Follow these and the AI can see the same defects a real grader would. It's a screening tool, not a PSA replacement — <a href="/accuracy" style="color:var(--gold-text);text-decoration:underline">see our accuracy log</a>.</div>
+    <div class="scan-gate-sub" style="line-height:1.5">Clear photos help reveal visible condition issues. Photo estimates can miss defects or differ from a professional grade; this is a screening tool, not a PSA replacement — <a href="/accuracy" style="color:var(--gold-text);text-decoration:underline">see our accuracy log</a>.</div>
 
     <!-- Golden Rules with real DO/DON'T demo photos.
          Images are lazy-loaded — they don't hit the network until the
@@ -4127,7 +4127,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.7208454f.js"></script>
+<script defer src="/js/core.d9d75e68.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4181,9 +4181,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .membership-account-status:not([hidden]) { position:relative; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0; padding:14px 16px; border:1px solid var(--gold,#d4af37); border-radius:12px; background:var(--surface,#171717); color:var(--text,#fafafa); font-size:.875rem; line-height:1.5; }
 .membership-account-status button { min-height:44px; padding:10px 16px; border:1px solid var(--gold,#d4af37); border-radius:8px; background:var(--surface-2,#252525); color:inherit; font:inherit; cursor:pointer; }
 </style>
-<script defer src="/js/membership-shop.d47ca262.js"></script>
+<script defer src="/js/membership-shop.32696313.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.4d5c325d.js"></script>
+<script defer src="/js/ui.161ab8c0.js"></script>
   <script defer src="/js/binder.033366b3.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.d7045eef.js"></script>
@@ -4705,8 +4705,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </div>
 
 <!-- =====================================================================
-     BULK GRADE OVERLAY (Pro Max / Ultimate)
-     Grades up to 25 cards in one session via /api/scan?mode=grade
+     BULK GRADE OVERLAY (Pro / Business)
+     Grades up to 10 cards in one session via /api/scan?mode=grade
      with concurrency=2 (Ximilar sync grader is ~3-8s per call).
      ===================================================================== -->
 <div id="bulkGradeOverlay" role="dialog" aria-modal="true" aria-label="Bulk grade" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:300;flex-direction:column;overflow:hidden">
@@ -4715,9 +4715,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div>
       <div style="font-size:1rem;font-weight:800;color:#fff;display:flex;align-items:center;gap:.4rem">
         <span style="color:var(--gold-text)">⭐</span> Bulk AI Grade
-        <span style="font-size:.6rem;font-weight:800;letter-spacing:.06em;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.15rem .4rem;border-radius:99px">PRO MAX</span>
+        <span style="font-size:.6rem;font-weight:800;letter-spacing:.06em;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.15rem .4rem;border-radius:99px">PRO / BUSINESS</span>
       </div>
-      <div id="bulkGradeSubtitle" style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">1 grade credit per card · up to 25 per session</div>
+      <div id="bulkGradeSubtitle" style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">1 grade credit per card · up to 10 per session</div>
     </div>
     <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:rgba(255,255,255,.6);font-size:1.5rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
   </div>
@@ -4725,20 +4725,20 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <!-- ==================== TIER GATE (free / pro) ==================== -->
   <div id="bulkGradeTierGate" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:2rem 1.5rem;text-align:center;gap:1rem">
     <div style="font-size:2.5rem">🔒</div>
-    <div style="font-size:1.1rem;font-weight:800;color:#fff">Bulk Grade is a Pro Max feature</div>
+    <div style="font-size:1.1rem;font-weight:800;color:#fff" id="bulkGradeGateTitle">Bulk Grade is included with Pro and Business</div>
     <div style="font-size:.85rem;color:var(--text-muted);max-width:340px;line-height:1.5">
-      Grade 25 cards in one shot instead of one-at-a-time. Ideal for evaluating a full binder page,
-      an Etsy lot, or a whole PC before submitting to PSA.
+      Queue up to 10 cards for Quick or Deep Grade estimates. Each card needs its own photos;
+      normal per-card credits apply. Review the results before deciding what to submit.
     </div>
     <div style="background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:12px;padding:.9rem 1.1rem;max-width:340px;font-size:.78rem;color:rgba(255,255,255,.85);line-height:1.55;text-align:left">
-      <div style="font-weight:800;color:var(--gold-text);margin-bottom:.4rem">Pro Max includes:</div>
-      • 40 AI Grades/mo · 100 ID scans/mo<br>
+      <div style="font-weight:800;color:var(--gold-text);margin-bottom:.4rem">Pro includes:</div>
+      • 40 Grade credits/mo · 250 ID credits/mo<br>
       • 15% off top-up packs<br>
       • <strong style="color:#fff">Bulk Grade tool</strong> (this one)<br>
       • All 15 marketplaces unlocked<br>
       • COMC &amp; Fanatics consignment + 4 buylists (Card Kingdom, CoolStuffInc, SCG, TCG Bulk)
     </div>
-    <button onclick="closeBulkGrade();openPricingModal('bulk_grade_gate')" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">Upgrade to Pro Max — $19.99/mo</button>
+    <button id="bulkGradeUpgradeBtn" onclick="closeBulkGrade();openPricingModal('bulk_grade_gate')" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">Compare Pro and Business</button>
     <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:var(--text-muted);font-size:.78rem;cursor:pointer;text-decoration:underline">Maybe later</button>
   </div>
 
@@ -4758,8 +4758,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div style="font-size:1.05rem;font-weight:800;color:#fff;max-width:340px;line-height:1.4">Grade a whole stack at once</div>
     <div style="font-size:.82rem;color:var(--text-muted);max-width:340px;line-height:1.55">
-      Upload front photos of up to <strong style="color:#fff">25 cards</strong>. Each gets a full
-      AI grade (corners, edges, surface, centering) with expected PSA 10 ROI.
+      Upload front and back photos of up to <strong style="color:#fff">10 cards</strong>. Each gets a photo-based
+      condition estimate. Deep Grade also uses four edge close-ups.
     </div>
     <div style="font-size:.72rem;color:rgba(255,255,255,.55);max-width:320px;line-height:1.55;padding:.55rem .8rem;background:rgba(255,255,255,.04);border-radius:8px">
       💡 Tip: use good lighting and lay cards flat. Photo quality drives grade accuracy.

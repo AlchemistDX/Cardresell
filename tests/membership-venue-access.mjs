@@ -41,6 +41,21 @@ for (const [tier, count] of Object.entries({ pro: 9, pro_max: 15, ultimate: 15, 
   assert.equal(actualVenues().length, count, 'legacy ' + tier); checks++;
 }
 assert.equal(membershipVenueAccess('__proto__').count, 2); checks++;
+const ui = fs.readFileSync(new URL('../' + index.match(/src="\/?(js\/ui\.[a-f0-9]+\.js)"/)[1], import.meta.url), 'utf8');
+const uiAst = parse(ui, { ecmaVersion:'latest' });
+const helper = uiAst.body.find(n=>n.id?.name === '_bulkGradeAccess');
+const batchAccess = new Function('window',ui.slice(helper.start,helper.end)+'; return _bulkGradeAccess;')(window);
+window.googleUser={sub:'owner-a'};window._isPro=true;
+for(const p of publicMembershipCatalogue().plans){
+  window._userTier=p.id;
+  window._membershipVenueAccess={owner:'owner-a',plan:p.id,bulkGrade:p.features.bulkGrade};
+  assert.equal(batchAccess(),['pro','business'].includes(p.id));checks++;
+}
+window.googleUser={sub:'owner-b'};assert.equal(batchAccess(),null);checks++;
+window.googleUser={sub:'owner-a'};delete window._membershipVenueAccess.bulkGrade;
+assert.equal(batchAccess(),null);checks++;
+window._membershipVenueAccess=null;window._userTier='pro_max';assert.equal(batchAccess(),true);checks++;
+window._isPro=false;assert.equal(batchAccess(),false);checks++;
 console.log(`Membership venue access: ${checks} passed`);
 
 finish(checks, 0);

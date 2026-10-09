@@ -2,7 +2,7 @@
 // rollback into legacy writers. No enrollment, flag changes, or Stripe calls.
 import { membershipVenueAccess } from './_membershipVenuePolicy.js';
 import * as legacy from './_idBilling.js';
-import { createMembershipConsumption, MembershipConsumptionError } from './_membershipConsumption.js';
+import { createMembershipConsumption, MembershipConsumptionError, membershipEnrollmentKey } from './_membershipConsumption.js';
 import { membershipRedis, membershipRouteMode } from './_membershipLegacyFence.js';
 import { grantMembership } from './_membershipLedger.js';
 import { withWelcomeDailyCap, clearWelcomeDeferral } from './_welcomeDailyCap.js';
@@ -72,6 +72,11 @@ export async function membershipWelcome(owner, email) {
   return { ...result, newlyGranted: result.granted && !replayed };
 }
 export async function membershipBalances(owner) {
+  // A new account is not a ledger outage. Do not invent zero balances or
+  // create an enrollment here; the normal account route owns setup.
+  if (await membershipRedis(['GET', membershipEnrollmentKey(owner)]) === null) {
+    throw new MembershipConsumptionError('membership_setup_required');
+  }
   const context = { owner, receipt: '0'.repeat(64), scan: 'read-only-balance' };
   const id = await membershipBilling('snapshot', context);
   const grade = await membershipBilling('snapshot', { ...context, mode: 'grade' });

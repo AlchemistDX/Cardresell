@@ -180,7 +180,7 @@ function grabFn(src, name) {
   ok('a 403 surfaces the server message', /e\.error/.test(seg));
   ok('a 403 tells the user', /showToast\(/.test(seg));
   ok('a 403 has a message even if the body is unparseable',
-     /Bulk Grade requires Pro Max\./.test(seg));
+     /Bulk Grade requires Pro or Business\./.test(seg));
   // 402 and 401 handling must survive.
   ok('the 402 out-of-credits path still exists', /resp\.status === 402/.test(HTML));
   ok('the 401 auth path still exists in the grade worker',
@@ -191,7 +191,7 @@ function grabFn(src, name) {
   // only thing standing between a Free user and the workflow.
   ok('the client tier gate is still present', /_bulkGradeShowSection\('tierGate'\)/.test(HTML));
   ok('the client gate still recognises pro_max',
-     /isEligible\s*=\s*tier === 'pro_max'/.test(HTML));
+     /\['pro_max', 'ultimate'\]\.includes\(window\._userTier\)/.test(HTML));
 }
 
 /* ═══════════════════════════════════════════════════════════

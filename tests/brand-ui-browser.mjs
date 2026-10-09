@@ -61,6 +61,17 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  check('photo tip text follows theme',await page.locator('.pt-sub').first().evaluate(e=>getComputedStyle(e).color),theme==='light'?'rgb(107, 105, 96)':'rgb(145, 143, 134)');
  if(shots)await page.screenshot({path:`${shots}/tips-${theme}-${viewport.width}.png`});
  await page.evaluate(()=>closePhotoTipsModal());
+ for(const [tier,allowed] of Object.entries({free:false,starter:false,casual:false,pro:true,business:true})){
+  await page.evaluate(({tier,allowed})=>{window.googleUser={sub:'fixture'};window._userTier=tier;window._isPro=tier!=='free';window._membershipVenueAccess={owner:'fixture',plan:tier,bulkGrade:allowed};openBulkGrade('quick')},{tier,allowed});
+  check(tier+' batch gate matches server capability',await page.locator('#bulkGradeTierGate').isVisible(),!allowed);
+  check(tier+' batch intro matches server capability',await page.locator('#bulkGradeIntro').isVisible(),allowed);
+  check(tier+' batch screen fits viewport',await fit(),true);
+  await page.evaluate(()=>closeBulkGrade());
+ }
+ await page.evaluate(()=>{window._membershipVenueAccess={owner:'other',plan:'business',bulkGrade:true};openBulkGrade('deep')});
+ check('unverified batch access does not sell an upgrade',await page.locator('#bulkGradeUpgradeBtn').isVisible(),false);
+ await page.evaluate(()=>{closeBulkGrade();window._membershipVenueAccess=null;window._userTier='free';window._isPro=false});
+
  for(const view of ['collection','drafts','flips','lookup']){await page.evaluate(v=>switchView(v),view);check(view+' fits viewport',await fit(),true)}
  await page.evaluate(()=>{switchView('collection');switchCollectionSection('cards')});
  check('Collection navigation is announced',await page.locator('.view-tab[data-view="collection"]').getAttribute('aria-pressed'),'true');

@@ -2,17 +2,19 @@
 import { LAUNCH_PLANS, LAUNCH_PACKS, LAUNCH_WELCOME_CREDITS, quoteLaunchPack } from './_launchMembershipConfig.js';
 
 import { membershipVenueAccess } from './_membershipVenuePolicy.js';
+import { MEMBERSHIP_FEATURE_VERSION, MEMBERSHIP_PAID_FEATURES } from './_membershipFeaturePolicy.js';
 import { reportMembershipFailure } from './_membershipDiagnostics.js';
 
 export function publicMembershipCatalogue(plan = 'free') {
   if (!Object.hasOwn(LAUNCH_PLANS, plan)) throw new Error('membership_context_unavailable');
   return {
-    version: 'launch-v2', currency: 'usd', interval: 'month', creditsExpire: false,
+    version: 'launch-v2', featureVersion: MEMBERSHIP_FEATURE_VERSION, currency: 'usd', interval: 'month', creditsExpire: false,
     welcome: LAUNCH_WELCOME_CREDITS,
     plans: Object.entries(LAUNCH_PLANS).map(([id, p]) => ({
       id, name: id[0].toUpperCase() + id.slice(1), monthlyPriceCents: p.monthlyPriceCents,
       idCredits: p.idCredits, gradeCredits: p.gradeCredits,
       packDiscountPercent: p.packDiscountPercent, marketplaceCount: membershipVenueAccess(id).count,
+      features: { bulkGrade: MEMBERSHIP_PAID_FEATURES[id]?.bulkGrade === true },
     })),
     // Do not advertise unfinished quota/storage features through the shop.
     packs: Object.keys(LAUNCH_PACKS).map(id => quoteLaunchPack(id, plan)),

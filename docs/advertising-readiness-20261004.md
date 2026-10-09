@@ -1,3 +1,7 @@
+## 2026-10-08 evening: tier access and launch-copy completion
+
+See `tier-access-and-advertising-20261009.md` for the current feature matrix, enforcement, validation and remaining live gates. Pro/Business batch access now follows server-validated paid-through authority. Active UI labels and public About/Terms/Contact/Accuracy copy match current offers; missing first enrollment reports setup rather than an outage. Listing/storage quotas remain unadvertised. Gmail onboarding is already accepted; the latest camera phone check and the recorded live fallback/public-admission conditions remain open. Approximately 90% of the bounded launch effort after verified release; not advertising-ready yet. No ad spend, new purchases, account mutation or admission change.
+
 ## 2026-10-08: camera warnings survive missing outlines
 
 See `docs/camera-phone-acceptance-20261008.md` for the source diagnosis, focused validation and the six unpaid phone checks. View-level softness/darkness/detail checks no longer depend on finding a card outline; capture metadata remains localized-only. Analysis errors are visible, and changing hint wording invalidates stale displayed advice. Real-browser worker/canvas scenes pass locally. Phone acceptance remains open; pilot stays on; readiness approximately 85%.

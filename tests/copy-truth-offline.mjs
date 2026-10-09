@@ -81,7 +81,7 @@ ok(routes.indexOf('/photo-tips/(.*\\.webp)') < routes.indexOf('/photo-tips/?'), 
 ok(['Starter','Casual','Pro','Business'].every(p => pr.includes(`<th scope="row">${p}</th>`)),
    'all four new paid plans appear in the monthly comparison');
 ok(!/data-upgrade-tier="ultimate"/.test(pr), 'no Ultimate CTA remains on the pricing page');
-ok(!pr.includes('p=annual') && pr.includes('Five monthly plans.'),
+ok(!pr.includes('p=annual') && ['Free','Starter','Casual','Pro','Business'].every(p => pr.includes('<th scope="row">'+p+'</th>')),
    'new catalogue does not offer unsupported annual checkout');
 ok(idx.includes('_pendingUpgradeInterval') && idx.includes("p.get('p')"),
    'index.html reads and stashes the handed-over interval');
@@ -385,8 +385,8 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
     logTimes.every((t, i) => i === 0 || logTimes[i - 1] >= t),
     'dated changelog entries are ordered newest-first as the heading claims'
   );
-  ok(/We audit this page every release cycle/.test(ac),
-     'accuracy header carries the audit-cadence promise');
+  ok(/Fee verification dates are shown separately/.test(ac),
+     'accuracy header distinguishes page changes from fee verification');
   ok(/Poshmark, COMC and Fanatics&nbsp;Collect re-verified/.test(ac),
      'the Sep 1 re-verification changelog entry exists');
   ok(/Terms &amp; Privacy rewritten/.test(ac),
@@ -463,13 +463,13 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 
   // Issue 3 - pricing.html spells all 4 buylists
   const pr2 = fs.readFileSync('pricing.html','utf8');
-  ok(!/Buylist quotes|marketplace access|photo storage|active listings/i.test(pr2),
-     'credit catalogue does not infer unrelated feature capabilities');
+  ok(!/\d+\s*(?:MB|GB)|\d+\s*active listings|guaranteed buylist quotes/i.test(pr2),
+     'catalogue does not advertise dormant storage or listing quantities');
   ok(!/eBay, COMC, Fanatics Collect &amp; more/.test(idx),
      'homepage feature blurb no longer promises COMC/Fanatics on Free');
   ok(/eBay, TCGplayer, Whatnot &amp; more/.test(idx),
      'homepage feature blurb names venues Free actually sees');
-  ok(/Compare current monthly allowances and credit-pack discounts/.test(idx),
+  ok(/Check Subscriptions for current plan details/.test(idx),
      'home upsell refers to the current catalogue rather than retired tier bundles');
 
   // Issue 4 - Ultimate removed from every user-facing surface

@@ -345,7 +345,6 @@ for (const id of ['scanStatus', 'bulkProgressLabel', 'bulkGradeProgressLabel']) 
     ['.game-select', 'the game selector (was 178x34.6)'],
     ['.venues-btn', 'the venues button (was 120.2x34.6)'],
     ['.vc-edit', 'the collection edit control (was 28.4x24.4)'],
-    ['#tryExampleBtn', 'Try Charizard (was 118.7x27.4)'],
   ];
   for (const [sel, why] of REQUIRED) {
     ok(`the mobile block sizes ${why}`, b.includes(sel));
@@ -364,14 +363,14 @@ for (const id of ['scanStatus', 'bulkProgressLabel', 'bulkGradeProgressLabel']) 
   for (const cls of ['scan-sub-btn', 'game-select', 'venues-btn', 'vc-edit']) {
     ok(`.${cls} is used in the markup or a template`, HTML.includes(cls + '"') || HTML.includes(cls + ' '));
   }
-  ok('#tryExampleBtn is a real element id', HTML.includes('id="tryExampleBtn"'));
+  ok('unwanted example CTA stays removed', !HTML.includes('id="tryExampleBtn"'));
   // Icon-only controls get a hit box, not a bigger glyph.
   ok('the promo close gets a 44px hit box', b.includes('.promo-banner-close'));
   ok('the pricing close gets a 44px hit box', b.includes('.pricing-close'));
   ok('icon hit boxes are centred so the glyph stays put',
      /min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center/.test(b));
   ok('the close-button rule names classes that exist',
-     HTML.includes('class="promo-banner-close"') && HTML.includes('class="pricing-close"'));
+     HTML.includes('class="pricing-close"') && HTML.includes('class="pricing-close-btn"'));
   // ── Block D2.1: the drafts screen's two interactive elements ────────────
   ok('the stub-row action gets a 44px target', b.includes('.draft-row-action'));
   ok('the paging control gets a 44px target', b.includes('.draft-more-btn'));

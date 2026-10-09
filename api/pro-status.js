@@ -60,7 +60,10 @@ export default async function handler(req, res) {
       // Verification survives an unavailable ledger; do not invent zero balances.
       let b;
       try { b = await membershipBalances(userSub); }
-      catch {
+      catch (error) {
+        if (error.code === 'membership_setup_required') return res.status(409).json({
+          error: error.code, action: 'complete_account_setup', creditsAvailable: false,
+          email: userEmail, emailVerified, verifiedEmail: saved ? verifiedEmail : userEmail, signInProvider });
         return res.status(503).json({ error: 'billing_unavailable', creditsAvailable: false,
           email: userEmail, emailVerified, verifiedEmail: saved ? verifiedEmail : userEmail, signInProvider });
       }

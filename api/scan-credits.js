@@ -31,7 +31,11 @@ export default async function handler(req, res) {
       if (!user.uid) return res.status(401).json({ error: 'Sign in to view credits.' });
       return res.status(200).json(await membershipBalances(user.uid));
     }
-  } catch { return res.status(503).json({ error: 'billing_unavailable' }); }
+  } catch (error) {
+    if (error.code === 'membership_setup_required') return res.status(409).json({
+      error: error.code, action: 'complete_account_setup', creditsAvailable: false });
+    return res.status(503).json({ error: 'billing_unavailable' });
+  }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const kvUrl     = process.env.KV_REST_API_URL;
