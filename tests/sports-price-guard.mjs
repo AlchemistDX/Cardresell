@@ -130,14 +130,12 @@ const hostChecks = [
    !/`https:\/\/www\.pricecharting\.com\/api\//.test(src)],
   ['every API call uses PC_HOST',
    (src.match(/\$\{PC_HOST\}\/api\//g) || []).length >= 5],
-  // 2026-09-04: pinning one literal version made this check fail the very
-  // bump it exists to demand (v7 -> v8 for the identity guard). Assert the
-  // current version AND that every superseded one is absent, so the check
-  // still catches a missing bump but survives a legitimate one.
-  ['cache key bumped past v6',
-   /const cacheKey = `v10\|/.test(src) && !/const cacheKey = `v[1-9]\|/.test(src)],
+  // v11 invalidates entries that omitted sport/brand. Actual handler tests in
+  // pricing-request-budget also verify facet and delimiter collision behavior.
+  ['cache key invalidates pre-facet entries',
+   /const cacheKey = 'v11\|'/.test(src)],
   ['parallel is part of the cache key',
-   /const cacheKey = `v\d+\|[^`]*\$\{parallel\}/.test(src)],
+   /const cacheKey = 'v11\|' \+ JSON.stringify\(\[[\s\S]*?parallel, pcid, wantVariants, sport, brand\]/.test(src)],
   // The identity guard reaches the response path at all.
   ['identity mismatch is refused, not priced',
    /reason: 'identity_mismatch'/.test(src)

@@ -15,26 +15,23 @@
 // page → "API/Download". If unset, endpoint returns { source: 'unconfigured' }
 // with insufficient confidence — the client already handles this gracefully.
 
+import { createPricingRequest, pricingCacheCommand } from './_pricingRequest.js';
+
 const CACHE_TTL_SEC = 6 * 60 * 60; // 6 hours (PriceCharting refreshes daily)
 
 async function getCached(kvUrl, kvToken, key) {
   if (!kvUrl || !kvToken) return null;
   try {
-    const r = await fetch(`${kvUrl}/get/${encodeURIComponent('pc_cache:' + key)}`,
-      { headers: { Authorization: `Bearer ${kvToken}` } });
-    const d = await r.json();
-    if (d.result) return JSON.parse(d.result);
+    const value = await pricingCacheCommand(kvUrl, kvToken, ['GET', 'pc_cache:' + key]);
+    if (value) return JSON.parse(value);
   } catch(e) {}
   return null;
 }
 
-async function setCache(kvUrl, kvToken, key, data) {
+async function setCache(kvUrl, kvToken, key, data, ttl = CACHE_TTL_SEC) {
   if (!kvUrl || !kvToken) return;
   try {
-    await fetch(
-      `${kvUrl}/setex/${encodeURIComponent('pc_cache:' + key)}/${CACHE_TTL_SEC}/${encodeURIComponent(JSON.stringify(data))}`,
-      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
-    );
+    await pricingCacheCommand(kvUrl, kvToken, ['SETEX', 'pc_cache:' + key, ttl, JSON.stringify(data)]);
   } catch(e) {}
 }
 
@@ -443,6 +440,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
+  const query = req.query || {};
+  const limits = { name: 200, q: 200, grade: 40, game: 30, number: 40, set: 200,
+    year: 10, sport: 40, brand: 100, parallel: 150, variants: 5, pcid: 30 };
+  if (Object.entries(limits).some(([key, limit]) => query[key] != null &&
+      (typeof query[key] !== 'string' || query[key].length > limit))) {
+    return res.status(400).json({ error: 'Invalid pricing query' });
+  }
+  req.query = query;
+
   const name   = (req.query.name   || req.query.q || '').trim();
   const grade  = (req.query.grade  || '').trim();
   const game   = (req.query.game   || 'pokemon').trim().toLowerCase();
@@ -488,7 +494,7 @@ export default async function handler(req, res) {
   const PC_HOST = (game === 'sports')
     ? 'https://www.sportscardspro.com'
     : 'https://www.pricecharting.com';
-  const fetchedAt = new Date().toISOString();
+  const fetchedAt = new Date(Date.now()).toISOString();
 
   // Emergency stopgap: if the key isn't configured yet, return a graceful
   // "insufficient" so the client falls back to eBay/tcgcsv without a crash.
@@ -514,12 +520,17 @@ export default async function handler(req, res) {
   // v8 (2026-09-04): identity guard changes WHICH product may be priced, so
   // every v7 entry that admitted a mismatched card must be invalidated.
   // v10 (2026-10-06): name-only TCG matches are no longer 'exact product match'.
-  const cacheKey = `v10|${game}|${name}|${setStr}|${number}|${year}|${grade}|${parallel}|${pcid}|${wantVariants ? 'L' : ''}`.toLowerCase();
+  // Sport and brand affect admission. Delimited strings can collide when a
+  // field itself contains the delimiter, so serialize the complete tuple.
+  const cacheKey = 'v11|' + JSON.stringify([game, name, setStr, number, year, grade,
+    parallel, pcid, wantVariants, sport, brand]).toLowerCase();
 
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
     const cacheAgeSec = Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 1000);
-    return res.status(200).json({ ...cached, cached: true, cacheAgeSec });
+    const ttl = cached.source === 'pricecharting-error' ? 60 : CACHE_TTL_SEC;
+    if (cacheAgeSec >= 0 && cacheAgeSec < ttl) return res.status(200).json({ ...cached, cached: true, cacheAgeSec,
+      ...(cached.source === 'pricecharting-error' ? { retryAfterSec: Math.max(1, ttl - cacheAgeSec) } : {}) });
   }
 
   // Build query — PriceCharting fuzzy-matches, so we send name + set + number
@@ -555,38 +566,20 @@ export default async function handler(req, res) {
   const q = qParts.join(' ');
   const url = `${PC_HOST}/api/product?t=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}`;
 
-  // 2026-08-30: retry with backoff on transient PC upstream failures.
-  // Root cause found in grade_price_audit_2026-08-30: at even 4 req/s the PC
-  // upstream returns 429/5xx or times out for ~40% of requests. The data IS
-  // there — cards that returned {source:'pricecharting-error'} succeeded when
-  // retried individually. So retry 2x with 400ms + 900ms backoff before
-  // giving up, and use 12s per-attempt timeout (was 8s).
-  async function fetchPcWithRetry(u) {
-    const backoffs = [0, 400, 900]; // 3 attempts total
-    let lastErr = null;
-    for (let i = 0; i < backoffs.length; i++) {
-      if (backoffs[i]) await new Promise(r => setTimeout(r, backoffs[i]));
-      try {
-        const controller = new AbortController();
-        const timeoutId  = setTimeout(() => controller.abort(), 12000);
-        const resp = await fetch(u, {
-          headers: { 'User-Agent': 'CardResell/1.0', 'Accept': 'application/json' },
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (resp.ok) return await resp.json();
-        // 5xx and 429 are retryable; 4xx (except 429) are not
-        if (resp.status !== 429 && resp.status < 500) {
-          throw new Error(`PriceCharting returned ${resp.status}`);
-        }
-        lastErr = new Error(`PriceCharting returned ${resp.status} (attempt ${i+1})`);
-      } catch(e) {
-        // AbortError, network, JSON parse — all retryable
-        lastErr = e;
-      }
-    }
-    throw lastErr || new Error('PriceCharting failed after retries');
-  }
+  // Shared deadline/call ceiling across search, identity correction and retries.
+  // Do not retry authorization failures, rate limits, malformed or stalled bodies.
+  const fetchPcWithRetry = createPricingRequest();
+  const unavailable = async (variants = false) => {
+    const data = {
+      median: null, avg: null, low: null, high: null, count: 0,
+      confidence: 'insufficient', confidenceScore: 0,
+      confidenceReasons: ['PriceCharting temporarily unavailable'],
+      source: 'pricecharting-error', retryAfterSec: 60, fetchedAt, cacheAgeSec: 0,
+      ...(variants ? { mode: 'variants', variants: [] } : {}),
+    };
+    await setCache(kvUrl, kvToken, cacheKey, data, 60);
+    return res.status(200).json(data);
+  };
 
   // SPORTS resolution. PriceCharting's single-best-match endpoint reliably
   // lands on Funko POP figures for player-name queries ("Tom Brady" -> Funko
@@ -652,11 +645,7 @@ export default async function handler(req, res) {
       await setCache(kvUrl, kvToken, cacheKey, data);
       return res.status(200).json(data);
     } catch (e) {
-      return res.status(200).json({
-        median: null, confidence: 'insufficient', confidenceScore: 0,
-        confidenceReasons: ['pricecharting-error'], source: 'pricecharting-error',
-        fetchedAt, cacheAgeSec: 0,
-      });
+      return unavailable();
     }
   }
 
@@ -701,10 +690,7 @@ export default async function handler(req, res) {
       await setCache(kvUrl, kvToken, cacheKey, data);
       return res.status(200).json(data);
     } catch (e) {
-      return res.status(200).json({
-        mode: 'variants', variants: [], count: 0,
-        source: 'pricecharting-error', fetchedAt, cacheAgeSec: 0,
-      });
+      return unavailable(true);
     }
   }
 
@@ -902,26 +888,7 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
 
   } catch(e) {
-    console.error('pricecharting error:', e.message);
-    // 2026-08-30: cache the ERROR briefly so a hot burst of requests for the
-    // same card doesn't hammer PC. 60s is short enough that a transient PC
-    // outage doesn't pin bad data in KV for 6h, but long enough to dedupe
-    // simultaneous scan retries. Successful results still get the full 6h TTL.
-    const errData = {
-      median: null, avg: null, low: null, high: null, count: 0,
-      confidence: 'insufficient', confidenceScore: 0,
-      confidenceReasons: [e.message || 'PriceCharting request failed'],
-      source: 'pricecharting-error', fetchedAt, cacheAgeSec: 0,
-    };
-    // Short-TTL cache for errors only
-    if (kvUrl && kvToken) {
-      try {
-        await fetch(
-          `${kvUrl}/setex/${encodeURIComponent('pc_cache:' + cacheKey)}/60/${encodeURIComponent(JSON.stringify(errData))}`,
-          { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
-        );
-      } catch(_) {}
-    }
-    return res.status(200).json(errData);
+    console.warn('pricecharting unavailable:', e.reason || 'provider_unavailable');
+    return unavailable();
   }
 }
