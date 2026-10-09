@@ -79,7 +79,8 @@ try {for(const size of [{width:390,height:844},{width:844,height:390}]) {
  await page.addScriptTag({content:readFileSync(new URL(html.match(/src="\/([^\"]*membership-shop\.[a-f0-9]+\.js)"/)[1],root),'utf8')});
  await page.evaluate(()=>openMembershipShop('subscriptions'));
  assert.equal(await page.locator('.membership-plan').count(),5);
- assert.ok(await page.getByText('Same marketplace tools as Pro, with higher allowances and a larger pack discount.').isVisible());
+ assert.ok(await page.getByText('Already using Pro? Business keeps the same comparison tools and gives you more capacity for larger batches.').isVisible());
+ assert.ok(await page.getByText('500 more ID credits and 60 more Grade credits each month than Pro.').isVisible());
  assert.equal(await page.locator('.membership-subscriptions').evaluate(e=>e.scrollWidth>e.clientWidth),false);
  if(process.env.CR_SHOT_DIR) await page.screenshot({path:process.env.CR_SHOT_DIR+'/subscriptions-'+size.width+'.png'});
  console.log('Subscription benefits render with live catalogue values, five plans and no horizontal overflow');

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// HISTORICAL October 5 model: old model/token inputs and Ximilar allocation.
+// Use tools/unit-economics-current.mjs for corrected quota/overflow scenarios.
 // Planning model for CardResell variable margin. NOT invoice accounting.
 // Inputs are public list prices (2026-10-05) plus code-derived call patterns;
 // replace the token assumptions with measured PROVIDER_USAGE output
@@ -84,6 +86,7 @@ export function model() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  console.error('HISTORICAL MODEL: use tools/unit-economics-current.mjs; do not add the Ximilar allocation here to its fixed monthly fee.');
   const m = model();
   if (process.argv.includes('--json')) { console.log(JSON.stringify(m, null, 2)); process.exit(0); }
   console.log(m.label);
