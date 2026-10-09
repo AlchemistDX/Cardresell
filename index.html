@@ -1462,7 +1462,6 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
   .game-select{min-height:44px}
   .venues-btn{min-height:44px;padding-block:.55rem}
   .vc-edit{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
-  #tryExampleBtn{min-height:44px;padding-inline:.9rem}
   .promo-banner-close,.pricing-close,.pricing-close-btn,.auth-modal-close,.modal-close{
     min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center
   }
@@ -2277,33 +2276,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
 </div>
 
-<!-- SOCIAL PROOF BAR + Try-an-example CTA -->
-<!-- 2026-08-31: first-visit "Try Charizard →" attention pulse.
-     First-time visitors see: a "New here?" prefix + a gentle 3-cycle pulse
-     on the button so it's discoverable without hijacking their attention.
-     Once they've either clicked it or come back a second time, the pulse
-     drops and the label reverts to the neutral "Try an example". -->
-<style>
-  @keyframes _tryExamplePulse {
-    0%,100% { box-shadow: 0 2px 8px rgba(196,122,0,.35); transform: scale(1); }
-    50%     { box-shadow: 0 3px 14px rgba(196,122,0,.65), 0 0 0 4px rgba(196,122,0,.18); transform: scale(1.045); }
-  }
-  #tryExampleBtn.first-visit {
-    animation: _tryExamplePulse 1.9s ease-in-out 3;
-  }
-  #tryExampleFirstVisitPrefix { display:none }
-  #tryExampleBtn.first-visit + #tryExampleFirstVisitPrefix,
-  body.first-visit #tryExampleFirstVisitPrefix { display:inline }
-  @media (prefers-reduced-motion: reduce) {
-    #tryExampleBtn.first-visit { animation:none }
-  }
-</style>
+<!-- SOCIAL PROOF BAR -->
 <div id="howItWorksBar" style="padding:.38rem 1rem;background:linear-gradient(135deg,rgba(196,122,0,.07),rgba(196,122,0,.03));border-bottom:1px solid rgba(196,122,0,.15);display:flex;align-items:center;justify-content:space-between;gap:.75rem">
   <span id="socialProofBar" style="font-size:.72rem;color:var(--text-muted);display:none">Over <span id="socialProofCount" style="color:var(--gold-text);font-weight:800"></span> <span id="socialProofLabel"></span></span>
-  <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
-    <span id="tryExampleFirstVisitPrefix" style="font-size:.68rem;color:var(--text-faint);font-weight:600;white-space:nowrap">New here? →</span>
-    <button id="tryExampleBtn" onclick="loadExampleCard()" style="flex-shrink:0;font-size:.72rem;font-weight:800;color:#000;background:var(--gold);border:none;border-radius:99px;padding:.3rem .85rem;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(196,122,0,.35)">Try Charizard →</button>
-  </div>
 </div>
 
 <!-- SCAN GUARANTEE LINE — subtle, appears once under social proof -->
