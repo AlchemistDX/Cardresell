@@ -34,7 +34,7 @@ import { readCoreBundle } from './_assetRefs.mjs';
 import { K, reset, EP, fakeReq, fakeRes } from './_draftHarness.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 
 const T = harness('draft-review-screen');
 
@@ -73,7 +73,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const { server, port } = await startHost();
 const _pw = (await import(PW)).default;
 const { chromium } = _pw;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM, args: ['--no-sandbox'] });
 
 const F = await generateReadFixtures();
 
@@ -2747,7 +2747,7 @@ try {
         postLog.push({ seq: postLog.length + 1, tMs: Date.now() - t0, caseTag,
           body: JSON.parse(req.postData() || '{}') });
         await route.fulfill({ status: 201, contentType: 'application/json',
-          body: JSON.stringify({ draftId: 'drf_created' }) });
+          body: JSON.stringify({ draftId: 'drf_cccccccccccccccccccccccccccccccc' }) });
         return;
       }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });

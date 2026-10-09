@@ -17,7 +17,7 @@
 // replaces globalThis.fetch, because the endpoint's real auth and store paths
 // have to run against the fake rather than around it.
 
-process.env.KV_REST_API_URL   = 'https://kv.test';
+process.env.KV_REST_API_URL   = 'https://draft-test.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-token';
 
 const SUB = '1029384756';
@@ -60,7 +60,9 @@ globalThis.fetch = async (url, opts) => {
   }
   if (u.includes('googleapis.com')) return { ok: false, status: 500, json: async () => ({}) };
 
-  const parts = String(url).replace('https://kv.test/', '').split('/').map(decodeURIComponent);
+  const parts = opts?.method === 'POST' && opts.body
+    ? JSON.parse(opts.body).map(String)
+    : String(url).replace('https://draft-test.upstash.io/', '').split('/').map(decodeURIComponent);
   const [cmd, ...rest] = parts;
   seen.push(cmd.toLowerCase());
   const auth = (opts && opts.headers && opts.headers.Authorization) || '';

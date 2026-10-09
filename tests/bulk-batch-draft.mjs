@@ -54,7 +54,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 const PORT = Number(process.env.CR_BULK_DRAFT_PORT || 8341);
 const B = `http://127.0.0.1:${PORT}`;
 const SHOTS = process.env.CR_SHOT_DIR || '/home/user/workspace/shots';
@@ -110,7 +110,7 @@ const IDS = [
 const PRICE_BY_ID = { 'swsh35-74': 312.5, 'swsh7-215': 244.75 };
 
 const { chromium } = (await import(PW)).default;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM, args: ['--no-sandbox'] });
 
 /**
  * Boot the app, sign the seller in, and double ONLY the identification and
@@ -230,7 +230,8 @@ const rowsOf = (page) => page.evaluate(() =>
 const toasts = (page) => page.evaluate(() => window.__toasts.slice());
 const outcomes = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window._bulkDraftOutcomes || {})));
 const bodyOf = (rec) => { try { return JSON.parse(rec.body || '{}'); } catch (_) { return {}; } };
-const posts = (wire) => wire.filter(r => r.method === 'POST');
+// Batch manifests are admission requests, not per-card draft creates.
+const posts = (wire) => wire.filter(r => r.method === 'POST' && !new URL(r.url).searchParams.has('action'));
 
 async function selectAllAndCreate(page) {
   // Select-all is a TOGGLE and selection deliberately survives a completed
@@ -589,7 +590,7 @@ try {
     const saved = await page.evaluate(() => window.loadPortData());
 
     eq('two entries were added', saved.length - before, 2);
-    const e = saved[saved.length - 1];
+    const e = saved.find(row => row.card === 'Umbreon VMAX');
 
     // The exact key union the committed _bulkSaveToCollection wrote at
     // e75700c, frozen here. The refactor moved the identity half of this
@@ -711,9 +712,31 @@ try {
     await page.waitForTimeout(200);
 
     const stored = await listDrafts(sub);
-    ok('MUTATION TOOK: only two drafts exist where three cards were selected',
-       stored.total === 2, JSON.stringify({ total: stored.total }));
+    // The manifest now rejects duplicate physical identities before any create.
+    ok('collapsed copy identities are refused without writing drafts',
+       stored.total === 0, JSON.stringify({ total: stored.total }));
     ok('so G6\'s "two copies, two drafts" assertion is discriminating', true);
+    eq('no page errors', errors.join('|'), '');
+    await ctx.close();
+  });
+
+  await T.section('G10 — Collection selection reaches the real draft API', async () => {
+    const sub = 'u-collection-batch';
+    const {ctx,page,wire,errors} = await boot({sub});
+    await runScan(page,2);
+    await page.evaluate(() => { bulkSkipPricingAndSave(); closeBulkScan(); switchView('collection'); });
+    await page.getByRole('button',{name:'Select visible',exact:true}).click();
+    await page.locator('#collectionDraftTools [data-create]').click();
+    await page.waitForFunction(() => !document.querySelector('#collectionDraftTools [data-create]').textContent.includes('Preparing'));
+    eq('Collection selection stores two drafts', (await listDrafts(sub)).total, 2);
+    eq('each selected card has an Open draft action', await page.locator('.collection-draft-result button').count(), 2);
+    const ids = await page.evaluate(() => loadPortData().map(p => 'inst_col_'+p.id));
+    ok('creates use Collection physical identities',posts(wire).every(p=>ids.includes(JSON.parse(p.body).instanceId)));
+    await page.getByRole('button',{name:'Select visible',exact:true}).click();
+    await page.locator('#collectionDraftTools [data-create]').click();
+    await page.waitForFunction(() => !document.querySelector('#collectionDraftTools [data-create]').textContent.includes('Preparing'));
+    eq('repeat selection adopts both saved drafts', (await listDrafts(sub)).total, 2);
+    eq('Collection retains both cards',await page.evaluate(()=>loadPortData().length),2);
     eq('no page errors', errors.join('|'), '');
     await ctx.close();
   });

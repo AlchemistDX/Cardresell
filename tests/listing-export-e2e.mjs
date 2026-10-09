@@ -49,7 +49,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 const PORT = Number(process.env.CR_EXPORT_PORT || 8347);
 const B = `http://127.0.0.1:${PORT}`;
 
@@ -163,7 +163,7 @@ const SCAN_ROW = {
 };
 
 const { chromium } = (await import(PW)).default;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM, args: ['--no-sandbox'] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await ctx.newPage();
 const pageErrors = [];

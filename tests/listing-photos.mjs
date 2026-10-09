@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 const T = harness('listing-photos');
 
 const MIME = {
@@ -69,7 +69,7 @@ function startHost() {
 
 const { server, port } = await startHost();
 const _pw = (await import(PW)).default;
-const browser = await _pw.chromium.launch();
+const browser = await _pw.chromium.launch({ executablePath: process.env.CR_CHROMIUM, args: ['--no-sandbox'] });
 
 /* One context per scenario = one origin's storage, isolated. Two PAGES in the
    same context share storage, which is what makes the two-tab check real. */
@@ -891,7 +891,7 @@ const screenState = (page) => page.evaluate(() => ({
   await page.evaluate(() => {
     window.__posts = [];
     window._crIdToken = async () => 'test-token';
-    window.__nextDraftId = 'draft-scan-A';
+    window.__nextDraftId = 'drf_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     window.__failNetwork = false;
     const realFetch = window.fetch;
     window.fetch = async (url, opts) => {
@@ -912,7 +912,7 @@ const screenState = (page) => page.evaluate(() => ({
       card: row, instanceId: row.instanceId, idemKey: 'idem-A',
       price: 12.5, priceSource: 'comp', source: 'bulk-scan', batch: true,
     });
-    const listed = await window.photosList('draft-scan-A');
+    const listed = await window.photosList('drf_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     const p = listed.photos[0] || null;
     let bytes = null, type = null;
     if (p && p.blob) {
@@ -990,10 +990,10 @@ const screenState = (page) => page.evaluate(() => ({
       'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
     const src = () => ({ sourceKey: 'scan:inst-C', blob: blobOf(), name: 'scan-photo' });
     const [a, b] = await Promise.all([
-      window.photosAttachScan('draft-scan-C', src()),
-      window.photosAttachScan('draft-scan-C', src()),
+      window.photosAttachScan('drf_cccccccccccccccccccccccccccccccc', src()),
+      window.photosAttachScan('drf_cccccccccccccccccccccccccccccccc', src()),
     ]);
-    const listed = await window.photosList('draft-scan-C');
+    const listed = await window.photosList('drf_cccccccccccccccccccccccccccccccc');
     return { a, b, count: listed.order.length };
   });
   T.check('ACCEPTANCE: two simultaneous attachments produce exactly ONE photo',
@@ -1009,7 +1009,7 @@ const screenState = (page) => page.evaluate(() => ({
      The first attempt fails at the network. The second replays the same
      idempotency key and succeeds. One photo must result, not two. */
   const replay = await page.evaluate(async (row) => {
-    window.__nextDraftId = 'draft-scan-B';
+    window.__nextDraftId = 'drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     window.__failNetwork = true;
     let firstErr = null;
     try {
@@ -1021,7 +1021,7 @@ const screenState = (page) => page.evaluate(() => ({
       idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
     const third = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
       idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
-    const listed = await window.photosList('draft-scan-B');
+    const listed = await window.photosList('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     return { firstErr, second: second.photo, third: third.photo, count: listed.order.length };
   }, scanRow('inst-B'));
   T.check('ACCEPTANCE: interrupted creation then replay leaves exactly ONE photo',
@@ -1034,12 +1034,12 @@ const screenState = (page) => page.evaluate(() => ({
      The seller deletes the auto-attached photo. Retrying creation must not
      bring it back. */
   const removal = await page.evaluate(async (row) => {
-    const before = await window.photosList('draft-scan-B');
-    await window.photosRemove('draft-scan-B', before.order[0]);
-    const afterRemove = await window.photosList('draft-scan-B');
+    const before = await window.photosList('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+    await window.photosRemove('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', before.order[0]);
+    const afterRemove = await window.photosList('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     const retry = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
       idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
-    const afterRetry = await window.photosList('draft-scan-B');
+    const afterRetry = await window.photosList('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     return { removed: afterRemove.order.length, retry: retry.photo,
              after: afterRetry.order.length };
   }, scanRow('inst-B'));
@@ -1062,11 +1062,11 @@ const screenState = (page) => page.evaluate(() => ({
     // Seller deleted the scan photo above; now they add their own and reorder.
      const f = new File([new Uint8Array([1, 2, 3])], 'mine.png', { type: 'image/png' });
     const g = new File([new Uint8Array([4, 5, 6])], 'mine2.png', { type: 'image/png' });
-    await window.photosAdd('draft-scan-B', [f, g]);
-    await window.photosMove('draft-scan-B', (await window.photosList('draft-scan-B')).order[0], 'down');
+    await window.photosAdd('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', [f, g]);
+    await window.photosMove('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', (await window.photosList('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')).order[0], 'down');
     const retry = await window._crCreateDraft({ card: row, instanceId: row.instanceId,
       idemKey: 'idem-B', price: 5, priceSource: 'comp', source: 'bulk-scan', batch: true });
-    const listed = await window.photosList('draft-scan-B');
+    const listed = await window.photosList('drf_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     const origins = listed.photos.map(p => p.origin);
     return { retry: retry.photo, count: listed.order.length, origins };
   }, scanRow('inst-B'));
@@ -1084,7 +1084,7 @@ const screenState = (page) => page.evaluate(() => ({
   await page2.goto(page.url(), { waitUntil: 'domcontentloaded' });
   await page2.waitForFunction(() => typeof window.photosList === 'function', { timeout: 15000 });
   const reopened = await page2.evaluate(async () => {
-    const a = await window.photosList('draft-scan-A');
+    const a = await window.photosList('drf_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     const other = await window.photosList('draft-unrelated');
     const pa = a.photos[0] || null;
     return { a: a.order.length, aOrigin: pa && pa.origin, other: other.order.length };

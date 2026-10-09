@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const PORT = Number(process.env.DEV_PORT || 8100);
 const PROJECT_ID = 'cardresell-e0329';
-const KV_URL = 'https://kv.dev.invalid';
+const KV_URL = 'https://draft-dev.upstash.io';
 
 process.env.KV_REST_API_URL = KV_URL;
 process.env.KV_REST_API_TOKEN = 'dev-token';
@@ -55,8 +55,11 @@ globalThis.fetch = async (input, init) => {
     return new Response(JSON.stringify(JWKS), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   if (url.startsWith(KV_URL)) {
-    const parts = url.slice(KV_URL.length + 1).split('/').map(decodeURIComponent);
-    const [cmd, key, ...rest] = parts;
+    const parts = init?.method === 'POST' && init.body
+      ? JSON.parse(init.body).map(String)
+      : url.slice(KV_URL.length + 1).split('/').map(decodeURIComponent);
+    const [rawCommand, key, ...rest] = parts;
+    const cmd = rawCommand.toLowerCase();
     kvLog.push(parts.slice(0, 2).join(' '));
     let result = null;
     // EVAL. The lifecycle lock, its fence allocation and every fenced write go

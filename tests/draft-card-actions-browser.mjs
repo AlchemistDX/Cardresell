@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 const PORT = Number(process.env.CR_CARD_ACTIONS_PORT || 8329);
 const B = `http://127.0.0.1:${PORT}`;
 const SLOT = 'ebay:fixed-price';
@@ -106,7 +106,7 @@ async function apiPatch(sub, id, rev, body) {
 }
 
 const { chromium } = (await import(PW)).default;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM, args: ['--no-sandbox'] });
 
 async function boot({ sub, collection = [], viewport = { width: 1280, height: 900 } } = {}) {
   const tok = await tokenFor(sub);

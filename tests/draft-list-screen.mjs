@@ -44,7 +44,7 @@ import { readCoreBundle } from './_assetRefs.mjs';
 import { generateFixtures } from './_draftListFixtures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 
 const T = harness('draft-list-screen');
 
@@ -195,7 +195,7 @@ const { chromium } = _pw;
 
 const F = await generateFixtures();
 const { server, port } = await startHost();
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM, args: ['--no-sandbox'] });
 
 /** Fresh page per case: _draftsState is module-level, so cases must not share it. */
 async function withPage(plan, fn) {

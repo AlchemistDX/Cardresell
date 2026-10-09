@@ -31,7 +31,7 @@
 import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('draft-lifecycle-real-redis');
 
-import { createClient } from 'redis';
+import { redisCommand } from './_idRedis.mjs';
 import { execFileSync } from 'node:child_process';
 import {
   LOCK_TTL_SEC, LIFECYCLE_ERR,
@@ -40,7 +40,6 @@ import {
   acquireLifecycleLock, releaseLifecycleLock, fencedSet,
 } from '../api/_draftLifecycle.js';
 
-const PORT = Number(process.env.CR_REDIS_PORT || 6399);
 const SUB = 'redis-sub';
 const SLOT = 'slot-a';
 
@@ -71,15 +70,8 @@ function makeRealKv(client) {
   };
 }
 
-let client;
-try {
-  client = createClient({ url: `redis://127.0.0.1:${PORT}` });
-  client.on('error', () => {});
-  await client.connect();
-} catch (e) {
-  console.log(`  FAIL cannot reach redis-server on 127.0.0.1:${PORT}\n       → ${e && e.message}`);
-  _finish(0, 1);
-}
+// _idRedis owns a fresh database and terminates its server on process exit.
+const client = { sendCommand: redisCommand };
 
 const kv = makeRealKv(client);
 
@@ -98,7 +90,7 @@ try {
 } catch { /* provenance is reported, not asserted */ }
 
 console.log(`  UNDER TEST: commit ${commit}${dirty}`);
-console.log(`  SERVER:     redis-server ${redisVersion}, ${luaVersion}, RESP via node-redis, port ${PORT}`);
+console.log(`  SERVER:     redis-server ${redisVersion}, ${luaVersion}, RESP via node-redis, isolated process-owned test store`);
 console.log(`  SCRIPTS:    ACQUIRE_SCRIPT, FENCED_SET_SCRIPT (exported), UNLOCK_SCRIPT (via releaseLifecycleLock)`);
 console.log(`  LOCK_TTL_SEC from the module: ${LOCK_TTL_SEC}`);
 
@@ -345,6 +337,5 @@ section('4. ownership-checked release');
     Number(await releaseLifecycleLock(kv, SUB, inst2, SLOT, B2.token)) === 1, 'B2 could not release');
 }
 
-await client.quit();
 console.log('');
 _finish(passed, failed);
