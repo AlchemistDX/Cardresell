@@ -24,7 +24,7 @@ Continue from production fdf66b4. Ship consistent tier benefits and access, corr
 | Single-card ID, Quick/Deep estimates | Yes, using credits | Yes | Yes | Yes | Yes |
 | Existing local flip tracking | Up to 10 | Beyond 10 | Beyond 10 | Beyond 10 | Beyond 10 |
 | Grading Log export | Existing paid gate | Included | Included | Included | Included |
-| Quick/Deep batch uploads, up to 10 cards | No | No | No | Included | Included |
+| Quick/Deep batch uploads (cards per batch) | No | No | No | Up to 10 | Up to 25 |
 | Private saved AI grade reports | Included | Included | Included | Included | Included |
 | Listing drafts | Existing account/technical limits on every plan; no new tier limits advertised |
 | Cloud photo allowance / automatic publishing | Not sold as operational plan benefits |
@@ -81,3 +81,6 @@ Existing bounded tracking supports these prepared links:
 - Video: https://www.cardresell.org/?cr_campaign=youtube
 
 Track entry → verified account → first successful identification → subscription/pack checkout → server-verified fulfillment. Browser events help diagnose conversion; Stripe and the ledger remain authoritative for revenue and credits. Measure failed scans/refunds and provider costs alongside conversion. No outreach or campaigns have been sent or purchased.
+
+## 2026-10-09 owner decision: Business batch size
+Business batch grading raised from 10 to 25 cards per batch (`BULK_GRADE_CARD_LIMITS` in `api/_membershipFeaturePolicy.js`, exposed as `features.bulkGradeCards` in the catalogue). Pro and legacy batch access stay at 10. Prices, monthly allowances, pack discounts and per-card credit costs are unchanged; each card in a batch is still an ordinary, separately debited grade. The cap is enforced in the batch tool from the server-reported plan; the server does not need a batch-size guard because every card is billed individually.

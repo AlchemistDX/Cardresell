@@ -4207,9 +4207,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 /* Retired purchase screens must stay unavailable even through a stale caller. */
 #pricingOverlay, #shopOverlay { display:none !important; }
 </style>
-<script defer src="/js/membership-shop.d5577fb4.js"></script>
+<script defer src="/js/membership-shop.e29aa9a9.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.9b9b4a25.js"></script>
+<script defer src="/js/ui.50ee20c7.js"></script>
 <script defer src="/js/collection-drafts.b143be43.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.033366b3.js"></script>
@@ -4701,7 +4701,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div style="width:38px;height:38px;flex-shrink:0;background:rgba(196,122,0,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem">🎯</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:.9rem;font-weight:800">Bulk Grade <span style="font-size:.6rem">PRO / BUSINESS</span></div>
-          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Grade a stack — up to 10 cards in one session. Upload photos; pick Quick or Deep next.</div>
+          <div style="font-size:.7rem;color:var(--text-muted);margin-top:.15rem;line-height:1.4">Grade a stack — up to 10 cards per batch (25 on Business). Upload photos; pick Quick or Deep next.</div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
@@ -4718,7 +4718,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div style="font-size:1rem;font-weight:800;color:#fff">Bulk Grade — pick a mode</div>
       <button onclick="closeBulkGradeBatchPicker()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:1.4rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
     </div>
-    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;line-height:1.45">Same batch, different depth. Both cap at 10 cards per session.</div>
+    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:.4rem;line-height:1.45">Same batch, different depth. Pro batches up to 10 cards; Business up to 25.</div>
 
     <!-- Quick Grade batch -->
     <button onclick="closeBulkGradeBatchPicker();openBulkGrade('quick')" style="display:flex;align-items:center;gap:.85rem;padding:.85rem 1rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#fff;text-align:left;cursor:pointer;position:relative;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(196,122,0,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
@@ -4755,7 +4755,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <span style="color:var(--gold-text)">⭐</span> Bulk AI Grade
         <span style="font-size:.6rem;font-weight:800;letter-spacing:.06em;background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;padding:.15rem .4rem;border-radius:99px">PRO / BUSINESS</span>
       </div>
-      <div id="bulkGradeSubtitle" style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">1 grade credit per card · up to 10 per session</div>
+      <div id="bulkGradeSubtitle" style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">1 grade credit per card · up to 10 per batch (25 on Business)</div>
     </div>
     <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:rgba(255,255,255,.6);font-size:1.5rem;cursor:pointer;padding:0 .3rem;line-height:1">×</button>
   </div>
@@ -4765,7 +4765,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div style="font-size:2.5rem">🔒</div>
     <div style="font-size:1.1rem;font-weight:800;color:#fff" id="bulkGradeGateTitle">Bulk Grade is included with Pro and Business</div>
     <div style="font-size:.85rem;color:var(--text-muted);max-width:340px;line-height:1.5">
-      Queue up to 10 cards for Quick or Deep Grade estimates. Each card needs its own photos;
+      Queue up to 10 cards on Pro or 25 on Business for Quick or Deep Grade estimates. Each card needs its own photos;
       normal per-card credits apply. Review the results before deciding what to submit.
     </div>
     <div style="background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.3);border-radius:12px;padding:.9rem 1.1rem;max-width:340px;font-size:.78rem;color:rgba(255,255,255,.85);line-height:1.55;text-align:left">
@@ -4796,7 +4796,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div style="font-size:1.05rem;font-weight:800;color:#fff;max-width:340px;line-height:1.4">Grade a whole stack at once</div>
     <div style="font-size:.82rem;color:var(--text-muted);max-width:340px;line-height:1.55">
-      Upload front and back photos of up to <strong style="color:#fff">10 cards</strong>. Each gets a photo-based
+      Upload front and back photos of up to <strong style="color:#fff">10 cards</strong> (25 on Business). Each gets a photo-based
       condition estimate. Deep Grade also uses four edge close-ups.
     </div>
     <div style="font-size:.72rem;color:rgba(255,255,255,.55);max-width:320px;line-height:1.55;padding:.55rem .8rem;background:rgba(255,255,255,.04);border-radius:8px">

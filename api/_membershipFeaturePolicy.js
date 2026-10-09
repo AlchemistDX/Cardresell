@@ -8,3 +8,6 @@ export const MEMBERSHIP_PAID_FEATURES = Object.freeze({
   pro: Object.freeze({ bulkGrade: true }),
   business: Object.freeze({ bulkGrade: true }),
 });
+// 2026-10-09 owner decision: batch grading size per plan (cards per batch).
+// Each card is still an ordinary, separately debited grade.
+export const BULK_GRADE_CARD_LIMITS = Object.freeze({ pro: 10, business: 25 });

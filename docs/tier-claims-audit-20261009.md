@@ -10,7 +10,7 @@ The live public membership catalogue matched the release source for prices, cred
 | Starter | 4.99 | 25 | 5 | None | 2 | No |
 | Casual | 9.99 | 50 | 15 | 10% | Up to 9 | No |
 | Pro | 19.99 | 250 | 40 | 15% | Up to 15 | Up to 10 cards |
-| Business | 49.99 | 750 | 100 | 25% | Up to 15 | Up to 10 cards |
+| Business | 49.99 | 750 | 100 | 25% | Up to 15 | Up to 25 cards |
 
 - Every plan: individual identification and Quick/Deep AI estimates using credits; explicit private saved reports (500/account, no photos); listing drafts under the existing shared 500-draft limit, including selected bulk-scan draft creation. Marketplace publishing is manual. No extra scan debit for preparing a draft.
 - Every paid plan: flip tracking beyond the Free ten-record limit and manual Grading Log export. This does not remove cloud/device technical limits or imply unlimited storage. Saved AI report download is separate from the paid manual Grading Log export.

@@ -3,7 +3,7 @@ import { draftPlanPolicy } from './_draftPlanPolicy.js';
 import { LAUNCH_PLANS, LAUNCH_PACKS, LAUNCH_WELCOME_CREDITS, quoteLaunchPack } from './_launchMembershipConfig.js';
 
 import { membershipVenueAccess } from './_membershipVenuePolicy.js';
-import { MEMBERSHIP_FEATURE_VERSION, MEMBERSHIP_PAID_FEATURES } from './_membershipFeaturePolicy.js';
+import { MEMBERSHIP_FEATURE_VERSION, MEMBERSHIP_PAID_FEATURES, BULK_GRADE_CARD_LIMITS } from './_membershipFeaturePolicy.js';
 import { reportMembershipFailure } from './_membershipDiagnostics.js';
 
 export function publicMembershipCatalogue(plan = 'free') {
@@ -16,7 +16,8 @@ export function publicMembershipCatalogue(plan = 'free') {
       idCredits: p.idCredits, gradeCredits: p.gradeCredits,
       packDiscountPercent: p.packDiscountPercent, marketplaceCount: membershipVenueAccess(id).count,
       drafts: draftPlanPolicy(id),
-      features: { bulkGrade: MEMBERSHIP_PAID_FEATURES[id]?.bulkGrade === true },
+      features: { bulkGrade: MEMBERSHIP_PAID_FEATURES[id]?.bulkGrade === true,
+        bulkGradeCards: MEMBERSHIP_PAID_FEATURES[id]?.bulkGrade === true ? BULK_GRADE_CARD_LIMITS[id] || 10 : 0 },
     })),
     // Do not advertise unfinished quota/storage features through the shop.
     packs: Object.keys(LAUNCH_PACKS).map(id => quoteLaunchPack(id, plan)),
