@@ -37,9 +37,9 @@ export function createPricingRequest({ budgetMs = 7500, maxAttempts = 4,
 }
 
 // Cache outages must not consume the whole browser response window.
-export async function pricingCacheCommand(url, token, command) {
+export async function pricingCacheCommand(url, token, command, timeoutMs = 600) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 600);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

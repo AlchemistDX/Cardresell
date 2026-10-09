@@ -21,6 +21,28 @@
 //   tcgcsv:{catId}:products:{gid}    → 6h TTL
 //   tcgcsv:{catId}:prices:{gid}      → 30min TTL
 
+import { createHash } from 'node:crypto';
+import { pricingCacheCommand } from './_pricingRequest.js';
+
+// Only share currently running public catalog reads within this instance.
+// Scope includes cache credentials to keep environments/bindings independent.
+const catalogReads = new Map();
+async function sharedCatalogRead(kvUrl, kvToken, key, work) {
+  const scope = createHash('sha256').update(JSON.stringify([kvUrl || '', kvToken || '', key])).digest('hex');
+  let pending = catalogReads.get(scope);
+  if (!pending) {
+    if (catalogReads.size >= 128) return work();
+    pending = Promise.resolve().then(work);
+    catalogReads.set(scope, pending);
+  }
+  try {
+    // Callers may sort/enrich their results. Never share mutable result objects.
+    return structuredClone(await pending);
+  } finally {
+    if (catalogReads.get(scope) === pending) catalogReads.delete(scope);
+  }
+}
+
 const CACHE_TTL = {
   groups:   86400,   // 1 day
   products: 21600,   // 6 hours
@@ -50,12 +72,8 @@ function baseFor(categoryId) {
 async function kvGet(kvUrl, kvToken, key) {
   if (!kvUrl || !kvToken) return null;
   try {
-    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${kvToken}` },
-      signal: AbortSignal.timeout(3000),
-    });
-    const d = await r.json();
-    if (d.result) return JSON.parse(d.result);
+    const value = await pricingCacheCommand(kvUrl, kvToken, ['GET', key], 3000);
+    if (value) return JSON.parse(value);
   } catch(e) {}
   return null;
 }
@@ -63,16 +81,18 @@ async function kvGet(kvUrl, kvToken, key) {
 async function kvSet(kvUrl, kvToken, key, value, ttl) {
   if (!kvUrl || !kvToken) return;
   try {
-    await fetch(
-      `${kvUrl}/setex/${encodeURIComponent(key)}/${ttl}/${encodeURIComponent(JSON.stringify(value))}`,
-      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` }, signal: AbortSignal.timeout(3000) }
-    );
+    await pricingCacheCommand(kvUrl, kvToken, ['SETEX', key, ttl, JSON.stringify(value)], 3000);
   } catch(e) {}
 }
 
 // ── tcgcsv fetchers with cache ────────────────────────────────
 // categoryId is optional; defaults to Pokemon for backwards-compat.
 export async function getGroups(kvUrl, kvToken, categoryId) {
+  return sharedCatalogRead(kvUrl, kvToken, `groups:${categoryId || DEFAULT_CATEGORY}`,
+    () => loadGroups(kvUrl, kvToken, categoryId));
+}
+
+async function loadGroups(kvUrl, kvToken, categoryId) {
   const cat = categoryId || DEFAULT_CATEGORY;
   const key = `tcgcsv:${cat}:groups`;
   const cached = await kvGet(kvUrl, kvToken, key);
@@ -80,6 +100,7 @@ export async function getGroups(kvUrl, kvToken, categoryId) {
   const r = await fetch(`${baseFor(cat)}/groups`, { headers: UA, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error(`tcgcsv groups cat=${cat} ${r.status}`);
   const j = await r.json();
+  if (!Array.isArray(j?.results)) throw new Error('tcgcsv invalid groups response');
   const groups = (j.results || []).map(g => ({
     groupId: g.groupId,
     name: g.name,
@@ -91,6 +112,11 @@ export async function getGroups(kvUrl, kvToken, categoryId) {
 }
 
 export async function getProducts(kvUrl, kvToken, groupId, categoryId) {
+  return sharedCatalogRead(kvUrl, kvToken, `products:${categoryId || DEFAULT_CATEGORY}:${groupId}`,
+    () => loadProducts(kvUrl, kvToken, groupId, categoryId));
+}
+
+async function loadProducts(kvUrl, kvToken, groupId, categoryId) {
   const cat = categoryId || DEFAULT_CATEGORY;
   const key = `tcgcsv:${cat}:products:${groupId}`;
   const cached = await kvGet(kvUrl, kvToken, key);
@@ -98,6 +124,7 @@ export async function getProducts(kvUrl, kvToken, groupId, categoryId) {
   const r = await fetch(`${baseFor(cat)}/${groupId}/products`, { headers: UA, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error(`tcgcsv products ${groupId} cat=${cat} ${r.status}`);
   const j = await r.json();
+  if (!Array.isArray(j?.results)) throw new Error('tcgcsv invalid products response');
   // Slim down to what we need + reduce cache size
   const products = (j.results || []).map(p => {
     const ext = {};
@@ -116,6 +143,11 @@ export async function getProducts(kvUrl, kvToken, groupId, categoryId) {
 }
 
 export async function getPrices(kvUrl, kvToken, groupId, categoryId) {
+  return sharedCatalogRead(kvUrl, kvToken, `prices:${categoryId || DEFAULT_CATEGORY}:${groupId}`,
+    () => loadPrices(kvUrl, kvToken, groupId, categoryId));
+}
+
+async function loadPrices(kvUrl, kvToken, groupId, categoryId) {
   const cat = categoryId || DEFAULT_CATEGORY;
   const key = `tcgcsv:${cat}:prices:${groupId}`;
   const cached = await kvGet(kvUrl, kvToken, key);
@@ -123,6 +155,7 @@ export async function getPrices(kvUrl, kvToken, groupId, categoryId) {
   const r = await fetch(`${baseFor(cat)}/${groupId}/prices`, { headers: UA, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error(`tcgcsv prices ${groupId} cat=${cat} ${r.status}`);
   const j = await r.json();
+  if (!Array.isArray(j?.results)) throw new Error('tcgcsv invalid prices response');
   // Group by productId → { [subType]: {market, low, mid, high} }
   const byProduct = {};
   for (const p of (j.results || [])) {
