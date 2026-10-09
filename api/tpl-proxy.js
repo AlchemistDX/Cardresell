@@ -168,11 +168,11 @@ export default async function handler(req, res) {
     budgetConfigForResult = r4.config;
   }
 
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 8000);
     const r = await fetch(url, { headers: { 'X-API-Key': key }, signal: ctrl.signal });
-    clearTimeout(timeout);
+    // Keep the deadline active while the response body is being transferred.
     const body = await r.text();
     res.status(r.status);
     res.setHeader('Content-Type', r.headers.get('content-type') || 'application/json');
@@ -202,5 +202,7 @@ export default async function handler(req, res) {
     if (reservation) await releaseReservation(store, reservation, { started: true });
     res.setHeader('Cache-Control', 'no-store');
     res.status(502).json({ error: 'TPL upstream failed', detail: String(e?.message || e) });
+  } finally {
+    clearTimeout(timeout);
   }
 }

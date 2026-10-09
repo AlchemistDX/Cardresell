@@ -25,8 +25,8 @@ A non-decrypting project-configuration listing returned 93 entries but no visibl
 ## Concrete migration work remaining
 
 1. Confirm an existing Scrydex account/plan and usable server-side credentials, or choose a paid plan after reviewing expected request volume. Do not put keys in chat or browser settings.
-2. Build a same-origin provider adapter with explicit feature enablement, authenticated request admission, usage limits and request coalescing/cache. Avoid moving the current browser query volume directly into uncapped paid calls.
-3. Normalize expansion/collector-number/language/image fields, retain canonical IDs and finish distinctions, and map source/condition/currency/date for prices. Never treat a blended market index as guaranteed TCGplayer sold comps. Do not flatten graded prices into raw prices.
+2. A same-origin pilot adapter is now implemented at /api/pokemon-provider, default off, with verified-account admission, an explicit pilot UID allowlist, aggregate and per-account limits, distributed duplicate suppression and cache. Confirm plan/configuration and run the live pilot before moving browser query volume. See scrydex-pilot-20261009.md.
+3. The adapter normalizes expansion/collector-number/language/image fields, canonical IDs and variant distinctions. Prices retain raw/graded type, condition, company/grade, currency and available source/date. Undocumented/missing source or date stays null; fetch time is separate. It does not construct a legacy TCGplayer object from Scrydex's aggregate values. Live response validation and UI presentation remain to do.
 4. Replace dependencies in browser search, Japanese image reference, exact scanned-card lookup, bulk/collection enrichment and server grounding. Handle 100-card pagination explicitly. Audit image CDN and price redirect dependencies separately; API retirement does not itself establish the image/redirect shutdown date.
 5. Test exact printing, collector suffixes, regional cards, missing prices, throttling, depleted credits, timeouts and rollback before enabling the paid provider. Keep local identity fallback and existing exact-printing checks.
 
