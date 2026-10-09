@@ -4136,7 +4136,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.822c1815.js"></script>
-<script defer src="/js/core.58e35c65.js"></script>
+<script defer src="/js/core.8d719895.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4172,6 +4172,20 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .membership-pack-price { font-size:1.2rem; color:var(--gold-text,#e8bd61); font-variant-numeric:tabular-nums; }
 .membership-switch { margin:8px 0; }
 .hdr #getProBtn { display:flex!important; }
+/* 2026-10-09: upgrade ladder in the plans view */
+.membership-upgrade { margin:16px 0 8px; padding:16px 18px; border:1.5px solid var(--gold,#d4af37); border-radius:12px; background:var(--surface-2,#252525); }
+.membership-upgrade h3 { margin:0 0 6px; font-size:1.05rem; }
+.membership-upgrade ul { margin:8px 0; padding-left:1.2rem; }
+.membership-upgrade li { margin:4px 0; line-height:1.45; }
+.membership-upgrade button { min-height:44px; margin-top:6px; padding:10px 18px; border:none; border-radius:8px; background:var(--gold,#d4af37); color:#000; font:inherit; font-weight:800; cursor:pointer; }
+.membership-plan-next { border:2px solid var(--gold,#d4af37); box-shadow:0 0 0 3px rgba(212,175,55,.18); }
+/* 2026-10-09: the header membership control becomes a tier badge for paid plans */
+.hdr #getProBtn[data-tier] { border-radius:99px!important; font-weight:900; letter-spacing:.06em; text-transform:uppercase; gap:.3rem; }
+.hdr #getProBtn[data-tier]>svg { display:inline-block; width:11px; height:11px; flex-shrink:0; }
+.hdr #getProBtn[data-tier="starter"] { background:#8a4f1d; border:1px solid #b36b2c; color:#fff; }
+.hdr #getProBtn[data-tier="casual"] { background:#334155; border:1px solid #64748b; color:#fff; }
+.hdr #getProBtn[data-tier="pro"] { background:linear-gradient(135deg,#b8860b,#f5c518); border:1px solid #b8860b; color:#000; }
+.hdr #getProBtn[data-tier="business"] { background:#111; border:1px solid #f5c518; color:#f5c518; }
 .hdr #proBadge { display:none!important; }
 .membership-shop section > button { margin:4px 8px 4px 0; }
 @media(max-width:950px) { .membership-plans { grid-template-columns:repeat(2,minmax(0,1fr)); } }
@@ -4193,7 +4207,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 /* Retired purchase screens must stay unavailable even through a stale caller. */
 #pricingOverlay, #shopOverlay { display:none !important; }
 </style>
-<script defer src="/js/membership-shop.d8e269e0.js"></script>
+<script defer src="/js/membership-shop.d5577fb4.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/ui.9b9b4a25.js"></script>
 <script defer src="/js/collection-drafts.b143be43.js"></script>

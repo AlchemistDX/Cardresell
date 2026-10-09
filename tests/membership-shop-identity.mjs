@@ -16,6 +16,7 @@ class Element {
   get textContent() { return (this.text || '') + this.children.map(x => x.textContent || '').join(''); }
   set textContent(value) { this.text = value; this.children = []; }
   append(x) { this.children.push(x); }
+  prepend(x) { this.children.unshift(x); }
   setAttribute() {}
   addEventListener(name, fn) { this.listeners[name] = fn; }
   replaceChildren() { this.children = []; }
@@ -529,5 +530,51 @@ await t.section('renewal plan changes need confirmation and bind the selected ac
   t.check('pending change exposes recovery',!!retry);
   await retry.onclick();
   t.check('recovery uses the original operation identity',changes.length===2&&changes[1].operationId===changes[0].operationId);
+});
+
+await t.section('upgrade ladder recommends the next plan with catalogue-only gains', async () => {
+  const c = { ...publicMembershipCatalogue(), purchaseEnabled: true, newSubscriptionAllowed: true };
+  const acct = (plan, credits) => async () => ({ ok: true, json: async () => ({
+    state: { subscriptionId: plan === 'free' ? null : 'sub_synthetic', snapshot: { plan, status: 'active' } },
+    credits: { tier: plan, ...(credits || {}) }, creditsAvailable: !!credits, management: { portal: plan !== 'free' } }) });
+  const panelOf = h => h.elements().find(x => x.tag === 'section' && x.className === 'membership-upgrade');
+  const card = (h, name) => h.elements().find(x => x.tag === 'article' && x.children.some(k => k.tag === 'h3' && k.textContent === name));
+  const plan = id => c.plans.find(p => p.id === id);
+  // Casual -> Pro
+  const h = setup({ suppliedCatalogue: c, onAccount: acct('casual', { included: { id: 12, grade: 3 }, welcome: { id: 0, grade: 0 }, purchased: { id: 5, grade: 1 } }) });
+  await h.window.openSubscriptions();
+  const p = panelOf(h), text = p ? p.textContent : '';
+  t.check('casual sees a Pro upgrade panel first', p && h.elements().indexOf(p) < h.elements().findIndex(x => x.tag === 'article')
+    && text.includes('Pro is your next step up from Casual.'));
+  t.check('panel states real allowance increase', text.includes(`${plan('pro').idCredits} ID + ${plan('pro').gradeCredits} Grade credits every month, up from ${plan('casual').idCredits} + ${plan('casual').gradeCredits}.`));
+  t.check('panel states venue, buylist, batch and pack gains', text.includes(`up to ${plan('pro').marketplaceCount} supported venues`)
+    && text.includes('buylist and consignment') && text.includes('Batch-grade') && text.includes(`Save ${plan('pro').packDiscountPercent}%`) && text.includes(`up from ${plan('casual').packDiscountPercent}%`));
+  t.check('panel shows remaining balance from account', text.includes('You have 17 ID and 4 Grade credits left.'));
+  t.check('panel shows price step without per-unit math', text.includes('(' + '$' + ((plan('pro').monthlyPriceCents - plan('casual').monthlyPriceCents) / 100).toFixed(2) + ' more than Casual)') && !/per credit|per scan|\/ID/.test(text));
+  t.check('Pro card is marked as the recommended next step', card(h, 'Pro').textContent.startsWith('Recommended next step') && /membership-plan-next/.test(card(h, 'Pro').className));
+  t.check('current plan card still marked current', card(h, 'Casual').textContent.startsWith('Current plan'));
+  // reason-led copy from Free
+  const f = setup({ suppliedCatalogue: c, onAccount: acct('free') }); await f.window.openPricingModal('scan_gate');
+  t.check('scan gate from Free leads with credits and Starter', (panelOf(f)?.textContent || '').startsWith('Running low on credits? Starter is your next step up from Free.'));
+  t.check('Free panel includes flip tracking unlock', (panelOf(f)?.textContent || '').includes('Track more than 10 flips'));
+  // bulk grade gate jumps to the first plan that has batch grading
+  const b = setup({ suppliedCatalogue: c, onAccount: acct('starter') }); await b.window.openPricingModal('bulk_grade_gate');
+  const firstBatch = c.plans.find(x => x.features?.bulkGrade);
+  t.check('bulk grade gate recommends the first plan with batch grading', (panelOf(b)?.textContent || '').includes(firstBatch.name + ' is your next step up from Starter.'));
+  // explicit plan target
+  const e = setup({ suppliedCatalogue: c, onAccount: acct('casual') }); await e.window.startTierCheckout('business');
+  t.check('explicit plan target is honored when above current', (panelOf(e)?.textContent || '').includes('Business is your next step up from Casual.'));
+  const d = setup({ suppliedCatalogue: c, onAccount: acct('pro') }); await d.window.startTierCheckout('starter');
+  t.check('a lower explicit target falls back to the next plan up', (panelOf(d)?.textContent || '').includes('Business is your next step up from Pro.'));
+  // top plan, legacy, signed out: no panel
+  const top = setup({ suppliedCatalogue: c, onAccount: acct('business') }); await top.window.openSubscriptions();
+  t.check('Business has no upgrade panel', !panelOf(top));
+  const leg = setup({ suppliedCatalogue: { ...c, currentPlan: 'business' }, onAccount: async () => ({ ok: true, json: async () => ({
+    state: { subscriptionId: 'sub_synthetic', snapshot: { plan: 'legacy' } }, credits: { tier: 'legacy' }, creditsAvailable: false, management: { portal: true } }) }) });
+  await leg.window.openSubscriptions();
+  t.check('legacy membership gets no ladder panel', !panelOf(leg));
+  const out = setup({ initial: null, suppliedCatalogue: c }); await out.window.openSubscriptions();
+  t.check('signed-out view gets no ladder panel', !panelOf(out));
+  t.check('every plan card still discloses the saved-report limit', ['Free','Starter','Casual','Pro','Business'].every(n => /500 private AI grade reports/.test(card(h, n).textContent)));
 });
 t.done();
