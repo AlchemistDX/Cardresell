@@ -1706,7 +1706,7 @@ Respond ONLY with valid JSON, no explanation:
     // gpt-4o's 72.2% — huge win on card ID / OCR-through-glare). If
     // it errors (org tier not enabled, unknown-param rejection, etc.)
     // fall back to gpt-4o so identify never hard-fails on a model change.
-    async function callModel(modelId) {
+    async function callModel(modelId, signal) {
       const isGpt5 = isReasoningModel(modelId);
       const body = {
         model: modelId,
@@ -1732,6 +1732,7 @@ Respond ONLY with valid JSON, no explanation:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal,
       });
     }
 
@@ -1743,29 +1744,33 @@ Respond ONLY with valid JSON, no explanation:
       return observeProviderAttempt({ provider: 'openai', operation: 'chat_completion',
         model: modelId, mode: isDeepGrade ? 'deep_grade' : isGradeMode ? 'grade' : 'identify',
         inputImages: visionContent.filter(item => item.type === 'image_url').length }, async observe => {
-        const r = await callModel(modelId);
-        observe({ status: r.status });
-        if (!r.ok) {
-          const errText = await r.text().catch(() => '');
-          return { ok: false, reason: 'http', status: r.status, errText: errText.slice(0, 300) };
-        }
-        const j = await r.json();
-        observe({ usage: j.usage });
-        const content = j.choices?.[0]?.message?.content || '';
-        const finishReason = j.choices?.[0]?.finish_reason || '';
-        if (!content.trim()) {
-          return { ok: false, reason: 'empty', finish_reason: finishReason, usage: j.usage };
-        }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60000);
         try {
-          const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-          // Handle cases where model wrapped JSON in extra text: find first {...} block.
-          const jsonStart = cleaned.indexOf('{');
-          const jsonEnd = cleaned.lastIndexOf('}');
-          const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? cleaned.slice(jsonStart, jsonEnd + 1) : cleaned;
-          return { ok: true, cardInfo: JSON.parse(jsonStr), raw: content };
-        } catch(e) {
-          return { ok: false, reason: 'parse', raw: content.slice(0, 500) };
-        }
+          const r = await callModel(modelId, controller.signal);
+          observe({ status: r.status });
+          if (!r.ok) {
+            const errText = await r.text().catch(() => '');
+            return { ok: false, reason: 'http', status: r.status, errText: errText.slice(0, 300) };
+          }
+          const j = await r.json();
+          observe({ usage: j.usage });
+          const content = j.choices?.[0]?.message?.content || '';
+          const finishReason = j.choices?.[0]?.finish_reason || '';
+          if (!content.trim()) {
+            return { ok: false, reason: 'empty', finish_reason: finishReason, usage: j.usage };
+          }
+          try {
+            const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            // Handle cases where model wrapped JSON in extra text: find first {...} block.
+            const jsonStart = cleaned.indexOf('{');
+            const jsonEnd = cleaned.lastIndexOf('}');
+            const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? cleaned.slice(jsonStart, jsonEnd + 1) : cleaned;
+            return { ok: true, cardInfo: JSON.parse(jsonStr), raw: content };
+          } catch(e) {
+            return { ok: false, reason: 'parse', raw: content.slice(0, 500) };
+          }
+        } finally { clearTimeout(timer); }
       });
     }
 

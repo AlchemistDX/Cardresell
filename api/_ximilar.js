@@ -50,7 +50,7 @@ async function identify(imageBase64, mime, apiToken, kind, observe) {
   // Ximilar accepts either `_base64` or `_url`. Use base64 since the client
   // uploaded the image directly and we haven't stored it anywhere public.
 
-  let resp, timeoutId;
+  let resp, json, timeoutId;
   try {
     const ac = new AbortController();
     timeoutId = setTimeout(() => ac.abort(), 15000);
@@ -63,25 +63,20 @@ async function identify(imageBase64, mime, apiToken, kind, observe) {
       body: JSON.stringify(body),
       signal: ac.signal,
     });
-  } catch (e) {
-    console.warn('[ximilar] fetch failed:', e.name === 'AbortError' ? 'timeout' : 'network');
-    return { ok: false, reason: 'network', error: e.message };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  observe({ status: resp.status });
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => '');
-    console.warn('[ximilar] non-2xx:', resp.status);
-    return { ok: false, reason: 'http', status: resp.status, errText: errText.slice(0, 300) };
-  }
-
-  let json;
-  try {
+    observe({ status: resp.status });
+    if (!resp.ok) {
+      console.warn('[ximilar] non-2xx:', resp.status);
+      // Keep the deadline active while consuming error responses too.
+      const errText = await resp.text();
+      return { ok: false, reason: 'http', status: resp.status, errText: errText.slice(0, 300) };
+    }
     json = await resp.json();
   } catch (e) {
-    return { ok: false, reason: 'parse', error: e.message };
+    const reason = ['AbortError', 'TimeoutError'].includes(e.name) ? 'timeout' : resp ? 'parse' : 'network';
+    console.warn('[ximilar] request failed:', reason);
+    return { ok: false, reason, error: e.message };
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const rec = json?.records?.[0];

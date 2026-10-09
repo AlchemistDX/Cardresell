@@ -37,11 +37,18 @@ export function summarizeProviderUsage(lines) {
     seen.add(record.attempt_id);
     const key = [record.provider, record.operation, record.mode, record.model || 'none'].join('/');
     if (!groups.has(key)) groups.set(key, { key, attempts: 0, successes: 0, failures: 0,
-      duration_ms_sum: 0, duration_samples: 0, cost_usd: null,
+      duration_ms_sum: 0, duration_samples: 0, cost_usd: null, failure_reasons: {},
       usage: Object.fromEntries(fields.map(field => [field, { reported_total: 0, unknown_attempts: 0 }])) });
     const group = groups.get(key);
     group.attempts++;
     group[record.outcome === 'success' ? 'successes' : 'failures']++;
+    if (record.outcome === 'failure') {
+      const reason = /^[a-z_]{1,40}$/.test(record.reason || '') ? record.reason : 'other';
+      // Reject prototype property names from imported, potentially untrusted logs.
+      if (!['__proto__', 'constructor', 'prototype'].includes(reason)) {
+        group.failure_reasons[reason] = (group.failure_reasons[reason] || 0) + 1;
+      }
+    }
     if (Number.isSafeInteger(record.duration_ms) && record.duration_ms >= 0) {
       group.duration_ms_sum += record.duration_ms; group.duration_samples++;
     }

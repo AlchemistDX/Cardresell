@@ -7,7 +7,8 @@ const operations = new Set(['tcg_id', 'sport_id', 'card_grade', 'chat_completion
 const models = new Set(['gpt-5', 'gpt-4o', 'gpt-6.1-sol', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-6-luna']);
 const reasons = new Set(['http', 'empty', 'parse', 'parse_error', 'network', 'network_error',
   'timeout', 'no_records', 'no_card_detected', 'no_match', 'low_confidence', 'empty_grades',
-  'missing_input', 'missing_token', 'missing_image']);
+  'missing_input', 'missing_token', 'missing_image', 'submit_timeout_ambiguous',
+  'submit_malformed', 'job_failed', 'job_timeout']);
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
 
 export async function observeProviderAttempt(meta, work) {
@@ -41,7 +42,7 @@ export async function observeProviderAttempt(meta, work) {
     record.outcome = result?.ok === true ? 'success' : 'failure';
     record.reason = record.outcome === 'success' ? null
       : reasons.has(result?.reason) ? result.reason
-      : /^http_\d{3}$/.test(result?.reason || '') ? 'http' : 'other';
+      : /^(?:poll_)?http_\d{3}$/.test(result?.reason || '') ? 'http' : 'other';
     return result;
   } catch (error) {
     record.outcome = 'failure';

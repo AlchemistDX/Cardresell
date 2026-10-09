@@ -13,24 +13,39 @@
 //   - fetchedAt + cacheAgeSec for staleness display
 
 const CACHE_TTL_SEC = 15 * 60;
+const COOLDOWN_KEY = 'provider-cooldown-v1';
+let cooldownUntil = 0;
+
+// Include response-body consumption in the deadline, not just headers.
+async function readResponse(url, init, format, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => {});
+      throw Object.assign(new Error('upstream_unavailable'), { status: response.status });
+    }
+    return await response[format]();
+  } finally { clearTimeout(timer); }
+}
 
 async function getCached(kvUrl, kvToken, key) {
   if (!kvUrl || !kvToken) return null;
   try {
-    const r = await fetch(`${kvUrl}/get/${encodeURIComponent('ebay_cache:' + key)}`,
-      { headers: { Authorization: `Bearer ${kvToken}` } });
-    const d = await r.json();
+    const d = await readResponse(`${kvUrl}/get/${encodeURIComponent('ebay_cache:' + key)}`,
+      { headers: { Authorization: `Bearer ${kvToken}` } }, 'json', 800);
     if (d.result) return JSON.parse(d.result);
   } catch(e) {}
   return null;
 }
 
-async function setCache(kvUrl, kvToken, key, data) {
+async function setCache(kvUrl, kvToken, key, data, ttl = CACHE_TTL_SEC) {
   if (!kvUrl || !kvToken) return;
   try {
-    await fetch(
-      `${kvUrl}/setex/${encodeURIComponent('ebay_cache:' + key)}/${CACHE_TTL_SEC}/${encodeURIComponent(JSON.stringify(data))}`,
-      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }
+    await readResponse(
+      `${kvUrl}/setex/${encodeURIComponent('ebay_cache:' + key)}/${ttl}/${encodeURIComponent(JSON.stringify(data))}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${kvToken}` } }, 'json', 800
     );
   } catch(e) {}
 }
@@ -149,6 +164,13 @@ function scoreConfidence({ count, prices, med, outliersRemoved, tcgMarket }) {
   return { confidence: tier, confidenceScore: score, confidenceReasons: reasons };
 }
 
+function forRequest(cached, tcgMarket) {
+  const { _prices, ...data } = cached;
+  return Array.isArray(_prices) && _prices.length ? { ...data,
+    ...scoreConfidence({ count: data.count, prices: _prices, med: data.median,
+      outliersRemoved: data.outliersRemoved, tcgMarket }) } : data;
+}
+
 // ── Filters ─────────────────────────────────────────────────────────────
 const PROMO_PATTERNS = [
   /shop on ebay/i,
@@ -157,7 +179,7 @@ const PROMO_PATTERNS = [
 ];
 
 const GRADE_PATTERNS = {
-  raw:   /\b(psa|bgs|cgc|sgc|ace|hga|gma)\s*(gem|black|pristine|mint)?\s*\d/i, // presence of any grader = NOT raw
+  raw:   /\b(psa|bgs|cgc|sgc|ace|hga|gma)[\s-]*(gem|black|pristine|mint)?[\s-]*\d/i, // presence of any grader = NOT raw
 };
 
 // Word-boundary grade match. "PSA 10" requires the title to contain literal "PSA 10",
@@ -171,7 +193,7 @@ function makeGradeMatcher(gradeStr) {
   const grader = m[1];
   const num = m[2];
   // Match "PSA 10", "PSA10", "PSA-10", "PSA  10"
-  const re = new RegExp(`\\b${grader}[\\s\\-]?${num.replace('.', '\\.')}\\b`, 'i');
+  const re = new RegExp(`\\b${grader}[\\s\\-]*${num.replace('.', '\\.')}\\b(?!\\.\\d)`, 'i');
   return re;
 }
 
@@ -187,14 +209,23 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  const q         = (req.query.q     || '').trim();
-  const grade     = (req.query.grade || '').trim();
-  const limit     = Math.min(parseInt(req.query.limit) || 15, 50);
-  const tcgMarket = parseFloat(req.query.tcgMarket) || 0;
+  const query = req.query || {};
+  if (['q', 'grade', 'limit', 'tcgMarket'].some(key => query[key] != null && typeof query[key] !== 'string')) {
+    return res.status(400).json({ error: 'Query parameters must be single values' });
+  }
+  const q = (query.q || '').trim();
+  const grade = (query.grade || '').trim();
+  const parsedLimit = Number.parseInt(query.limit, 10);
+  const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(parsedLimit, 50)) : 15;
+  const market = Number(query.tcgMarket);
+  const tcgMarket = Number.isFinite(market) && market > 0 ? market : 0;
   if (!q) return res.status(400).json({ error: 'q required' });
+  if (q.length > 200 || grade.length > 40) return res.status(400).json({ error: 'Query too long' });
 
   const keywords = grade ? `${q} ${grade}` : q;
-  const cacheKey = `v3|${keywords.toLowerCase()}|${limit}`; // v3 invalidates old cache
+  // Separate grade filtering from keywords. Confidence is recalculated using
+  // this request's comparison price, so raw comps remain reusable across prices.
+  const cacheKey = `v4|${JSON.stringify([q.toLowerCase(), grade.toLowerCase(), limit])}`;
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
@@ -202,11 +233,13 @@ export default async function handler(req, res) {
   const cached = await getCached(kvUrl, kvToken, cacheKey);
   if (cached && cached.fetchedAt) {
     const cacheAgeSec = Math.round((Date.now() - new Date(cached.fetchedAt).getTime()) / 1000);
-    return res.status(200).json({ ...cached, cached: true, cacheAgeSec });
+    if (cacheAgeSec >= 0 && cacheAgeSec < CACHE_TTL_SEC) {
+      return res.status(200).json({ ...forRequest(cached, tcgMarket), cached: true, cacheAgeSec });
+    }
   }
 
   const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(keywords)}&LH_Complete=1&LH_Sold=1&LH_BIN=1&_sacat=2536`;
-  const fetchedAt = new Date().toISOString();
+  const fetchedAt = new Date(Date.now()).toISOString();
 
   const emptyResp = (extra = {}) => ({
     count: 0, rawCount: 0, median: null, avg: null, low: null, high: null,
@@ -216,47 +249,31 @@ export default async function handler(req, res) {
     ...extra,
   });
 
+  const unavailable = () => emptyResp({ available: false, reason: 'provider_unavailable',
+    confidenceReasons: ['sold comparisons temporarily unavailable'], message: 'View on eBay',
+    retryAfterSec: Math.max(1, Math.ceil((cooldownUntil - Date.now()) / 1000)) });
+  if (cooldownUntil <= Date.now()) {
+    const shared = await getCached(kvUrl, kvToken, COOLDOWN_KEY);
+    if (Number.isFinite(shared?.until)) cooldownUntil = shared.until;
+  }
+  if (cooldownUntil > Date.now()) return res.status(200).json(unavailable());
+
   try {
     const searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(keywords)}&LH_Complete=1&LH_Sold=1&LH_BIN=1&_sacat=2536&_ipg=${limit}`;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    let r;
-    try {
-      // eBay aggressively 403s datacenter IPs with thin headers. This header
-      // set matches a real Chrome 128 request and gets through more often.
-      // Rotate UAs to reduce fingerprinting.
-      const UAS = [
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-      ];
-      const ua = UAS[Math.floor(Math.random() * UAS.length)];
-      r = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': ua,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Sec-Ch-Ua': '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"macOS"',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
-          'Referer': 'https://www.google.com/',
-        },
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-    } finally { clearTimeout(timeoutId); }
-
-    if (!r.ok) throw new Error(`eBay search returned ${r.status}`);
-    const html = await r.text();
+    // Identify the service honestly. A denied request pauses future lookups;
+    // it must not trigger attempts to evade the provider's access controls.
+    const html = await readResponse(searchUrl, {
+      headers: {
+        'User-Agent': 'CardResell/1.0 (+https://cardresell.org)',
+        'Accept': 'text/html',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      redirect: 'follow',
+    }, 'text', 6000);
+    if (/pardon our interruption|verify (?:that )?you(?:'re| are) human|robot check/i.test(html)) {
+      throw Object.assign(new Error('upstream_unavailable'), { status: 403 });
+    }
 
     // Parse each listing block so we can pair title+price+url and filter promos properly.
     // eBay wraps each result in <li class="s-item ...">, so we split on that boundary.
@@ -296,6 +313,7 @@ export default async function handler(req, res) {
       filtered = filtered.filter(it => !GRADE_PATTERNS.raw.test(it.title));
     }
 
+    filtered = filtered.slice(0, limit);
     const rawCount = filtered.length;
     if (rawCount === 0) {
       const data = emptyResp();
@@ -347,14 +365,17 @@ export default async function handler(req, res) {
       outliersRemoved,
       confidence, confidenceScore, confidenceReasons,
       fetchedAt, cacheAgeSec: 0,
-      items, searchUrl: ebaySearchUrl,
+      items, searchUrl: ebaySearchUrl, _prices: finalPrices,
     };
 
     await setCache(kvUrl, kvToken, cacheKey, data);
-    return res.status(200).json(data);
+    return res.status(200).json(forRequest(data, tcgMarket));
 
   } catch(e) {
-    console.error('ebay-sold error:', e.message);
-    return res.status(200).json(emptyResp({ message: 'View on eBay', error: e.message }));
+    const seconds = [401, 403].includes(e.status) ? 900 : e.status === 429 ? 300 : 30;
+    cooldownUntil = Date.now() + seconds * 1000;
+    await setCache(kvUrl, kvToken, COOLDOWN_KEY, { until: cooldownUntil }, seconds);
+    console.warn('ebay-sold unavailable:', e.status || (e.name === 'AbortError' ? 'timeout' : 'network'));
+    return res.status(200).json(unavailable());
   }
 }

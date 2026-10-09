@@ -490,12 +490,11 @@ await t.section('late/reordered paid invoices and next-renewal migration fence',
   t.check('late failure event cannot erase already granted paid period', await raw(activeKey) === active);
 
   await reset(); const migration = fixture({ plan: 'casual' });
-  // Explicit owner-authorized date, not a guess about the exact live renewal
-  // timestamp. The activation integration must bind the actual Stripe epoch.
-  const oct7 = Date.parse('2026-10-07T00:00:00Z') / 1000;
-  migration.term.effectiveFrom = oct7;
+  // Keep this synthetic boundary ahead of the fixture's paid period. A fixed
+  // calendar date silently stops exercising the fence once that date passes.
+  migration.term.effectiveFrom = now + 86400;
   const before = await snapshot();
-  await rejects('Casual scheduled term cannot grant before October 7', () =>
+  await rejects('Casual scheduled term cannot grant before its future boundary', () =>
     migration.webhook('invoice.paid', 'in_synthetic'), 'outside_authorized_term');
   t.check('migration fence leaves purchased/history untouched and makes no grant call',
     migration.grants.length === 0 && await snapshot() === before);
