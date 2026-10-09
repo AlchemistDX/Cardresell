@@ -1,6 +1,6 @@
 # Listing value and revenue proposal — October 9, 2026
 
-Status: recommendation, not activated entitlements. The production limit remains 500 saved drafts per account. This release only improves subscription and pricing copy. Prices, billing, credits, access and existing data are unchanged.
+Status: the draft-capacity and bulk-preparation ladder below is implemented for launch memberships in the follow-up release. See draft-tier-rollout-20261009.md for enforcement, compatibility exceptions and verification. Revenue-service ideas remain proposals; no new revenue service is claimed as active.
 
 ## Recommended upgrade ladder
 

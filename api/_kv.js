@@ -19,9 +19,12 @@
 export function makeKv(url, token) {
   return async function kv(...args) {
     const path = args.map((a) => encodeURIComponent(String(a))).join('/');
-    const r = await fetch(`${url}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch(path.length > 6000 ? url : `${url}/${path}`, path.length > 6000
+      ? { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args) }
+      : { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) throw new Error(`kv_${r.status}`);
     const j = await r.json();
+    if (j.error || !Object.hasOwn(j, 'result')) throw new Error('kv_response_invalid');
     return j.result;
   };
 }

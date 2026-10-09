@@ -270,6 +270,7 @@ export function createMembershipLifecycle({
     // after its boundary passed and a fresh canonical period was observed.
     insist(!s.command || (s.command.phase === 'confirmed'
       && s.snapshot.periodStart >= s.command.effectiveAt), 'change_pending');
+    insist(!s.snapshot.scheduledChange && (kind === 'cancel' || !s.snapshot.cancelAtPeriodEnd), 'change_pending');
     insist(kind === 'cancel' || requestedPlan !== s.snapshot.plan, 'unchanged_plan');
     const command = { owner, subscriptionId, operationId, kind, plan: kind === 'cancel' ? null : requestedPlan,
       effectiveAt: s.snapshot.periodEnd, phase: 'requested',

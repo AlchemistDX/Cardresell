@@ -1,3 +1,4 @@
+import { draftCapacityUsage } from './_draftCapacity.js';
 // api/_draftService.js — C1 wiring: the four draft operations, composed.
 //
 // This module contains no new concurrency or idempotency design. It composes
@@ -472,7 +473,7 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
 
       return await createUnderFence({
         kv, googleSub, input, operationId, instanceId, slotName,
-        generation: resolved.gen, fence,
+        generation: resolved.gen, fence, capacity: opts.capacity,
       });
     });
 
@@ -532,7 +533,7 @@ export async function createDraft(kv, googleSub, input, idempotencyKey, opts = {
  * invisible to every later create and gets duplicated.
  */
 async function createUnderFence({
-  kv, googleSub, input, operationId, instanceId, slotName, generation, fence,
+  kv, googleSub, input, operationId, instanceId, slotName, generation, fence, capacity,
 }) {
   {
     // ── The cap is checked HERE, inside the protected operation ───────────
@@ -544,9 +545,12 @@ async function createUnderFence({
     // HTTP boundary instead would turn a network retry into a refusal for
     // work that was already done — the exact failure idempotency exists to
     // prevent, reintroduced by a quota check.
-    // Atomic: INCR hands every caller a different number, so exactly
-    // DRAFT_CAP callers can ever receive one at or below the cap.
-    const cap = await reserveDraftSlot(googleSub);
+    // Tier admission is atomic with the authoritative write below. The
+    // historical non-membership path retains its existing reservation gate.
+    capacity = typeof capacity === 'function' ? await capacity() : capacity;
+    const usage = capacity ? await draftCapacityUsage(kv, googleSub, capacity) : null;
+    const cap = capacity ? { state: 'atomic-write', cap: capacity.activeLimit, count: usage.active }
+      : await reserveDraftSlot(googleSub);
     if (cap.state === QUOTA.AT_CAP) {
       const err = new Error(SERVICE_ERR.DRAFT_CAP_REACHED);
       err.detail = { error: SERVICE_ERR.DRAFT_CAP_REACHED, count: cap.count, cap: DRAFT_CAP, retryable: false };
@@ -561,7 +565,9 @@ async function createUnderFence({
     // The POINTER first, as `reserved`. A reservation with no draft is a
     // recoverable interrupted attempt; a draft with no pointer is invisible to
     // every later create and gets duplicated.
-    const res = await reserveCreate(kv, googleSub, instanceId, slotName, draft.draftId, generation, fence);
+    // Tiered writes commit their lifecycle pointer with the record. A cap
+    // refusal must not leave a reserved pointer that later looks like lost work.
+    const res = capacity ? { ok: true } : await reserveCreate(kv, googleSub, instanceId, slotName, draft.draftId, generation, fence);
     if (!res.ok) {
       if (reserved) await releaseDraftSlot(googleSub);
       const err = new Error(res.error === LIFECYCLE_ERR.FENCED
@@ -574,7 +580,7 @@ async function createUnderFence({
     try {
       // The fence travels to the store, where the guard and the write are one
       // command. Checking it here and then writing would be the race.
-      written = await putDraft(kv, googleSub, draft, operationId, { instanceId, slot: slotName, fence });
+      written = await putDraft(kv, googleSub, draft, operationId, { instanceId, slot: slotName, fence, ...(capacity ? { activeLimit: capacity.activeLimit, generation } : {}) });
     } catch (e) {
       // A slot held by a create that never persisted is a leak, and leaks
       // accumulate into a seller locked out below their real limit.
@@ -586,7 +592,7 @@ async function createUnderFence({
       // because nothing exists to index.
       if (reserved) await releaseDraftSlot(googleSub);
       const err = new Error(written.error);
-      err.detail = written;
+      err.detail = { ...written, cap: cap.cap, count: capacity ? null : cap.count };
       throw err;
     }
 
@@ -626,7 +632,7 @@ async function createUnderFence({
       // The reservation already counts this draft, so remaining is measured
       // from it directly. `null` when the gate could not be read — the UI says
       // nothing rather than guessing.
-      capRemaining: reserved && Number.isFinite(cap.count)
+      capRemaining: capacity ? null : reserved && Number.isFinite(cap.count)
         ? Math.max(0, DRAFT_CAP - cap.count)
         : null,
     };

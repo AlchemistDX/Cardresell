@@ -6,7 +6,7 @@ import { LAUNCH_PLANS } from '../api/_launchMembershipConfig.js';
 let passed=0,failed=0;
 async function test(name,fn){try{await fn();passed++;console.log('PASS '+name)}catch(e){failed++;console.log('FAIL '+name+': '+e.message)}}
 const copy=x=>structuredClone(x);
-async function fixture(){
+async function fixture(legacySubscription=null){
  await redis(['FLUSHDB']);
  const map={plans:{}},prices={};
  for(const [plan,c] of Object.entries(LAUNCH_PLANS)){if(plan==='free')continue;map.plans[plan]={priceId:'price_'+plan,productId:'prod_'+plan};prices['price_'+plan]={object:'price',id:'price_'+plan,product:'prod_'+plan,livemode:false,currency:'usd',unit_amount:c.monthlyPriceCents,type:'recurring',recurring:{interval:'month',interval_count:1}}}
@@ -32,7 +32,7 @@ async function fixture(){
   if(f.fault===path){f.fault=null;throw Error('synthetic committed response loss')}
   return Response.json(copy(value));
  };
- f.api=createMembershipLifecycleStripe({execute:redis,reader,apiKey:'sk_test_synthetic',accountId:'acct_test',priceMap:map,fetchImpl:f.fetch,timeoutMs:100});
+ f.api=createMembershipLifecycleStripe({legacySubscription,execute:redis,reader,apiKey:'sk_test_synthetic',accountId:'acct_test',priceMap:map,fetchImpl:f.fetch,timeoutMs:100});
  f.map=map;f.reader=reader;return f;
 }
 await test('normal plan change writes create and update once then confirms canonical snapshot',async()=>{const f=await fixture();assert.equal((await f.api.executeCommand(f.command)).status,'confirmed');assert.equal(f.posts.length,2);assert.equal((await f.api.executeCommand(f.command)).status,'confirmed');assert.equal(f.posts.length,2);assert.ok(f.calls.every(x=>x.auth==='Bearer sk_test_synthetic'&&x.redirect==='error'));assert.equal(f.posts[1].p['phases[0][items][0][price]'],'price_casual');assert.equal(f.posts[1].p['phases[1][items][0][price]'],'price_pro');assert.equal(f.posts[1].p.proration_behavior,'none');assert.equal(f.posts[1].p.end_behavior,'release')});
@@ -79,5 +79,11 @@ await test('Portal cancellation appearing after schedule creation prevents phase
  f.reader.retrieveSubscription=async()=>{const s=await original();if(++reads>=2)s.cancel_at=f.command.effectiveAt;return s;};
  await assert.rejects(f.api.executeCommand(f.command),/invalid_plan_change/);
  assert.equal(f.posts.length,1);assert.equal(f.posts[0].path,'subscription_schedules');
+});
+
+await test('an imported owner does not block another paid account scheduling its own plan',async()=>{
+ const legacy={owner:'imported',subscriptionId:'sub_legacy',customerId:'cus_legacy',priceId:'price_legacy',productId:'prod_legacy',periodStart:1700000000,periodEnd:1702592000};
+ const f=await fixture(legacy);const r=await f.api.executeCommand(f.command);assert.equal(r.status,'confirmed');
+ const denied=await fixture(legacy);denied.command.owner='imported';await assert.rejects(()=>denied.api.executeCommand(denied.command),/legacy_command_mismatch/);assert.equal(denied.posts.length,0);
 });
 console.log(`membership-lifecycle-stripe: ${passed} passed, ${failed} failed`);process.exit(failed?1:0);

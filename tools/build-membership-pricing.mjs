@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { publicMembershipCatalogue } from '../api/_membershipPurchaseRoutes.js';
 const c = publicMembershipCatalogue();
 const money = n => '$' + (n / 100).toFixed(2);
-const rows = c.plans.map(p => `<tr><th scope="row">${p.name}</th><td>${money(p.monthlyPriceCents)}</td><td>${p.idCredits}</td><td>${p.gradeCredits}</td><td>${p.packDiscountPercent ? p.packDiscountPercent + '%' : 'None'}</td><td>${p.marketplaceCount === 2 ? 'eBay + TCGplayer' : 'Up to ' + p.marketplaceCount}</td><td>Up to 500</td><td>${p.features.bulkGrade ? 'Up to 10 cards' : 'Not included'}</td></tr>`).join('\n');
+const rows = c.plans.map(p => `<tr><th scope="row">${p.name}</th><td>${money(p.monthlyPriceCents)}</td><td>${p.idCredits}</td><td>${p.gradeCredits}</td><td>${p.packDiscountPercent ? p.packDiscountPercent + '%' : 'None'}</td><td>${p.marketplaceCount === 2 ? 'eBay + TCGplayer' : 'Up to ' + p.marketplaceCount}</td><td>Up to 500</td><td>${p.drafts.activeLimit.toLocaleString('en-US')}</td><td>${p.drafts.bulkLimit > 1 ? 'Up to ' + p.drafts.bulkLimit : 'Individual'}</td><td>${p.features.bulkGrade ? 'Up to 10 cards' : 'Not included'}</td></tr>`).join('\n');
 const packs = c.packs.map(p => `<li><span>${p.credits.toLocaleString('en-US')} ${p.kind === 'id' ? 'ID' : 'Grade'} credits</span><strong>${money(p.amountCents)}</strong></li>`).join('\n');
 const path = new URL('../pricing.html', import.meta.url);
 let html = await readFile(path, 'utf8');

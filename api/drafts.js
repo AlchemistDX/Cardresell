@@ -1,3 +1,6 @@
+import { resolveDraftPlan } from './_draftPlanPolicy.js';
+import { draftCapacityUsage } from './_draftCapacity.js';
+import { prepareDraftBulk, validateDraftBulk } from './_draftBulk.js';
 import { verifyTokenFlexible } from './_verifyToken.js';
 import {
   createDraft, readDraft, updateDraft, deleteDraftOp, listDrafts,
@@ -77,6 +80,10 @@ export default async function handler(req, res) {
   const draftId = (req.query && req.query.id) ? String(req.query.id) : '';
 
   try {
+    if (req.method === 'POST' && req.query?.action === 'batch') {
+      const policy = await resolveDraftPlan(googleSub);
+      return res.status(200).json(await prepareDraftBulk(kv, googleSub, readBody(req), policy));
+    }
     // Explicit normal-auth listing actions, no additional acceptance endpoint.
     // OFF leaves the legacy dispatcher untouched.
     if (listingV2Enabled() && req.method === 'POST' && req.query?.action) {
@@ -103,6 +110,11 @@ export default async function handler(req, res) {
         ...(e.usage ? { usage: e.usage } : {}) });
     }
     const msg = String((e && e.message) || e);
+    if (msg.startsWith('DRAFT_BATCH_')) return res.status(msg === 'DRAFT_BATCH_LIMIT' ? 403 : 409).json({
+      error: msg === 'DRAFT_BATCH_LIMIT' ? 'Your plan does not support this bulk selection. Choose fewer cards or view subscriptions.' : 'Could not confirm this bulk selection. Retry preparation.',
+      code: msg, ...(e.policy ? { policy: e.policy } : {}) });
+    if (['DRAFT_MEMBERSHIP_UNAVAILABLE', 'DRAFT_CAPACITY_UNAVAILABLE'].includes(msg)
+      || msg.startsWith('membership_')) return res.status(503).json({error:'Could not confirm draft capacity. Existing drafts are preserved. Retry.', code:'DRAFT_CAPACITY_UNAVAILABLE',retryable:true});
     // A normalization refusal is the CLIENT's error, and it names the field, so
     // the client can fix the one value rather than guessing at the whole body.
     if (msg.startsWith('DRAFT_FIELD_INVALID') || msg.startsWith('MUTATION_FIELD_')) {
@@ -118,9 +130,9 @@ export default async function handler(req, res) {
     if (msg === SERVICE_ERR.DRAFT_CAP_REACHED) {
       const d = (e && e.detail) || {};
       return res.status(409).json({
-        error: `You have reached the maximum of ${DRAFT_CAP} saved drafts. Finish or delete one to save another.`,
+        error: `You have reached the maximum of ${d.cap || DRAFT_CAP} saved drafts. Delete a draft or view subscriptions for more capacity.`,
         code: SERVICE_ERR.DRAFT_CAP_REACHED,
-        cap: DRAFT_CAP,
+        cap: d.cap || DRAFT_CAP,
         count: d.count === undefined ? null : d.count,
         retryable: false,
       });
@@ -257,14 +269,21 @@ async function handleGet(req, res, kv, googleSub, draftId) {
     }
     // Usage failure must not make existing drafts unreadable.
     let usage = null;
-    if (listingV2Enabled()) { try { usage = await readListingUsage(kv, googleSub); } catch {} }
+    try {
+      if (listingV2Enabled()) usage = await readListingUsage(kv, googleSub);
+      else {
+        const policy = await resolveDraftPlan(googleSub);
+        usage = policy.plan === 'legacy' ? { ...policy, active: page.total, remaining: Math.max(0,policy.activeLimit-page.total) }
+          : await draftCapacityUsage(kv, googleSub, policy);
+      }
+    } catch {}
     return res.status(200).json({
       rows: page.rows,
       count: page.count,
       total: page.total,
       nextCursor: page.nextCursor,
-      cap: listingV2Enabled() ? usage?.activeLimit ?? null : DRAFT_CAP,
-      ...(listingV2Enabled() ? { usage } : {}),
+      cap: usage?.activeLimit ?? null,
+      usage,
       source: page.source,
       degraded: page.degraded,
       focusOffset: page.focusOffset === undefined ? null : page.focusOffset,
@@ -306,7 +325,13 @@ async function handleCreate(req, res, kv, googleSub) {
   const body = readBody(req);
   const input = normalizeCreateInput(body);
 
-  const out = await createDraft(kv, googleSub, input, key, { generation: readGeneration(body) });
+  const out = await createDraft(kv, googleSub, input, key, { generation: readGeneration(body), capacity: async () => {
+    let policy;
+    try { policy = await resolveDraftPlan(googleSub); }
+    catch { throw Error('DRAFT_MEMBERSHIP_UNAVAILABLE'); }
+    if (body.bulkId !== undefined) await validateDraftBulk(kv, googleSub, body.bulkId, input.instanceId, key, policy);
+    return policy.plan === 'legacy' ? null : policy;
+  } });
 
   if (out.state === IDEMPOTENCY_STATE.MISMATCH) {
     // Same key, different mutation. 409 rather than 400: the request is

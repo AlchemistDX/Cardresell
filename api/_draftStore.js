@@ -1,3 +1,5 @@
+import { capacityFencedWrite, capacityKeys } from './_draftCapacity.js';
+import { lifecycleFenceKey as capacityFenceKey, lifecycleKey as capacityLifecycleKey } from './_draftLifecycle.js';
 import { readStoredPacket, PACKET_COMPAT, packetInputFingerprint } from './_listingPacket.js';
 import { legacyListingWriteGuard } from './_listingEnrollment.js';
 // api/_draftStore.js
@@ -1010,10 +1012,26 @@ export async function putDraft(kv, googleSub, draft, operationId, fenceCtx = nul
   }
 
   if (fenceCtx && Number.isFinite(fenceCtx.fence)) {
-    const w = await fencedSet(
-      kv, googleSub, fenceCtx.instanceId, fenceCtx.slot, fenceCtx.fence,
-      draftKey(googleSub, draft.draftId), JSON.stringify(draft),
-    );
+    let w;
+    const capacityReady = fenceCtx.activeLimit || await kv('GET', capacityKeys(googleSub).ready);
+    if (!capacityReady) {
+      w = await fencedSet(kv, googleSub, fenceCtx.instanceId, fenceCtx.slot, fenceCtx.fence,
+        draftKey(googleSub, draft.draftId), JSON.stringify(draft));
+    } else {
+    // Capacity tracking applies to every fenced draft write once initialized,
+    // including edits/deletes. Lifecycle pointer writes keep their own script.
+    try {
+      const n = await capacityFencedWrite(kv, googleSub,
+        capacityFenceKey(googleSub, fenceCtx.instanceId, fenceCtx.slot),
+        draftKey(googleSub, draft.draftId), fenceCtx.fence, draft, fenceCtx.activeLimit || 0,
+        fenceCtx.activeLimit ? { key: capacityLifecycleKey(googleSub,fenceCtx.instanceId,fenceCtx.slot), record: {
+          v: 1, gen: fenceCtx.generation, fence: fenceCtx.fence, lastDraftId: draft.draftId,
+          lastDraftGen: fenceCtx.generation, lastState: 'live', reservedAt: null,
+        }} : null);
+      if (n === -2) return { ok: false, error: 'DRAFT_CAP_REACHED', retryable: false };
+      w = n === 1 ? { ok: true } : { ok: false, error: n === -1 ? LIFECYCLE_ERR.FENCED : LIFECYCLE_ERR.UNAVAILABLE };
+    } catch { w = { ok: false, error: LIFECYCLE_ERR.UNAVAILABLE }; }
+    }
     if (!w.ok) {
       // FENCED is not retryable: a newer owner has taken this row, and this
       // writer's whole operation is stale — including the id it minted.

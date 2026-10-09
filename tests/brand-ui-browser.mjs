@@ -36,7 +36,7 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  check('membership opens subscriptions',await page.locator('.membership-shop[open] h2').textContent(),'Subscriptions');
  await page.waitForFunction(()=>document.querySelectorAll('.membership-plan').length===5);
  check('only Pro and Business advertise batch uploads',await page.locator('.membership-plan').evaluateAll(es=>es.filter(e=>e.textContent.includes('Batch-grade uploaded')).map(e=>e.querySelector('h3').textContent)),['Pro','Business']);
- check('each tier discloses saved-report and draft limits',await page.locator('.membership-plan').evaluateAll(es=>es.every(e=>e.textContent.includes('500 private AI grade reports')&&e.textContent.includes('500 saved listing drafts'))),true);
+ check('each tier discloses saved-report and draft limits',await page.locator('.membership-plan').evaluateAll(es=>es.every((e,i)=>e.textContent.includes('500 private AI grade reports')&&e.textContent.includes([5,25,100,500,2000][i].toLocaleString()+' saved listing drafts'))),true);
  check('retired pricing cannot reopen from stale calls',await page.evaluate(()=>['pricingOverlay','shopOverlay'].every(id=>{const e=document.getElementById(id);e.classList.add('open');e.style.display='flex';const hidden=getComputedStyle(e).display==='none';e.classList.remove('open');e.style.display='';return hidden})),true);
 
  if(shots)await page.screenshot({path:`${shots}/subscriptions-${theme}-${viewport.width}.png`});
@@ -100,6 +100,32 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  await page.evaluate(()=>{_draftsState.signedIn=true;_draftsState.total=0;_draftsState.rows=[];_draftsPaint()});
  await page.locator('#draftsWrap .empty-primary').click();
  check('empty drafts lead to ID scanner menu',await page.locator('#scanMenuTabId').getAttribute('aria-selected'),'true');
+ await page.evaluate(()=>{_draftsState.total=105;_draftsState.usage={plan:'casual',active:105,activeLimit:100,remaining:0};_draftsPaint()});
+ check('draft usage shows over-limit data without hiding work',await page.locator('#draftsCount').textContent().then(t=>t.includes('105 / 100')&&t.includes('Existing drafts stay available')),true);
+ check('draft usage offers plans',await page.locator('#draftsCount button').textContent(),'View plans');
+ check('draft usage fits viewport',await fit(),true);
+ if(theme==='light'&&viewport.width===390){
+  let bulkLimit=1,manifests=[];
+  await page.route('**/api/drafts**',r=>r.request().method()==='GET'
+    ?r.fulfill({json:{cap:25,total:0,usage:{active:0,remaining:25,bulkLimit}}})
+    :r.fulfill({json:(()=>{const b=r.request().postDataJSON();manifests.push(b);return {id:b.id,count:b.rows.length}})()}));
+  await page.evaluate(()=>{
+    window._savedDraftCreate=_crCreateDraft;window._bulkCalls=[];
+    _crCreateDraft=async o=>{window._bulkCalls.push(o);return {ok:true,status:201,draftId:'drf_fixture'}};
+    window._bulkResults=[{success:true,rowId:'one',cardName:'Test card',setName:'Test set',qty:2}];
+    _bulkCopyUids(window._bulkResults[0]);window._bulkDraftSel=[window._bulkResults[0].scanUid];
+  });
+  await page.evaluate(()=>bulkCreateSelectedDrafts());
+  check('Free bulk selection writes no manifest',manifests.length,0);
+  check('Free block preserves selected scan',await page.evaluate(()=>window._bulkResults.length),1);
+  await page.keyboard.press('Escape');bulkLimit=10;
+  await page.evaluate(()=>bulkCreateSelectedDrafts());
+  check('paid bulk prepares one server manifest for physical copies',manifests.length===1&&manifests[0].rows.length===2,true);
+  check('each create carries its manifest and account',await page.evaluate(()=>window._bulkCalls.length===2&&window._bulkCalls.every(o=>o.bulkId&&o.batchOwner==='fixture')),true);
+  await page.evaluate(()=>{_crCreateDraft=window._savedDraftCreate;window._bulkResults=[];window._bulkDraftSel=[];window._bulkDraftBusy=false;});
+  await page.unroute('**/api/drafts**');
+ }
+
  await page.keyboard.press('Escape');
  await page.evaluate(()=>_launchDeepGrade());await page.locator('#gradeUploadPhoto').click();
  check('deep grade has six upload slots',await page.locator('[data-grade-slot]').count(),6);

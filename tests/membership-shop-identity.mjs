@@ -509,4 +509,25 @@ const authPath = html.match(/src="\/js\/(auth\.[a-f0-9]{8}\.js)"/)[1];
 const authSource = fs.readFileSync(new URL('../js/' + authPath, import.meta.url), 'utf8');
 t.check('shipped sign-in and verification completion await automatic setup', (authSource.match(/await window\.ensureMembershipAccount\?\.\(\)/g) || []).length === 2);
 t.check('shipped sign-out clears setup and banner', /window\.googleUser = null;\s+window\.resetMembershipAccountSetup\?\.\(\)/.test(authSource));
+
+await t.section('renewal plan changes need confirmation and bind the selected account', async () => {
+  const changes=[];
+  const current={subscriptionId:'sub_fixture',snapshot:{status:'active',plan:'starter',periodStart:1700000000,periodEnd:2000000000,cancelAtPeriodEnd:false},command:null};
+  const h=setup({initial:{...user('A'),emailVerified:true},suppliedCatalogue:{...publicMembershipCatalogue('starter'),purchaseEnabled:true,newSubscriptionAllowed:false},onAccount:async opts=>{
+    if(opts.body){const body=JSON.parse(opts.body);changes.push(body);current.command={operationId:body.operationId,kind:'plan_change',plan:body.plan,phase:'requested'};return {ok:true,json:async()=>({status:'pending',state:current})};}
+    return {ok:true,json:async()=>({state:current,credits:{tier:'starter'},creditsAvailable:false,management:{portal:true,scheduleChanges:true}})};
+  }});
+  h.window.confirm=()=>false;
+  await h.window.openMembershipShop('subscriptions');
+  let control=h.controls().find(x=>x.textContent==='Change to Pro at renewal');
+  t.check('eligible subscription offers renewal change',!!control&&!control.disabled);
+  await control.onclick();t.check('declining confirmation sends no operation',changes.length===0);
+  h.window.confirm=()=>true;await control.onclick();
+  t.check('accepted change sends server selection only',changes.length===1&&changes[0].action==='change'&&changes[0].plan==='pro'&&Object.keys(changes[0]).sort().join(',')==='action,operationId,plan');
+  t.check('change has durable operation identity',/^[a-f0-9]{64}$/.test(changes[0].operationId));
+  const retry=h.controls().find(x=>x.textContent==='Retry pending membership change');
+  t.check('pending change exposes recovery',!!retry);
+  await retry.onclick();
+  t.check('recovery uses the original operation identity',changes.length===2&&changes[1].operationId===changes[0].operationId);
+});
 t.done();

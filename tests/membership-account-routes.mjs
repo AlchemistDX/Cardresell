@@ -103,4 +103,12 @@ check(freeAccount.body.state.status === 'associated' && freeAccount.body.managem
 check(freeAccount.body.state.subscriptionId === null);
 associatedCustomer = null;
 check((await launchCall(portalCommand)).code === 503);
+
+for(const enabled of [true,false]){
+ const guarded=createMembershipAccountRoutes({authenticate:async()=>({uid:'owner',verified:true}),customers:{get:async()=>({state:'bound'})},
+  lifecycle,balances:async()=>({}),commands:{executeCommand:async()=>{}},scheduleChanges:async uid=>enabled&&uid==='owner'});
+ const run=async(method,body)=>{const res={setHeader(){},status(code){this.code=code;return this},json(body){this.body=body;return this}};await guarded.account({method,body,headers:{authorization:'Bearer good'}},res);return res;};
+ check((await run('GET')).body.management.scheduleChanges===enabled);
+ if(!enabled)check((await run('POST',{action:'change',plan:'business',operationId:'e'.repeat(64)})).code===409);
+}
 console.log(`membership-account-routes: ${passed} passed, 0 failed`);

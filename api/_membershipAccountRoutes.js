@@ -41,6 +41,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
       try {
         const identity = await owner(req);
         const uid = identity.uid;
+        const canSchedule = typeof scheduleChanges === 'function' ? await scheduleChanges(uid) : scheduleChanges === true;
         if (req.method === 'GET') {
           const customer = await customers.get(uid);
           const state = customer?.state === 'bound' ? await lifecycle.get({ owner: uid })
@@ -51,7 +52,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
           let credits = null;
           try { credits = await balances(uid); } catch {}
           return res.status(200).json({ state: publicState(state), credits, creditsAvailable: credits !== null, creditsExpire: false,
-            management: { portal: typeof portal === 'function' && customer?.state === 'bound', scheduleChanges } });
+            management: { portal: typeof portal === 'function' && customer?.state === 'bound', scheduleChanges: canSchedule } });
         }
         const body = req.body;
         if (exact(body, ['action', 'operationId']) && body.action === 'portal'
@@ -76,7 +77,7 @@ export function createMembershipAccountRoutes({ authenticate, customers, lifecyc
           || !['change', 'cancel', 'refresh'].includes(body.action) || !/^[a-f0-9]{64}$/.test(body.operationId)) {
           return res.status(400).json({ error: 'invalid_request' });
         }
-        if (!scheduleChanges && ['change', 'cancel'].includes(body.action)) {
+        if (!canSchedule && ['change', 'cancel'].includes(body.action)) {
           return res.status(409).json({ error: 'use_customer_portal' });
         }
         const state = await lifecycle.get({ owner: uid });

@@ -176,7 +176,7 @@ export function createMembershipLifecycleStripe({ execute, reader, apiKey, accou
         && ['plan_change', 'cancel'].includes(command.kind) && command.phase === 'requested'
         && typeof command.idempotencyKey === 'string', 'invalid_command');
       const { s, item, cancelsAtPeriodEnd } = await rawSubscription(command.subscriptionId);
-      if (legacy) insist(command.owner === legacy.owner && command.subscriptionId === legacy.subscriptionId
+      if (legacy && (command.owner === legacy.owner || command.subscriptionId === legacy.subscriptionId)) insist(command.owner === legacy.owner && command.subscriptionId === legacy.subscriptionId
         && command.kind === 'plan_change' && command.plan === 'casual'
         && command.effectiveAt === legacy.periodEnd, 'legacy_command_mismatch');
       insist(item.current_period_end === command.effectiveAt && s.status === 'active'

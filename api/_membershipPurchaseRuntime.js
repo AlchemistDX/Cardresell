@@ -196,7 +196,7 @@ export async function membershipPurchaseRuntime() {
   const purchases = createMembershipPurchaseRoutes({ authenticate, resolveContext, controller, purchaseEnabled });
   return { ...purchases,
     ...createMembershipAccountRoutes({ authenticate, customers, lifecycle, fulfillment, commands,
-      balances: membershipBalances, portal: customerStripe.createPortal, bootstrap, scheduleChanges: false,
+      balances: membershipBalances, portal: customerStripe.createPortal, bootstrap, scheduleChanges: owner => owner !== imported?.authorization.owner,
       retryWelcome: async (owner, identity) => {
         if (await hasWelcomeDeferral(membershipRedis, owner)) await bootstrap(owner, identity);
       } }) };

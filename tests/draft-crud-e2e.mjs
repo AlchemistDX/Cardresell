@@ -12,7 +12,7 @@
 import { harness } from './_assert.mjs';
 const { check, checkAsync, done } = harness('draft-crud-e2e');
 
-process.env.KV_REST_API_URL   = 'https://kv.test';
+process.env.KV_REST_API_URL   = 'https://draft-fixture.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-token';
 
 const SUB = '1029384756';
@@ -55,7 +55,7 @@ globalThis.fetch = async (url, opts) => {
   }
   if (u.includes('googleapis.com')) return { ok: false, status: 500, json: async () => ({}) };
 
-  const parts = String(url).replace('https://kv.test/', '').split('/').map(decodeURIComponent);
+  const parts = opts?.body ? JSON.parse(opts.body) : String(url).replace('https://draft-fixture.upstash.io/', '').split('/').map(decodeURIComponent);
   const [cmd, ...rest] = parts;
   seen.push(cmd.toLowerCase());
   const auth = (opts && opts.headers && opts.headers.Authorization) || '';

@@ -1,3 +1,4 @@
+import { draftPlanPolicy } from './_draftPlanPolicy.js';
 // Normal HTTP adapters. Dependencies are server-created, never browser-provided.
 import { LAUNCH_PLANS, LAUNCH_PACKS, LAUNCH_WELCOME_CREDITS, quoteLaunchPack } from './_launchMembershipConfig.js';
 
@@ -14,6 +15,7 @@ export function publicMembershipCatalogue(plan = 'free') {
       id, name: id[0].toUpperCase() + id.slice(1), monthlyPriceCents: p.monthlyPriceCents,
       idCredits: p.idCredits, gradeCredits: p.gradeCredits,
       packDiscountPercent: p.packDiscountPercent, marketplaceCount: membershipVenueAccess(id).count,
+      drafts: draftPlanPolicy(id),
       features: { bulkGrade: MEMBERSHIP_PAID_FEATURES[id]?.bulkGrade === true },
     })),
     // Do not advertise unfinished quota/storage features through the shop.
