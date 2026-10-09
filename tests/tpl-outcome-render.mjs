@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || '/home/user/node_modules/playwright/index.js';
 const T = harness('tpl-outcome-render');
 
 const MIME = {
@@ -98,7 +98,7 @@ const NOT_FOUND_WORDING = /no (results|matches|pok|magic|lorcana|yu-gi|[a-z ]*ca
 
 const { chromium } = (await import(PW)).default;
 const { server, port } = await startHost();
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || undefined, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const pageErrors = [];
 page.on('pageerror', e => pageErrors.push(String(e && e.message || e)));

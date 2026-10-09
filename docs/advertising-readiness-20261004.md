@@ -1,3 +1,5 @@
+> Current status: batch photo uploads and saved reports shipped in release 94f24a6. See `product-readiness-20261009.md` and `pokemon-api-and-advertising-20261009.md`. Older dated readiness percentages and the withdrawn-batch note below are historical, not the current launch state.
+
 > October 8 correction: batch-grading entry is hidden and is not a launched benefit. Shop/pricing claims withdrawn. Private saved AI grade reports added separately; see `tier-access-and-advertising-20261009.md`. Do not treat the earlier readiness estimate as acceptance of batch grading.
 
 ## 2026-10-08 evening: tier access and launch-copy completion
