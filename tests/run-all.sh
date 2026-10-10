@@ -78,7 +78,7 @@ echo "  CardResell regression suite"
 echo "════════════════════════════════════════════════════"
 
 echo ""
-echo "▶ [1/108] Asset fingerprints (referenced bundles named after their bytes)"
+echo "▶ [1/109] Asset fingerprints (referenced bundles named after their bytes)"
 if suite "$ROOT/tests/asset-fingerprints.mjs"; then
   :
 else
@@ -86,7 +86,7 @@ else
 fi
 
 echo ""
-echo "▶ [2/108] membership-venue-access"
+echo "▶ [2/109] membership-venue-access"
 if suite "$ROOT/tests/membership-venue-access.mjs"; then
   :
 else
@@ -94,7 +94,7 @@ else
 fi
 
 echo ""
-echo "▶ [3/108] scan-input-reset"
+echo "▶ [3/109] scan-input-reset"
 if suite "$ROOT/tests/scan-input-reset.mjs"; then
   :
 else
@@ -102,7 +102,7 @@ else
 fi
 
 echo ""
-echo "▶ [4/108] scan-request-recovery"
+echo "▶ [4/109] scan-request-recovery"
 if suite "$ROOT/tests/scan-request-recovery.mjs"; then
   :
 else
@@ -110,7 +110,7 @@ else
 fi
 
 echo ""
-echo "▶ [5/108] Syntax check (all inline <script> blocks)"
+echo "▶ [5/109] Syntax check (all inline <script> blocks)"
 if suite "$ROOT/tests/syntax-check.js"; then
   :
 else
@@ -118,7 +118,7 @@ else
 fi
 
 echo ""
-echo "▶ [6/108] Auth stack integrity"
+echo "▶ [6/109] Auth stack integrity"
 if suite "$ROOT/tests/auth-integrity.js"; then
   :
 else
@@ -126,7 +126,7 @@ else
 fi
 
 echo ""
-echo "▶ [7/108] Scan-miss regression checks"
+echo "▶ [7/109] Scan-miss regression checks"
 if suite "$ROOT/tests/scan-miss.js"; then
   :
 else
@@ -134,7 +134,7 @@ else
 fi
 
 echo ""
-echo "▶ [8/108] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
+echo "▶ [8/109] Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)"
 if suite "$ROOT/tests/deeplink-companions.js"; then
   :
 else
@@ -142,7 +142,7 @@ else
 fi
 
 echo ""
-echo "▶ [9/108] Copy truth checks"
+echo "▶ [9/109] Copy truth checks"
 if suite "$ROOT/tests/copy-truth-offline.mjs"; then
   :
 else
@@ -150,7 +150,7 @@ else
 fi
 
 echo ""
-echo "▶ [10/108] Fee truth checks"
+echo "▶ [10/109] Fee truth checks"
 if suite "$ROOT/tests/fee-truth-offline.mjs"; then
   :
 else
@@ -158,7 +158,7 @@ else
 fi
 
 echo ""
-echo "▶ [11/108] Stripe webhook P0 checks"
+echo "▶ [11/109] Stripe webhook P0 checks"
 if suite "$ROOT/tests/webhook-p0-offline.mjs"; then
   :
 else
@@ -166,7 +166,7 @@ else
 fi
 
 echo ""
-echo "▶ [12/108] Launch-audit regressions"
+echo "▶ [12/109] Launch-audit regressions"
 if suite "$ROOT/tests/launch-audit-regressions.mjs"; then
   :
 else
@@ -174,7 +174,7 @@ else
 fi
 
 echo ""
-echo "▶ [13/108] Variant selection (premium-printing bias)"
+echo "▶ [13/109] Variant selection (premium-printing bias)"
 if suite "$ROOT/tests/variant-selection.mjs"; then
   :
 else
@@ -182,7 +182,7 @@ else
 fi
 
 echo ""
-echo "▶ [14/108] Sports price guard (host + parallel discipline)"
+echo "▶ [14/109] Sports price guard (host + parallel discipline)"
 if suite "$ROOT/tests/sports-price-guard.mjs"; then
   :
 else
@@ -190,7 +190,7 @@ else
 fi
 
 echo ""
-echo "▶ [15/108] Quick Pricing + headline price"
+echo "▶ [15/109] Quick Pricing + headline price"
 if suite "$ROOT/tests/quick-pricing.mjs"; then
   :
 else
@@ -198,7 +198,7 @@ else
 fi
 
 echo ""
-echo "▶ [16/108] Sports parallel matching"
+echo "▶ [16/109] Sports parallel matching"
 if suite "$ROOT/tests/sports-parallel.mjs"; then
   :
 else
@@ -206,7 +206,7 @@ else
 fi
 
 echo ""
-echo "▶ [17/108] Scanner fastpath + miss-logging"
+echo "▶ [17/109] Scanner fastpath + miss-logging"
 if suite "$ROOT/tests/scanner-fastpath.mjs"; then
   :
 else
@@ -214,7 +214,7 @@ else
 fi
 
 echo ""
-echo "▶ [18/108] eBay auth + taxonomy (offline)"
+echo "▶ [18/109] eBay auth + taxonomy (offline)"
 if suite "$ROOT/tests/ebay-auth-offline.mjs"; then
   :
 else
@@ -222,7 +222,7 @@ else
 fi
 
 echo ""
-echo "▶ [19/108] Card identity + SKU golden tests"
+echo "▶ [19/109] Card identity + SKU golden tests"
 if suite "$ROOT/tests/sku-identity.mjs"; then
   :
 else
@@ -230,7 +230,7 @@ else
 fi
 
 echo ""
-echo "▶ [20/108] Sell entry point eligibility (D1 gate, offline)"
+echo "▶ [20/109] Sell entry point eligibility (D1 gate, offline)"
 if suite "$ROOT/tests/sell-eligibility.mjs"; then
   :
 else
@@ -238,7 +238,7 @@ else
 fi
 
 echo ""
-echo "▶ [21/108] Sell gate: out-of-order responses + wire size (D1, offline)"
+echo "▶ [21/109] Sell gate: out-of-order responses + wire size (D1, offline)"
 if suite "$ROOT/tests/sell-gate-ordering.mjs"; then
   :
 else
@@ -246,7 +246,7 @@ else
 fi
 
 echo ""
-echo "▶ [22/108] Listing packet: title + condition + target-net + metadata (offline)"
+echo "▶ [22/109] Listing packet: title + condition + target-net + metadata (offline)"
 if suite "$ROOT/tests/listing-packet-offline.mjs"; then
   :
 else
@@ -254,7 +254,7 @@ else
 fi
 
 echo ""
-echo "▶ [23/108] Draft index recovery + packet schema version (offline)"
+echo "▶ [23/109] Draft index recovery + packet schema version (offline)"
 if suite "$ROOT/tests/draft-index-recovery.mjs"; then
   :
 else
@@ -262,7 +262,7 @@ else
 fi
 
 echo ""
-echo "▶ [24/108] C1 draft store — revisions, tombstones, schema safety (offline)"
+echo "▶ [24/109] C1 draft store — revisions, tombstones, schema safety (offline)"
 if suite "$ROOT/tests/draft-store.mjs"; then
   :
 else
@@ -270,7 +270,7 @@ else
 fi
 
 echo ""
-echo "▶ [25/108] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
+echo "▶ [25/109] C1 draft CRUD end-to-end — create/read/edit/delete (offline)"
 if suite "$ROOT/tests/draft-crud-e2e.mjs"; then
   :
 else
@@ -278,7 +278,7 @@ else
 fi
 
 echo ""
-echo "▶ [26/108] C2/C3 draft list + cap — hydration, paging, severity (offline)"
+echo "▶ [26/109] C2/C3 draft list + cap — hydration, paging, severity (offline)"
 if suite "$ROOT/tests/draft-list-cap.mjs"; then
   :
 else
@@ -287,19 +287,19 @@ fi
 
 echo ""
 if [[ "${DRAFT_KV_LIVE:-0}" == "1" ]]; then
-  echo "▶ [27/108] C1 draft persistence against the REAL store"
+  echo "▶ [27/109] C1 draft persistence against the REAL store"
   if suite "$ROOT/tests/draft-kv-live.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [27/108] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
+  echo "▶ [27/109] C1 real-store pass — SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)"
 fi
 
 if [[ "$LOCAL_ONLY" == "0" ]]; then
   echo ""
-  echo "▶ [28/108] Prod endpoint smoke ($BASE)"
+  echo "▶ [28/109] Prod endpoint smoke ($BASE)"
   if suite "$ROOT/tests/endpoints-smoke.js" "--base=$BASE"; then
     :
   else
@@ -307,23 +307,23 @@ if [[ "$LOCAL_ONLY" == "0" ]]; then
   fi
 else
   echo ""
-  echo "▶ [28/108] Prod endpoint smoke — SKIPPED (--local)"
+  echo "▶ [28/109] Prod endpoint smoke — SKIPPED (--local)"
 fi
 
 echo ""
 if [[ "${COND_PILLS_BROWSER:-0}" == "1" ]]; then
-  echo "▶ [29/108] Condition-applicability interaction (real browser)"
+  echo "▶ [29/109] Condition-applicability interaction (real browser)"
   if suite "$ROOT/tests/condition-applicability.mjs"; then
     :
   else
     FAIL=1
   fi
 else
-  echo "▶ [29/108] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
+  echo "▶ [29/109] Condition-applicability interaction — SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
 fi
 
 echo ""
-echo "▶ [30/108] D2.1 draft-list readiness (derivation + copy ownership)"
+echo "▶ [30/109] D2.1 draft-list readiness (derivation + copy ownership)"
 if suite "$ROOT/tests/draft-readiness.mjs"; then
   :
 else
@@ -331,7 +331,7 @@ else
 fi
 
 echo ""
-echo "▶ [31/108] D2.1 draft-list focus parameter (offset resolution + refusal)"
+echo "▶ [31/109] D2.1 draft-list focus parameter (offset resolution + refusal)"
 if suite "$ROOT/tests/draft-focus.mjs"; then
   :
 else
@@ -339,7 +339,7 @@ else
 fi
 
 echo ""
-echo "▶ [32/108] D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)"
+echo "▶ [32/109] D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)"
 if suite "$ROOT/tests/draft-list-screen.mjs"; then
   :
 else
@@ -351,7 +351,7 @@ echo ""
 # from step 2 onward but was only ever run by hand, so nothing here would have
 # noticed it going red -- an unregistered suite is a suite that protects
 # whichever branch the author last remembered to run it on.
-echo "▶ [33/108] D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)"
+echo "▶ [33/109] D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)"
 if suite "$ROOT/tests/draft-review-screen.mjs"; then
   :
 else
@@ -364,7 +364,7 @@ echo ""
 # scope: the rule suite tests pure functions, and the screen suites test one
 # render at a time. A confirmation leaking from one card to the next only shows
 # up when a document survives across two listings and a reload.
-echo "▶ [34/108] Top Rated Plus confirmation is scoped to one listing (4 acceptance states)"
+echo "▶ [34/109] Top Rated Plus confirmation is scoped to one listing (4 acceptance states)"
 if suite "$ROOT/tests/trs-listing-scope.mjs"; then
   :
 else
@@ -375,7 +375,7 @@ fi
 # session record claimed contrast-tokens was "registered" when only its pass
 # count had ever been observed by hand. A suite that is never invoked by the
 # runner is not a guard, it is a file. Registering both, and renumbering to 33.
-echo "▶ [35/108] Theme token contrast meets AA in both themes (runtime-resolved)"
+echo "▶ [35/109] Theme token contrast meets AA in both themes (runtime-resolved)"
 if suite "$ROOT/tests/contrast-tokens.mjs"; then
   :
 else
@@ -384,7 +384,7 @@ fi
 
 # Bidirectional: a venue missing from either side, or a date that disagrees
 # across the two surfaces, is a published claim the code no longer backs.
-echo "▶ [36/108] accuracy.html and the fee model agree on venues and audit dates"
+echo "▶ [36/109] accuracy.html and the fee model agree on venues and audit dates"
 if suite "$ROOT/tests/accuracy-fee-parity.mjs"; then
   :
 else
@@ -398,7 +398,7 @@ fi
 # reordering or deleting a row fails here. Registered in the same commit that
 # wrote it, rather than run by hand and wired in later -- the drift this
 # runner's own comments document three separate times.
-echo "▶ [37/108] Review-screen fee rows are a dt/dd list with the withheld pair intact"
+echo "▶ [37/109] Review-screen fee rows are a dt/dd list with the withheld pair intact"
 if suite "$ROOT/tests/review-fee-dl.mjs"; then
   :
 else
@@ -415,7 +415,7 @@ fi
 # suite sits on disk without either an invocation here or a declared reason.
 
 echo ""
-echo "▶ [38/108] SOL-PLAT-007 asset extraction — inline JS/CSS stays split and hashed"
+echo "▶ [38/109] SOL-PLAT-007 asset extraction — inline JS/CSS stays split and hashed"
 if suite "$ROOT/tests/asset-extraction-2026-09-05.mjs"; then
   :
 else
@@ -423,7 +423,7 @@ else
 fi
 
 echo ""
-echo "▶ [39/108] Sol-audit blockers — executes the shipped logic, not its text"
+echo "▶ [39/109] Sol-audit blockers — executes the shipped logic, not its text"
 if suite "$ROOT/tests/sol-remediation-2026-09-04.mjs"; then
   :
 else
@@ -431,7 +431,7 @@ else
 fi
 
 echo ""
-echo "▶ [40/108] Sol majors — flip and pack"
+echo "▶ [40/109] Sol majors — flip and pack"
 if suite "$ROOT/tests/majors-flip-and-pack-2026-09-04.mjs"; then
   :
 else
@@ -439,7 +439,7 @@ else
 fi
 
 echo ""
-echo "▶ [41/108] Sol majors — data durability and tombstones"
+echo "▶ [41/109] Sol majors — data durability and tombstones"
 if suite "$ROOT/tests/durability-tombstones-2026-09-04.mjs"; then
   :
 else
@@ -447,7 +447,7 @@ else
 fi
 
 echo ""
-echo "▶ [42/108] Sol majors — scan hygiene"
+echo "▶ [42/109] Sol majors — scan hygiene"
 if suite "$ROOT/tests/scan-hygiene-2026-09-04.mjs"; then
   :
 else
@@ -455,7 +455,7 @@ else
 fi
 
 echo ""
-echo "▶ [43/108] Sol majors — entitlements and session integrity"
+echo "▶ [43/109] Sol majors — entitlements and session integrity"
 if suite "$ROOT/tests/entitlements-2026-09-04.mjs"; then
   :
 else
@@ -463,7 +463,7 @@ else
 fi
 
 echo ""
-echo "▶ [44/108] Sol majors — accessibility, mobile targets, honest copy"
+echo "▶ [44/109] Sol majors — accessibility, mobile targets, honest copy"
 if suite "$ROOT/tests/a11y-mobile-2026-09-04.mjs"; then
   :
 else
@@ -471,7 +471,7 @@ else
 fi
 
 echo ""
-echo "▶ [45/108] SOL-PLAT-011/012/013 — gold text AA, social meta, absolute og:url"
+echo "▶ [45/109] SOL-PLAT-011/012/013 — gold text AA, social meta, absolute og:url"
 if suite "$ROOT/tests/minors-011-012-013-2026-09-04.mjs"; then
   :
 else
@@ -479,7 +479,7 @@ else
 fi
 
 echo ""
-echo "▶ [46/108] Bulk-scan misfire — two bugs, four fixes"
+echo "▶ [46/109] Bulk-scan misfire — two bugs, four fixes"
 if suite "$ROOT/tests/bulk-scan-misfire.mjs"; then
   :
 else
@@ -487,7 +487,7 @@ else
 fi
 
 echo ""
-echo "▶ [47/108] Bulk row regression — Bulbasaur qualifier"
+echo "▶ [47/109] Bulk row regression — Bulbasaur qualifier"
 if suite "$ROOT/tests/bulk-bulbasaur-qualifier-2026-09-04.mjs"; then
   :
 else
@@ -495,7 +495,7 @@ else
 fi
 
 echo ""
-echo "▶ [48/108] Bulk row regression — Minun set/variant misfire"
+echo "▶ [48/109] Bulk row regression — Minun set/variant misfire"
 if suite "$ROOT/tests/bulk-minun-misfire-2026-09-04.mjs"; then
   :
 else
@@ -503,7 +503,7 @@ else
 fi
 
 echo ""
-echo "▶ [49/108] Grading upside: net comes from the shared fee model (BIAS-1)"
+echo "▶ [49/109] Grading upside: net comes from the shared fee model (BIAS-1)"
 if suite "$ROOT/tests/grading-upside-fees.mjs"; then
   :
 else
@@ -511,7 +511,7 @@ else
 fi
 
 echo ""
-echo "▶ [50/108] Payout honesty: signed payout bars + four-state cost records (BIAS-6)"
+echo "▶ [50/109] Payout honesty: signed payout bars + four-state cost records (BIAS-6)"
 if suite "$ROOT/tests/payout-honesty.mjs"; then
   :
 else
@@ -519,7 +519,7 @@ else
 fi
 
 echo ""
-echo "▶ [51/108] Decision restatements — shipped copy still matches the decisions of record"
+echo "▶ [51/109] Decision restatements — shipped copy still matches the decisions of record"
 if suite "$ROOT/tests/decision-restatements.mjs"; then
   :
 else
@@ -527,7 +527,7 @@ else
 fi
 
 echo ""
-echo "▶ [52/108] TPL proxy contract (offline, mocked upstream) [CH-3]"
+echo "▶ [52/109] TPL proxy contract (offline, mocked upstream) [CH-3]"
 if suite "$ROOT/tests/tpl-proxy-offline.mjs"; then
   :
 else
@@ -535,7 +535,7 @@ else
 fi
 
 echo ""
-echo "▶ [53/108] TPL cache + aggregate spending allowance (offline, mocked store) [CH-3/R4]"
+echo "▶ [53/109] TPL cache + aggregate spending allowance (offline, mocked store) [CH-3/R4]"
 if suite "$ROOT/tests/tpl-budget-offline.mjs"; then
   :
 else
@@ -543,7 +543,7 @@ else
 fi
 
 echo ""
-echo "▶ [54/108] eBay notification verification token fails closed [CH-2]"
+echo "▶ [54/109] eBay notification verification token fails closed [CH-2]"
 if suite "$ROOT/tests/ebay-notify-token.mjs"; then
   :
 else
@@ -555,7 +555,7 @@ echo ""
 # generation pointer every draft create is now compared against, and had been
 # run by hand only. Registering all four; the registry suite stays last so it
 # reports on the file it just checked.
-echo "▶ [55/108] Draft lifecycle pointer — generations, reservations, fencing (offline)"
+echo "▶ [55/109] Draft lifecycle pointer — generations, reservations, fencing (offline)"
 if suite "$ROOT/tests/draft-lifecycle.mjs"; then
   :
 else
@@ -563,7 +563,7 @@ else
 fi
 
 echo ""
-echo "▶ [56/108] An omitted generation is legacy generation 0, then compared like any other"
+echo "▶ [56/109] An omitted generation is legacy generation 0, then compared like any other"
 if suite "$ROOT/tests/draft-generation-omission.mjs"; then
   :
 else
@@ -571,7 +571,7 @@ else
 fi
 
 echo ""
-echo "▶ [57/108] Draft delete in a real browser — 410 shows the deleted state, no auto-retry"
+echo "▶ [57/109] Draft delete in a real browser — 410 shows the deleted state, no auto-retry"
 if suite "$ROOT/tests/draft-delete-browser.mjs"; then
   :
 else
@@ -579,7 +579,7 @@ else
 fi
 
 echo ""
-echo "▶ [58/108] TPL outcome rendering"
+echo "▶ [58/109] TPL outcome rendering"
 if suite "$ROOT/tests/tpl-outcome-render.mjs"; then
   :
 else
@@ -587,7 +587,7 @@ else
 fi
 
 echo ""
-echo "▶ [59/108] Collection escaping: hostile values stay inside their attributes"
+echo "▶ [59/109] Collection escaping: hostile values stay inside their attributes"
 if suite "$ROOT/tests/collection-escaping-browser.mjs"; then
   :
 else
@@ -595,7 +595,7 @@ else
 fi
 
 echo ""
-echo "▶ [60/108] Draft card actions in a real browser — edit, delete, download, desktop and 375px"
+echo "▶ [60/109] Draft card actions in a real browser — edit, delete, download, desktop and 375px"
 if suite "$ROOT/tests/draft-card-actions-browser.mjs"; then
   :
 else
@@ -603,7 +603,7 @@ else
 fi
 
 echo ""
-echo "▶ [61/108] Batch drafting from Bulk/Rapid Scan in a real browser — scan identity, copies, retry, cap refusal"
+echo "▶ [61/109] Batch drafting from Bulk/Rapid Scan in a real browser — scan identity, copies, retry, cap refusal"
 if suite "$ROOT/tests/bulk-batch-draft.mjs"; then
   :
 else
@@ -611,7 +611,7 @@ else
 fi
 
 echo ""
-echo "▶ [62/108] Collector number display — denominator safeguards, prefixes, leading zeros, SKU-neutrality"
+echo "▶ [62/109] Collector number display — denominator safeguards, prefixes, leading zeros, SKU-neutrality"
 if suite "$ROOT/tests/collector-number-format.mjs"; then
   :
 else
@@ -619,7 +619,7 @@ else
 fi
 
 echo ""
-echo "▶ [63/108] Scan rarity grounding — the grounded record overrides an invented rarity"
+echo "▶ [63/109] Scan rarity grounding — the grounded record overrides an invented rarity"
 if suite "$ROOT/tests/scan-rarity-grounding.mjs"; then
   :
 else
@@ -627,7 +627,7 @@ else
 fi
 
 echo ""
-echo "▶ [64/108] Catalogue printing evidence — reject ambiguous or contradictory enrichment"
+echo "▶ [64/109] Catalogue printing evidence — reject ambiguous or contradictory enrichment"
 if suite "$ROOT/tests/catalog-printing-evidence.mjs"; then
   :
 else
@@ -635,7 +635,7 @@ else
 fi
 
 echo ""
-echo "▶ [65/108] Cert generation matcher — no mislabelled generation, no entered value in output"
+echo "▶ [65/109] Cert generation matcher — no mislabelled generation, no entered value in output"
 if suite "$ROOT/tests/cert-generation-compare.mjs"; then
   :
 else
@@ -643,7 +643,7 @@ else
 fi
 
 echo ""
-echo "▶ [66/108] eBay credential checker output — no supplied credential or token on any path"
+echo "▶ [66/109] eBay credential checker output — no supplied credential or token on any path"
 if suite "$ROOT/tests/ebay-credential-check.mjs"; then
   :
 else
@@ -651,7 +651,7 @@ else
 fi
 
 echo ""
-echo "▶ [67/108] Seeder collector numbers — leading zeros and prefixes survive verbatim"
+echo "▶ [67/109] Seeder collector numbers — leading zeros and prefixes survive verbatim"
 if suite "$ROOT/tests/seeder-collector-number.mjs"; then
   :
 else
@@ -659,7 +659,7 @@ else
 fi
 
 echo ""
-echo "▶ [68/108] Printed denominator resolves without the filesystem; embedded table matches the seeder record"
+echo "▶ [68/109] Printed denominator resolves without the filesystem; embedded table matches the seeder record"
 if suite "$ROOT/tests/printed-totals-runtime-2026-09-13.mjs"; then
   :
 else
@@ -667,7 +667,7 @@ else
 fi
 
 echo ""
-echo "▶ [69/108] Photo hosting contract — eBay’s documented photo-column limits, and no host configured yet"
+echo "▶ [69/109] Photo hosting contract — eBay’s documented photo-column limits, and no host configured yet"
 if suite "$ROOT/tests/photo-host-2026-09-13.mjs"; then
   :
 else
@@ -675,7 +675,7 @@ else
 fi
 
 echo ""
-echo "▶ [70/108] Photo upload endpoint — a non-owner cannot host another seller’s draft photos"
+echo "▶ [70/109] Photo upload endpoint — a non-owner cannot host another seller’s draft photos"
 if suite "$ROOT/tests/photo-upload-endpoint-2026-09-13.mjs"; then
   :
 else
@@ -683,7 +683,7 @@ else
 fi
 
 echo ""
-echo "▶ [71/108] Item photo URL is written, and a blank column is disclosed rather than claimed as sent"
+echo "▶ [71/109] Item photo URL is written, and a blank column is disclosed rather than claimed as sent"
 if suite "$ROOT/tests/photo-export-wiring-2026-09-13.mjs"; then
   :
 else
@@ -691,7 +691,7 @@ else
 fi
 
 echo ""
-echo "▶ [72/108] Draft-list Download button: seller photo lands or the file is refused (never blank)"
+echo "▶ [72/109] Draft-list Download button: seller photo lands or the file is refused (never blank)"
 if suite "$ROOT/tests/photo-download-gating-2026-09-13.mjs"; then
   :
 else
@@ -699,7 +699,7 @@ else
 fi
 
 echo ""
-echo "▶ [73/108] Photo decoding falls back without bypassing quality checks"
+echo "▶ [73/109] Photo decoding falls back without bypassing quality checks"
 if suite "$ROOT/tests/photo-decoder-fallback.mjs"; then
   :
 else
@@ -707,7 +707,7 @@ else
 fi
 
 echo ""
-echo "▶ [74/108] Provider request timers are cleared on failures"
+echo "▶ [74/109] Provider request timers are cleared on failures"
 if suite "$ROOT/tests/provider-timer-cleanup.mjs"; then
   :
 else
@@ -715,7 +715,7 @@ else
 fi
 
 echo ""
-echo "▶ [75/108] Camera cancellation and late callbacks remain isolated"
+echo "▶ [75/109] Camera cancellation and late callbacks remain isolated"
 if suite "$ROOT/tests/photo-capture-lifecycle.mjs"; then
   :
 else
@@ -723,7 +723,7 @@ else
 fi
 
 echo ""
-echo "▶ [76/108] Firebase email verification and persistence"
+echo "▶ [76/109] Firebase email verification and persistence"
 if suite "$ROOT/tests/firebase-email-claim.mjs"; then
   :
 else
@@ -731,7 +731,7 @@ else
 fi
 
 echo ""
-echo "▶ [77/108] Acquisition channel tracking and admin report protection"
+echo "▶ [77/109] Acquisition channel tracking and admin report protection"
 if suite "$ROOT/tests/acquisition-tracking.mjs"; then
   :
 else
@@ -739,7 +739,7 @@ else
 fi
 
 echo ""
-echo "▶ [78/108] Google provider verification for signed Google sessions"
+echo "▶ [78/109] Google provider verification for signed Google sessions"
 if suite "$ROOT/tests/google-provider-verification.mjs"; then
   :
 else
@@ -747,7 +747,7 @@ else
 fi
 
 echo ""
-echo "▶ [79/108] Grade model selection keeps the default and allowlist"
+echo "▶ [79/109] Grade model selection keeps the default and allowlist"
 if suite "$ROOT/tests/grade-model-selection.mjs"; then
   :
 else
@@ -755,7 +755,7 @@ else
 fi
 
 echo ""
-echo "▶ [80/108] Post-scan ID credit nudge counts included credits"
+echo "▶ [80/109] Post-scan ID credit nudge counts included credits"
 if suite "$ROOT/tests/id-credit-toast.mjs"; then
   :
 else
@@ -763,7 +763,7 @@ else
 fi
 
 echo ""
-echo "▶ [81/108] Limiting factor keeps defect-driven explanations"
+echo "▶ [81/109] Limiting factor keeps defect-driven explanations"
 if suite "$ROOT/tests/limiting-factor-reconcile.mjs"; then
   :
 else
@@ -771,7 +771,7 @@ else
 fi
 
 echo ""
-echo "▶ [82/108] Daily welcome-award circuit breaker"
+echo "▶ [82/109] Daily welcome-award circuit breaker"
 if suite "$ROOT/tests/welcome-daily-cap.mjs"; then
   :
 else
@@ -779,7 +779,7 @@ else
 fi
 
 echo ""
-echo "▶ [83/108] Ximilar grading uses the async job API"
+echo "▶ [83/109] Ximilar grading uses the async job API"
 if suite "$ROOT/tests/ximilar-grade-async.mjs"; then
   :
 else
@@ -787,7 +787,7 @@ else
 fi
 
 echo ""
-echo "▶ [84/108] Grading: poor visibility is not damage"
+echo "▶ [84/109] Grading: poor visibility is not damage"
 if suite "$ROOT/tests/grade-evidence-honesty.mjs"; then
   :
 else
@@ -795,7 +795,7 @@ else
 fi
 
 echo ""
-echo "▶ [85/108] Grading upside prices the graded printing"
+echo "▶ [85/109] Grading upside prices the graded printing"
 if suite "$ROOT/tests/grade-upside-identity.mjs"; then
   :
 else
@@ -803,7 +803,7 @@ else
 fi
 
 echo ""
-echo "▶ [86/108] Grading capture resolution and body budget"
+echo "▶ [86/109] Grading capture resolution and body budget"
 if suite "$ROOT/tests/grade-capture-resolution.mjs"; then
   :
 else
@@ -811,7 +811,7 @@ else
 fi
 
 echo ""
-echo "▶ [87/108] Client printing identity survives local artwork ambiguity"
+echo "▶ [87/109] Client printing identity survives local artwork ambiguity"
 if suite "$ROOT/tests/client-printing-evidence.mjs"; then
   :
 else
@@ -819,7 +819,7 @@ else
 fi
 
 echo ""
-echo "▶ [88/108] Catalog search exposes every printing page"
+echo "▶ [88/109] Catalog search exposes every printing page"
 if suite "$ROOT/tests/catalog-search.mjs"; then
   :
 else
@@ -827,7 +827,7 @@ else
 fi
 
 echo ""
-echo "▶ [89/108] Private AI grade report storage"
+echo "▶ [89/109] Private AI grade report storage"
 if suite "$ROOT/tests/grade-history.mjs"; then
   :
 else
@@ -835,7 +835,7 @@ else
 fi
 
 echo ""
-echo "▶ [90/108] Batch grading browser to ledger and saved reports"
+echo "▶ [90/109] Batch grading browser to ledger and saved reports"
 if suite "$ROOT/tests/batch-grade-browser.mjs"; then
   :
 else
@@ -843,7 +843,7 @@ else
 fi
 
 echo ""
-echo "▶ [91/108] Collection sync failures and concurrent writes"
+echo "▶ [91/109] Collection sync failures and concurrent writes"
 if suite "$ROOT/tests/collection-storage.mjs"; then
   :
 else
@@ -851,7 +851,7 @@ else
 fi
 
 echo ""
-echo "▶ [92/108] Local catalog fallback has no invented prices"
+echo "▶ [92/109] Local catalog fallback has no invented prices"
 if suite "$ROOT/tests/catalog-outage.mjs"; then
   :
 else
@@ -859,7 +859,7 @@ else
 fi
 
 echo ""
-echo "▶ [93/108] Membership header tier badge"
+echo "▶ [93/109] Membership header tier badge"
 if suite "$ROOT/tests/membership-header-badge.mjs"; then
   :
 else
@@ -867,7 +867,7 @@ else
 fi
 
 echo ""
-echo "▶ [94/108] Business batch size (25) and plan-derived bulk grade cap"
+echo "▶ [94/109] Business batch size (25) and plan-derived bulk grade cap"
 if suite "$ROOT/tests/bulk-grade-plan-cap.mjs"; then
   :
 else
@@ -875,7 +875,7 @@ else
 fi
 
 echo ""
-echo "▶ [95/108] Bulk photo preflight (no provider calls)"
+echo "▶ [95/109] Bulk photo preflight (no provider calls)"
 if suite "$ROOT/tests/bulk-photo-preflight.mjs"; then
   :
 else
@@ -883,7 +883,7 @@ else
 fi
 
 echo ""
-echo "▶ [96/108] Catalog read sharing"
+echo "▶ [96/109] Catalog read sharing"
 if suite "$ROOT/tests/catalog-read-sharing.mjs"; then
   :
 else
@@ -891,7 +891,7 @@ else
 fi
 
 echo ""
-echo "▶ [97/108] Collection drafts (real browser)"
+echo "▶ [97/109] Collection drafts (real browser)"
 if suite "$ROOT/tests/collection-drafts-browser.mjs"; then
   :
 else
@@ -899,7 +899,7 @@ else
 fi
 
 echo ""
-echo "▶ [98/108] Draft plan capacity"
+echo "▶ [98/109] Draft plan capacity"
 if suite "$ROOT/tests/draft-plan-capacity.mjs"; then
   :
 else
@@ -907,7 +907,7 @@ else
 fi
 
 echo ""
-echo "▶ [99/108] eBay sold-comp resilience"
+echo "▶ [99/109] eBay sold-comp resilience"
 if suite "$ROOT/tests/ebay-sold-resilience.mjs"; then
   :
 else
@@ -915,7 +915,7 @@ else
 fi
 
 echo ""
-echo "▶ [100/108] Pricing request budget"
+echo "▶ [100/109] Pricing request budget"
 if suite "$ROOT/tests/pricing-request-budget.mjs"; then
   :
 else
@@ -923,7 +923,7 @@ else
 fi
 
 echo ""
-echo "▶ [101/108] Provider deadlines"
+echo "▶ [101/109] Provider deadlines"
 if suite "$ROOT/tests/provider-deadlines.mjs"; then
   :
 else
@@ -931,7 +931,7 @@ else
 fi
 
 echo ""
-echo "▶ [102/108] Rapid Scan (real browser)"
+echo "▶ [102/109] Rapid Scan (real browser)"
 if suite "$ROOT/tests/rapid-scan-browser.mjs"; then
   :
 else
@@ -939,7 +939,7 @@ else
 fi
 
 echo ""
-echo "▶ [103/108] Scrydex pilot adapter (default off)"
+echo "▶ [103/109] Scrydex pilot adapter (default off)"
 if suite "$ROOT/tests/scrydex-pilot.mjs"; then
   :
 else
@@ -947,7 +947,7 @@ else
 fi
 
 echo ""
-echo "▶ [104/108] TCG Price Lookup body deadline"
+echo "▶ [104/109] TCG Price Lookup body deadline"
 if suite "$ROOT/tests/tpl-body-deadline.mjs"; then
   :
 else
@@ -955,7 +955,7 @@ else
 fi
 
 echo ""
-echo "▶ [105/108] Grade prompt is cache-ordered (static rules first)"
+echo "▶ [105/109] Grade prompt is cache-ordered (static rules first)"
 if suite "$ROOT/tests/grade-prompt-cache-order.mjs"; then
   :
 else
@@ -963,7 +963,7 @@ else
 fi
 
 echo ""
-echo "▶ [106/108] Ximilar sports retry only after a detected-card miss"
+echo "▶ [106/109] Ximilar sports retry only after a detected-card miss"
 if suite "$ROOT/tests/ximilar-sport-retry.mjs"; then
   :
 else
@@ -971,7 +971,7 @@ else
 fi
 
 echo ""
-echo "▶ [107/108] Ximilar match-distance telemetry (numbers only)"
+echo "▶ [107/109] Ximilar match-distance telemetry (numbers only)"
 if suite "$ROOT/tests/provider-match-distance.mjs"; then
   :
 else
@@ -979,7 +979,15 @@ else
 fi
 
 echo ""
-echo "▶ [108/108] Every suite on disk is invoked or declared; slot numbering is derived"
+echo "▶ [108/109] First-visit demo yields to any other card selection"
+if suite "$ROOT/tests/example-demo-yields.mjs"; then
+  :
+else
+  FAIL=1
+fi
+
+echo ""
+echo "▶ [109/109] Every suite on disk is invoked or declared; slot numbering is derived"
 if suite "$ROOT/tests/test-registry.mjs"; then
   :
 else

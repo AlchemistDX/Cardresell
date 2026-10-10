@@ -592,6 +592,8 @@ await t.section('out-of-credit shop moments suggest a plan above the packs', asy
   t.check('nudge sits above the packs', g.elements().indexOf(n) < g.elements().findIndex(x => x.tag === 'section' && x.className === 'membership-pack-section'));
   const btn = n && n.children.find(k => k.tag === 'button');
   t.check('nudge offers Compare plans', btn && btn.textContent === 'Compare plans');
+  const packHeads = g.elements().filter(x => x.tag === 'section' && x.className === 'membership-pack-section').map(x => x.children[0]?.textContent);
+  t.check('Grade moment lists Grade packs first', packHeads[0] === 'Grade Credits' && packHeads[1] === 'ID / Scan Credits');
   if (btn) { await btn.onclick(); }
   t.check('Compare plans opens Subscriptions with the same reason lead', /Out of Grade credits\? Starter is your next step up from Free\./.test(
     (g.elements().find(x => x.tag === 'section' && x.className === 'membership-upgrade')?.textContent) || ''));
@@ -599,6 +601,7 @@ await t.section('out-of-credit shop moments suggest a plan above the packs', asy
   t.check('ID moment names ID credits and the next plan', (nudgeOf(id)?.textContent || '').startsWith('Out of ID credits? Buy a pack below, or get credits every month with Pro.'));
   const plain = setup({ suppliedCatalogue: c, onAccount: acct('free') }); await plain.window.openShop('id', 'header');
   t.check('header Shop opens without a nudge', !nudgeOf(plain));
+  t.check('header Shop keeps ID packs first', plain.elements().find(x => x.tag === 'section' && x.className === 'membership-pack-section')?.children[0]?.textContent === 'ID / Scan Credits');
   const top = setup({ suppliedCatalogue: c, onAccount: acct('business') }); await top.window.openShop('grade', 'grade_scan_gate');
   t.check('Business gets no nudge', !nudgeOf(top));
   const off = setup({ suppliedCatalogue: { ...c, purchaseEnabled: false }, onAccount: acct('free') }); await off.window.openShop('grade', 'grade_scan_gate');

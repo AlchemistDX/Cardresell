@@ -2684,6 +2684,11 @@ try {
     // needed a read for B to survive into a create for A.
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await ctx.newPage();
+    // 2026-10-10: the first-visitor Charizard demo polls for up to nine seconds
+    // and, when this case seeded its card before the demo began, clicked
+    // Charizard during case 4 (the intermittent 415/2). This section is about
+    // basis binding, not landing, so it runs as a returning visitor.
+    await page.addInitScript(() => localStorage.setItem('cs_landing_seen', '1'));
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     let posted = null;
     // Waiting on window._crLastDraftId would only work once -- it stays set
