@@ -577,4 +577,33 @@ await t.section('upgrade ladder recommends the next plan with catalogue-only gai
   t.check('signed-out view gets no ladder panel', !panelOf(out));
   t.check('every plan card still discloses the saved-report limit', ['Free','Starter','Casual','Pro','Business'].every(n => /500 private AI grade reports/.test(card(h, n).textContent)));
 });
+await t.section('out-of-credit shop moments suggest a plan above the packs', async () => {
+  const c = { ...publicMembershipCatalogue(), purchaseEnabled: true, newSubscriptionAllowed: true };
+  const acct = plan => async () => ({ ok: true, json: async () => ({
+    state: { subscriptionId: plan === 'free' ? null : 'sub_synthetic', snapshot: { plan, status: 'active' } },
+    credits: { tier: plan }, creditsAvailable: false, management: { portal: plan !== 'free' } }) });
+  const nudgeOf = h => h.elements().find(x => x.tag === 'section' && /membership-shop-nudge/.test(x.className || ''));
+  const plan = id => c.plans.find(p => p.id === id);
+  const g = setup({ suppliedCatalogue: c, onAccount: acct('free') }); await g.window.openShop('grade', 'grade_scan_402');
+  const n = nudgeOf(g), text = n ? n.textContent : '';
+  t.check('free user out of Grade credits sees a plan nudge in the Shop', text.startsWith('Out of Grade credits? Buy a pack below, or get credits every month with Starter.'));
+  t.check('nudge uses catalogue allowances and price only', text.includes(`${plan('starter').idCredits} ID + ${plan('starter').gradeCredits} Grade credits every month`)
+    && text.includes('$' + (plan('starter').monthlyPriceCents / 100).toFixed(2) + ' / month') && !/per credit|per scan|save \d+%|%/i.test(text));
+  t.check('nudge sits above the packs', g.elements().indexOf(n) < g.elements().findIndex(x => x.tag === 'section' && x.className === 'membership-pack-section'));
+  const btn = n && n.children.find(k => k.tag === 'button');
+  t.check('nudge offers Compare plans', btn && btn.textContent === 'Compare plans');
+  if (btn) { await btn.onclick(); }
+  t.check('Compare plans opens Subscriptions with the same reason lead', /Out of Grade credits\? Starter is your next step up from Free\./.test(
+    (g.elements().find(x => x.tag === 'section' && x.className === 'membership-upgrade')?.textContent) || ''));
+  const id = setup({ suppliedCatalogue: c, onAccount: acct('casual') }); await id.window.openShop('id', 'id_scan_402');
+  t.check('ID moment names ID credits and the next plan', (nudgeOf(id)?.textContent || '').startsWith('Out of ID credits? Buy a pack below, or get credits every month with Pro.'));
+  const plain = setup({ suppliedCatalogue: c, onAccount: acct('free') }); await plain.window.openShop('id', 'header');
+  t.check('header Shop opens without a nudge', !nudgeOf(plain));
+  const top = setup({ suppliedCatalogue: c, onAccount: acct('business') }); await top.window.openShop('grade', 'grade_scan_gate');
+  t.check('Business gets no nudge', !nudgeOf(top));
+  const off = setup({ suppliedCatalogue: { ...c, purchaseEnabled: false }, onAccount: acct('free') }); await off.window.openShop('grade', 'grade_scan_gate');
+  t.check('no nudge when purchasing is not enabled for the account', !nudgeOf(off));
+  const out = setup({ initial: null, suppliedCatalogue: c }); await out.window.openShop('grade', 'grade_scan_402');
+  t.check('signed-out Shop gets no nudge', !nudgeOf(out));
+});
 t.done();
