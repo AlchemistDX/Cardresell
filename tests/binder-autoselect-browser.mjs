@@ -67,6 +67,32 @@ await page.evaluate(()=>{startBinderScan();});await page.selectOption('#binderLa
 await page.setInputFiles('#binderInput',{name:'iphone24.jpg',mimeType:'image/jpeg',buffer:Buffer.from(big)});
 await page.waitForFunction(()=>document.querySelectorAll('.binder-pocket').length===9&&!document.getElementById('binderControls').disabled,null,{timeout:60000});
 check('a 24 MP page produces 9 non-blank, pre-selected pockets',(await ticks()).every(Boolean));
+check('a 24 MP page gets no small-photo advice',!(await page.locator('#binderStatus').textContent()).includes('fairly small'));
+// Real owner photos (IMG_4056-4070, cards in toploaders) laid into pockets.
+// The rule that matters: a real card is never pre-skipped. Textured empty
+// pockets may stay ticked (known limitation; costs a refunded credit at worst).
+const real=JSON.parse(readFileSync(dir+'real_truth.json','utf8'));
+for(const [f,t] of Object.entries(real)){
+  await load(f,'3,3');
+  const got=await ticks();
+  check(f+': every real card is ticked',t.every((x,i)=>!x||got[i]),JSON.stringify(got));
+  check(f+': small-photo advice shown for ~500-600 px pockets',(await page.locator('#binderStatus').textContent()).includes('original photo from your camera roll'));
+  await page.click('#binderSelectAll');await page.click('#binderContinue');
+  const dims=await page.evaluate(async()=>Promise.all(_bulkQueue.map(async q=>{const i=await createImageBitmap(q.file);const d=[i.width,i.height];i.close();return d;})));
+  check(f+': every pocket meets the bulk photo check minimum (400 px)',dims.every(([w,h])=>Math.min(w,h)>=400),JSON.stringify(dims));
+  await page.evaluate(()=>cancelBulkConfirm());
+}
+// Pockets under the bulk photo minimum are refused before the credit quote.
+const tiny=await page.evaluate(async()=>{const c=document.createElement('canvas');c.width=1134;c.height=1512;const x=c.getContext('2d');x.fillStyle='#345';x.fillRect(0,0,c.width,c.height);for(let i=0;i<300;i++){x.fillStyle=`hsl(${i*7},60%,50%)`;x.fillRect(Math.random()*1100,Math.random()*1500,30,30);}
+  const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));return Array.from(new Uint8Array(await b.arrayBuffer()));});
+await page.evaluate(()=>{_bulkQueue=[];startBinderScan();});await page.selectOption('#binderLayout','3,3');
+await page.setInputFiles('#binderInput',{name:'shared-small.jpg',mimeType:'image/jpeg',buffer:Buffer.from(tiny)});
+await page.waitForFunction(()=>!document.getElementById('binderControls').disabled,null,{timeout:30000});
+check('378 px pockets are refused before any quote',(await page.locator('.binder-pocket').count())===0&&await page.locator('#binderContinue').isDisabled());
+check('refusal explains how to fix it',(await page.locator('#binderStatus').textContent()).includes('fewer pockets'));
+await page.selectOption('#binderLayout','2,2');
+await page.waitForFunction(()=>document.querySelectorAll('.binder-pocket').length===4&&!document.getElementById('binderControls').disabled,null,{timeout:30000});
+check('the same photo works with a layout that has fewer pockets',(await page.locator('.binder-pocket').count())===4);
 check('no provider calls before confirmation',api.length===0,api.join(','));
 check('no browser errors',errors.length===0,errors.join(' | '));
 await b.close();server.close();

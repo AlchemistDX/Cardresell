@@ -1,0 +1,24 @@
+{
+ "real_r1_shared.jpg": [
+  "IMG_4056",
+  "IMG_4058",
+  "IMG_4060",
+  "IMG_4062",
+  false,
+  "IMG_4064",
+  "IMG_4066",
+  "IMG_4068",
+  "IMG_4070"
+ ],
+ "real_r2_full.jpg": [
+  "IMG_4056",
+  false,
+  "IMG_4060",
+  "IMG_4062",
+  "IMG_4064",
+  false,
+  "IMG_4068",
+  "IMG_4070",
+  "IMG_4058"
+ ]
+}
