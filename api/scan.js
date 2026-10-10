@@ -678,6 +678,13 @@ async function groundCardInfoByGame(cardInfo) {
 // Authorization: Bearer <google_id_token>
 // Returns: { card_name, card_number, set_name, hp, card_type, rarity, success: true }
 
+function foilHintFrom(tag) {
+  const t = String(tag || '');
+  if (/^non/i.test(t)) return 'non_foil';
+  if (/foil|holo/i.test(t)) return 'foil';
+  return '';
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -1382,6 +1389,7 @@ export default async function handler(req, res) {
           image_small: cardInfo.image_small || null,
           source: 'ximilar',
           ygo_grounded_by: cardInfo._ygo_grounded_by || null,
+          foil_hint: foilHintFrom(cardInfo._ximilar_foil),
           identified: false, grounded: false, grounded_id: null, printing: null,
         });
       }
@@ -1417,6 +1425,7 @@ export default async function handler(req, res) {
         image_small: cardInfo.image_small || null,
         source: 'ximilar',
         ygo_grounded_by: cardInfo._ygo_grounded_by || null,
+        foil_hint: foilHintFrom(cardInfo._ximilar_foil),
       });
     }
   }
