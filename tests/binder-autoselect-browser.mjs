@@ -93,6 +93,35 @@ check('refusal explains how to fix it',(await page.locator('#binderStatus').text
 await page.selectOption('#binderLayout','2,2');
 await page.waitForFunction(()=>document.querySelectorAll('.binder-pocket').length===4&&!document.getElementById('binderControls').disabled,null,{timeout:30000});
 check('the same photo works with a layout that has fewer pockets',(await page.locator('.binder-pocket').count())===4);
+// Real binder page (owner photo IMG_4652): 9 cards on a couch, page not filling
+// the frame. Before auto-fit the full-photo grid cut across 2-4 cards per pocket.
+const margins=()=>page.evaluate(()=>['Left','Right','Top','Bottom'].map(k=>Number(document.getElementById('binder'+k).value)));
+await load('real_IMG_4652_page.jpg','3,3');
+const fitm=await margins();
+const inRange=(v,[lo,hi])=>v>=lo&&v<=hi;
+check('real page: grid auto-fitted to the cards',[[5,8],[10,13],[5,8],[9,12]].every((r,i)=>inRange(fitm[i],r)),JSON.stringify(fitm));
+check('real page: auto-fit is announced',(await page.locator('#binderStatus').textContent()).startsWith('Grid fitted to your cards automatically.'));
+check('real page: all 9 cards ticked',(await ticks()).every(Boolean));
+// A manual edge edit wins over auto-fit, including after a layout change.
+await page.locator('summary').filter({hasText:'Adjust the grid edges'}).click();
+await page.locator('#binderLeft').fill('3');await page.locator('#binderLeft').dispatchEvent('change');
+await page.waitForFunction(()=>!document.getElementById('binderControls').disabled);
+await page.selectOption('#binderLayout','3,4');await page.waitForFunction(()=>!document.getElementById('binderControls').disabled);
+check('a manual edge edit is kept after a layout change',(await margins())[0]===3);
+check('no auto-fit note after a manual edit',!(await page.locator('#binderStatus').textContent()).includes('fitted'));
+// A new photo re-enables auto-fit.
+await page.selectOption('#binderLayout','3,3');await page.waitForFunction(()=>!document.getElementById('binderControls').disabled);
+await page.setInputFiles('#binderInput',dir+'real_IMG_4652_page.jpg');
+await page.waitForFunction(()=>document.querySelectorAll('.binder-pocket').length===9&&!document.getElementById('binderControls').disabled,null,{timeout:60000});
+check('a new photo is auto-fitted again',JSON.stringify(await margins())===JSON.stringify(fitm));
+await page.locator('summary').filter({hasText:'Adjust the grid edges'}).click();
+// Wrong shape for the layout -> leave the grid alone rather than guess.
+await load('real_IMG_4652_page.jpg','3,4');
+check('auto-fit declines when pockets would not be card-shaped',JSON.stringify(await margins())==='[0,0,0,0]');
+await load('p5_allempty.jpg','3,3');
+check('auto-fit declines on an all-empty page',JSON.stringify(await margins())==='[0,0,0,0]');
+const fitFull=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=900;c.height=1200;const x=c.getContext('2d');x.fillStyle='#777';x.fillRect(0,0,900,1200);return CardResellBinder.fitGrid(c,3,3);});
+check('auto-fit returns nothing for a featureless photo',fitFull===null);
 check('no provider calls before confirmation',api.length===0,api.join(','));
 check('no browser errors',errors.length===0,errors.join(' | '));
 await b.close();server.close();
