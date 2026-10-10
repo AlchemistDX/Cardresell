@@ -1695,12 +1695,26 @@ Respond ONLY with valid JSON, no explanation:
 {"card_name":"...","card_number":"...","set_name":"...","set_code":"...","hp":"...","card_type":"...","is_japanese":false,"jp_name":"","rarity":"...","sport":"...","year":"...","confidence":"high|medium|low","image_quality":"ok","glare_regions":[],"retake_hint":"","candidates":[{"card_name":"...","card_number":"...","set_name":"...","set_code":"...","hp":"...","card_type":"...","is_japanese":false,"rarity":"...","sport":"...","year":"...","confidence_pct":75}]}`;
 
     // Build the vision content once so we can retry with a different model if needed.
-    const visionContent = [
+    const photoContent = [
       { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
       ...(isGradeMode && backDataUrl ? [{ type: 'image_url', image_url: { url: backDataUrl, detail: 'high' } }] : []),
       ...edgeImages.map(e => ({ type: 'image_url', image_url: { url: e.dataUrl, detail: 'high' } })),
-      { type: 'text', text: prompt }
     ];
+    // 2026-10-10 cost: OpenAI caches an identical request PREFIX of 1,024+
+    // tokens (cached input is billed at 1/20 of normal input). The grade rules
+    // are ~10k static tokens, but they used to follow the photos, so no prefix
+    // ever matched. Grade requests now send: static rules, then the short
+    // per-request photo description (and Deep mode note), then the photos in
+    // the same order. Wording is unchanged; only placement moved. If the prompt
+    // head ever stops matching, fall back to the previous layout.
+    const GRADE_INTRO = "You are a strict, professional trading card grader trained to PSA's OFFICIAL published standards.";
+    const gradeContext = ` You are analyzing ${imageDescription}.${deepGradeInstructions}`;
+    const cacheableGrade = isGradeMode && prompt.startsWith(GRADE_INTRO + gradeContext);
+    const visionContent = cacheableGrade ? [
+      { type: 'text', text: GRADE_INTRO + prompt.slice((GRADE_INTRO + gradeContext).length) },
+      { type: 'text', text: gradeContext.trim() + '\n\nThe photos follow in that order.' },
+      ...photoContent,
+    ] : [...photoContent, { type: 'text', text: prompt }];
 
     // 2026-08-16: try gpt-5 first (native multimodal, 84.2% MMMU vs
     // gpt-4o's 72.2% — huge win on card ID / OCR-through-glare). If

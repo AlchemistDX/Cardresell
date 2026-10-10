@@ -19,8 +19,9 @@ const PRICES = { // USD per token, standard short-context list prices 2026-10-05
 export function buildVisionContent(opts) {
   const src = readFileSync(SCAN, 'utf8').split('\n');
   const start = src.findIndex(l => l.includes("const mime   = mimeType || 'image/jpeg';"));
-  const vc = src.findIndex((l, i) => i > start && l.includes('const visionContent = ['));
-  const end = src.findIndex((l, i) => i > vc && /^    \];/.test(l));
+  const vc = src.findIndex((l, i) => i > start && l.includes('const visionContent ='));
+  // Ends at the statement's closing line: `    ];` or `    ] : [...];` (cache-ordered layout).
+  const end = src.findIndex((l, i) => i > vc && /^    \](;| : .*\];)\s*$/.test(l));
   if (start < 0 || vc < 0 || end < 0) throw Error('shipped prompt block not found in api/scan.js');
   const body = src.slice(start, end + 1).join('\n') + '\nreturn visionContent;';
   const params = ['mimeType', 'imageBase64', 'backBase64', 'backMimeType', 'isDeepGrade', 'isGradeMode',
