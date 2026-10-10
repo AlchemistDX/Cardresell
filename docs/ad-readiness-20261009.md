@@ -90,3 +90,16 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - New tool: tools/binder-photo-eval.mjs runs any binder photo through the shipped flow locally and reports ticks, pocket sizes, the photo-quality result and matcher guesses, with no network.
 - Tests: binder-autoselect-browser now has 53 checks, including the real page; the previous bundle fails the auto-fit checks. Full suite: 111 of 111 parts, 10,193 checks, 0 failed.
 - Follow-up: the combined status message is long on a phone (about 7 lines) and could be shortened.
+
+## October 10 owner live binder scan (screen recording) and fixes (commit 9f42a1f, dpl_2xeh8wowiJPScJ6pqgGjXUmQyc1F)
+
+- Owner scanned the IMG_4652 page live (9 ID credits; 953 remaining afterwards). The server identifier named 8 of 9 exact printings: Scovillain OBF 25, Relicanth PLB 24, Heliolisk CRZ 50, Plusle SW 36, Dubwool CRZ 122, Dwebble PAR 6, Venipede TWM 115 and Froslass TWM 53. Carracosta SCR 38 failed, both on the first try and on "Retry same photo".
+- Server logs: Carracosta's best match scored a distance of 0.552, just over the 0.55 acceptance limit, with a gap of 0.274 to the second match. The retry returned the identical score. The best guess's name is not logged, so whether it was Carracosta is unknown. Across 3 days only 15 scored lookups exist, so the threshold was not changed.
+- Bug fixed, bulk pricing: rows were priced at the highest variant, so every row read "Reverse Holofoil" and commons were overvalued. Rows now use the identifier's foil reading ("Foil/Holo" or "Non-Foil", now returned as foil_hint). With no reading they use the base printing: Normal, else Holo. The highest price is no longer the default.
+- Fixed, no wasted retry: a definite "not identified" answer hides "Retry same photo", because the same image returns the same score. The row says no credit was used and suggests scanning the card on its own.
+- Not yet verified live: the server's foil_hint value on a real scan, which needs an owner scan.
+- Follow-ups:
+  - The single-card scan still defaults to Holo, then Reverse, then Normal. Its dropdown is visible.
+  - Log the best-guess identity on low-confidence misses.
+  - Shorten the binder status message.
+- Tests: new bulk-variant-choice (22 checks; fails on the previous bundle). Full suite: 112 of 112 parts, 10,215 checks, 0 failed. One earlier run hit a draft-delete timing race that passes 113 of 113 on its own.
