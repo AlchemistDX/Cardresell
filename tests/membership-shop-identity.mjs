@@ -385,7 +385,9 @@ await t.section('membership funnel signals cannot invent payment success or brea
     h.events.map(x => x.name).join(',') === 'membership_shop_open,membership_checkout_attempt,membership_checkout_redirect');
   t.check('checkout redirect alone does not report a verified return', !h.events.some(x => x.name === 'membership_return_verified'));
   t.check('checkout telemetry only includes public selection and kind',
-    JSON.stringify(h.events[1].props) === JSON.stringify({ plan: 'id_25', trigger: 'pack' }));
+    JSON.stringify(h.events[1].props) === JSON.stringify({ plan: 'id_25', trigger: 'pack', source: 'direct' }));
+  t.check('shop-open telemetry names the view and a public trigger only',
+    JSON.stringify(h.events[0].props) === JSON.stringify({ source: 'shop', trigger: 'direct' }));
   const pending = setup({ onCheckout: async () => ({ ok: true, status: 202, json: async () => ({ status: 'recovery_pending' }) }) });
   await pending.open(); await pending.buttons()[0].onclick();
   t.check('pending checkout is not a redirect or conversion', pending.navigations.length === 0
@@ -592,6 +594,7 @@ await t.section('out-of-credit shop moments suggest a plan above the packs', asy
   t.check('nudge sits above the packs', g.elements().indexOf(n) < g.elements().findIndex(x => x.tag === 'section' && x.className === 'membership-pack-section'));
   const btn = n && n.children.find(k => k.tag === 'button');
   t.check('nudge offers Compare plans', btn && btn.textContent === 'Compare plans');
+  t.check('out-of-credit open is attributed to its trigger', g.events.some(x => x.name === 'membership_shop_open' && x.props?.trigger === 'grade_scan_402'));
   const packHeads = g.elements().filter(x => x.tag === 'section' && x.className === 'membership-pack-section').map(x => x.children[0]?.textContent);
   t.check('Grade moment lists Grade packs first', packHeads[0] === 'Grade Credits' && packHeads[1] === 'ID / Scan Credits');
   if (btn) { await btn.onclick(); }
