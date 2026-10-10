@@ -94,6 +94,7 @@ async function identify(imageBase64, mime, apiToken, kind, observe) {
   const distances    = Array.isArray(ident.distances)    ? ident.distances    : [];
   const dBest   = distances[0] ?? 1.0;
   const dSecond = distances[1] ?? 1.0;
+  observe?.({ matchDistance: distances[0], ...(distances.length > 1 ? { matchGap: distances[1] - distances[0] } : {}) });
 
   // Extract card-tag signals for cardInfo enrichment
   const tags = obj._tags || {};

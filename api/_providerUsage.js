@@ -25,9 +25,15 @@ export async function observeProviderAttempt(meta, work) {
     // Ximilar endpoints do not document a billed-unit field. Calls/images are
     // observable; their invoice credit usage and USD cost remain unknown.
     billed_units: null, cost_usd: null,
+    // 2026-10-10: Ximilar identification match distance (lower = closer) and
+    // gap to the second candidate, for threshold calibration. Numbers only.
+    match_distance: null, match_gap: null,
   };
-  const observe = ({ status, usage } = {}) => {
+  const observe = ({ status, usage, matchDistance, matchGap } = {}) => {
     if (Number.isInteger(status) && status >= 100 && status <= 599) record.http_status = status;
+    const dist = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2 ? Math.round(v * 1000) / 1000 : null;
+    if (record.provider === 'ximilar' && matchDistance !== undefined) record.match_distance = dist(matchDistance);
+    if (record.provider === 'ximilar' && matchGap !== undefined) record.match_gap = dist(matchGap);
     if (record.provider !== 'openai' || !usage || typeof usage !== 'object') return;
     record.prompt_tokens = count(usage.prompt_tokens);
     record.completion_tokens = count(usage.completion_tokens);
