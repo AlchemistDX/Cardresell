@@ -167,8 +167,8 @@ eq((idx.match(/(?<![-a-zA-Z])color:#8b5cf6/g) || []).length, 0,
 const OG_IMG = 'https://www.cardresell.org/og-image.png';
 for (const f of ['index.html', 'pricing.html', 'about.html', 'contact.html', 'accuracy.html']) {
   const h = read(f);
-  ok(h.includes(`<meta property="og:image" content="${OG_IMG}"`), `012: ${f} must declare og:image`);
-  ok(/<meta name="twitter:image" content="https:\/\/www\.cardresell\.org\/og-image\.png"/.test(h), `012: ${f} must declare twitter:image`);
+  ok(/<meta property="og:image" content="https:\/\/www\.cardresell\.org\/og-image\.png(\?v=[0-9a-f]{8})?"/.test(h), `012: ${f} must declare og:image (optional ?v= cache key)`);
+  ok(/<meta name="twitter:image" content="https:\/\/www\.cardresell\.org\/og-image\.png(\?v=[0-9a-f]{8})?"/.test(h), `012: ${f} must declare twitter:image (optional ?v= cache key)`);
   /* These two stay exact counts, deliberately. The 2026-09-07 sweep for
      instance 19 flagged them by signature, and they are the counter-example
      that fixes the boundary: "exactly one" IS the proposition here. A duplicate
