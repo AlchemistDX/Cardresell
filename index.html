@@ -4212,7 +4212,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/ui.50ee20c7.js"></script>
 <script defer src="/js/collection-drafts.b143be43.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
-  <script defer src="/js/binder.033366b3.js"></script>
+  <script defer src="/js/binder.51fbfb50.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.d7045eef.js"></script>
 <script>
@@ -4407,11 +4407,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         .binder-pocket:has(input:checked) {border-color:#4ade80;background:#14291b}
         .binder-pocket img {width:100%;height:190px;object-fit:contain;background:#111}
         .binder-pocket input {width:22px;height:22px;accent-color:#4ade80}
+        .binder-empty-tag {margin-left:auto;font-size:.75rem;color:#ddd;background:#333;border-radius:6px;padding:.15rem .45rem}
+        #binderBulkPick:not([hidden]) {display:flex;gap:.6rem}
+        #binderBulkPick button {flex:1}
         #bulkBinderReview :focus-visible {outline:3px solid #f5ad27;outline-offset:3px}
         @media(min-width:700px){#binderPockets{grid-template-columns:repeat(4,minmax(0,1fr))}}
       </style>
       <h2 style="margin:0;font-size:1.2rem">Scan a binder page <small style="font-size:.75rem;color:#f5ad27">Guided</small></h2>
-      <p style="margin:0;line-height:1.5">Photograph one page straight-on in even light. Match the grid to the pockets, then select the cards to identify. This scans card identities, not grades.</p>
+      <p style="margin:0;line-height:1.5">Photograph one page straight-on in even light. Match the grid to the pockets. We tick the pockets that hold a card for you to review. This identifies cards; it does not grade them.</p>
       <fieldset id="binderControls">
         <label for="binderInput">Binder page photo</label>
         <input id="binderInput" type="file" accept="image/jpeg,image/png,image/webp">
@@ -4432,8 +4435,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </fieldset>
       <canvas id="binderPreview" hidden aria-label="Page with pocket grid" style="width:100%;max-width:500px;align-self:center;height:auto"></canvas>
       <p id="binderStatus" role="status" style="margin:0;line-height:1.5"></p>
+      <div id="binderBulkPick" hidden><button id="binderSelectAll" type="button">Select all</button><button id="binderSelectNone" type="button">Clear</button></div>
       <div id="binderPockets"></div>
-      <p style="margin:0;font-size:.85rem;color:#bbb">1 ID credit per selected pocket. Glare or angled pages may need individual photos. Only selected crops are sent for identification.</p>
+      <p style="margin:0;font-size:.85rem;color:#bbb">1 ID credit per selected pocket. Only selected pockets are sent for identification. Glare or angled pages may need individual photos.</p>
       <button id="binderContinue" type="button" disabled style="background:#f0a51c;color:#111;font-weight:800">Select the cards to scan</button>
       <button id="binderCancel" type="button">Back to scan options</button>
     </section>

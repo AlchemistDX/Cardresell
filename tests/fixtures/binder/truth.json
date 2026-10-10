@@ -1,0 +1,82 @@
+{
+ "p1_black.jpg": [
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true
+ ],
+ "p2_white.jpg": [
+  false,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  false
+ ],
+ "p5_allempty.jpg": [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false
+ ],
+ "p6_4x3.jpg": [
+  true,
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  true
+ ],
+ "p7_energy_dark.jpg": [
+  true,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  true
+ ],
+ "p8_energy_white_blur.jpg": [
+  true,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  true
+ ],
+ "p9_black_blurry.jpg": [
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true
+ ]
+}

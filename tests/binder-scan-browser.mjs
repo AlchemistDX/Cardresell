@@ -30,7 +30,7 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  const queue=()=>page.evaluate(async()=>Promise.all(_bulkQueue.map(async q=>{const i=await createImageBitmap(q.file),c=document.createElement('canvas');c.width=c.height=1;c.getContext('2d').drawImage(i,0,0,1,1);return {name:q.file.name,pixel:[...c.getContext('2d').getImageData(0,0,1,1).data].slice(0,3).map(v=>v>128),w:i.width,h:i.height,uid:q.scanUid}})));
  await start();
  check('four pockets rendered',await page.locator('.binder-pocket').count(),4);
- check('nothing selected automatically',await page.locator('#binderContinue').isDisabled(),true);
+ check('flat test pockets read as empty, so nothing is pre-selected',await page.locator('#binderContinue').isDisabled(),true);
  check('review fits phone width',await page.locator('#bulkBinderReview').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
  await first().check();await page.locator('.binder-pocket input').nth(3).check();
  check('quote counts selected pockets',await page.locator('#binderContinue').textContent(),'Review 2 cards · 2 ID credits');
@@ -39,7 +39,7 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  check('existing credit quote correct',await page.locator('#bulkCreditConfirmCredit').textContent(),'Uses 2 credits · You have 20 available');
  const selected=await queue();
  check('selected row and column order',selected.map(q=>q.name),['binder-row-1-col-1.jpg','binder-row-2-col-2.jpg']);
- check('crop resolution retained',selected.map(q=>[q.w,q.h]),[[500,500],[500,500]]);
+ check('crop keeps resolution plus a 4% inner margin',selected.map(q=>[q.w,q.h]),[[520,520],[520,520]]);
  check('correct red and yellow pockets',selected.map(q=>q.pixel),[[true,false,false],[true,true,false]]);
  check('separate physical identities',new Set(selected.map(q=>q.uid)).size,2);
  await page.evaluate(()=>document.getElementById('binderContinue').click());
@@ -52,7 +52,7 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  await page.evaluate(()=>cancelBulkConfirm());await start();
  await page.locator('summary').filter({hasText:'Adjust the grid edges'}).click();await page.locator('#binderLeft').fill('20');await page.locator('#binderLeft').dispatchEvent('change');await ready();
  await first().check();await page.locator('#binderContinue').click();
- check('margin adjustment changes bounds',(await queue()).map(q=>[q.w,q.h]),[[400,500]]);
+ check('margin adjustment changes bounds',(await queue()).map(q=>[q.w,q.h]),[[432,520]]);
  await page.evaluate(()=>cancelBulkConfirm());await start();
  if(process.env.CR_SHOT_DIR) await page.screenshot({path:process.env.CR_SHOT_DIR+'/binder-'+viewport.width+'.png'});
  const small=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=100;return c.toDataURL('image/png').split(',')[1]});
