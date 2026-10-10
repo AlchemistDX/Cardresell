@@ -64,3 +64,13 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - The last pocket layout is remembered.
 - Tests: new binder-autoselect-browser (34 checks; fails on the old bundle). binder-scan-browser expectations were updated for the margin (46 checks). Full suite: 111 of 111 parts, 10,174 checks, 0 failed.
 - Live Production check: on the 3×3 test page, 7 cards were ticked and 2 empty pockets skipped, with 0 scan calls and 0 page errors.
+
+## October 10 binder scan, real-photo pass (deployed dpl_2MU89Xpgg6pwaE2VpnKPNnaqSSB8, commit 3ed7b8c)
+
+- Input: 8 owner photos (IMG_4056–4070), each a single card in a toploader, 1500×2000. These were laid into binder pages at full iPhone size and at the shared size. Empty pockets were made from the real background texture in those photos. No real empty binder pocket has been photographed yet.
+- Every real card was pre-selected. Textured empty pockets scored the same as cards on detail (fine detail 23.6–24.3 vs 16.9–31.3; the pale Cresselia full art was lowest). No simple local statistic separated them: tried detail, coarse detail, colour, brightness spread and how uneven the detail is. The check therefore stays one-sided: it skips only clearly smooth pockets. A textured empty pocket stays ticked, which costs at worst a refunded ID credit; a real card is never silently skipped.
+- On-device artwork matcher, used as a stand-in for crop quality (the bulk scan itself uses the server identifier): full-size binder crops named the same 5 of 8 cards as the original photos. Shared-size crops (~520×693) named 4 of 8, losing Crocalor. Cresselia, Mantyke and Steelix were not named even from the originals.
+- Fixed: the binder accepted pockets down to 200 px, but the bulk photo check rejects under 400 px, so pockets of 200–399 px were quoted and then failed as "Photo too small". The binder now applies the same 400 px minimum before quoting, and explains the fix: use the original photo, move closer, or choose fewer pockets.
+- Added: advice to use the original camera-roll photo when pockets are under 700 px.
+- Added: the instructions now ask the user to untick empty pockets too.
+- Tests: binder-autoselect-browser now has 44 checks, including 2 real-photo pages. The previous bundle fails 4 of them. Full suite: 111 of 111 parts, 10,184 checks, 0 failed.
