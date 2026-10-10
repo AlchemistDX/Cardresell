@@ -54,3 +54,13 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - Shop telemetry: `membership_shop_open` and the checkout events now carry the trigger reason (a public label), so out-of-credit nudges can be measured against direct opens.
 - Full suite at 18cf2d4: 110 of 110 parts, 10,140 checks passed, 0 failed.
 - Owner live tests: CardResell-Live-Tests-2026-10-10.md (8 tests, no purchases).
+
+## October 10 binder scan pass (deployed dpl_AbTax3Kut3a3botx7aRtykfNETPQ, commit abb05f8)
+
+- Pockets are pre-selected by a free, local detail check, so no credits or provider calls are spent before confirmation. On 9 synthetic iPhone-size pages (real card art on dark, white and gray backings, with sleeve glare, blur and plain Energy cards), cards scored 21–54, empty pockets 0.6–5, and untrimmed corner pockets about 10. The threshold is 12. All 9 pages matched exactly. This has not been measured on real binder photos yet; see owner live test 9.
+- Added Select all and Clear buttons, plus a "Looks empty" label on skipped pockets.
+- Each pocket is cropped with a 4% inner margin, so a slightly off grid keeps the card corners.
+- The working photo is capped at 12 MP by area. Previously 24 and 48 MP iPhone photos could exceed Safari's ~16.7 MP canvas limit and draw blank pockets.
+- The last pocket layout is remembered.
+- Tests: new binder-autoselect-browser (34 checks; fails on the old bundle). binder-scan-browser expectations were updated for the margin (46 checks). Full suite: 111 of 111 parts, 10,174 checks, 0 failed.
+- Live Production check: on the 3×3 test page, 7 cards were ticked and 2 empty pockets skipped, with 0 scan calls and 0 page errors.
