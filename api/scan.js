@@ -1189,7 +1189,12 @@ export default async function handler(req, res) {
     // fall back to sport_id if the first attempt returns no_match/no_card.
     const t0 = Date.now();
     let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg');
-    if (!xim.ok && (xim.reason === 'no_match' || xim.reason === 'no_card_detected')) {
+    // 2026-10-10 cost: only retry as sports on no_match. no_card_detected
+    // means the shared card detector found no card object at all (both
+    // endpoints report the same "Top Category: Card" detector), so a second
+    // paid call cannot identify anything. The user's credit is refunded on
+    // either miss; this avoids paying Ximilar twice for an empty photo.
+    if (!xim.ok && xim.reason === 'no_match') {
       // Retry as sports card (cheap: still 10 credits, same as TCG)
       const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport');
       if (ximSport.ok) xim = ximSport;
