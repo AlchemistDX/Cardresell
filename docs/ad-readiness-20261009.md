@@ -28,3 +28,19 @@ Rough readiness remains about 85% (qualitative). Public purchasing stays pilot-o
 8. Backup/restore: confirm Upstash backup availability on the current plan, and run one restore drill into an isolated database.
 
 Prices, monthly allowances, discounts, accounts, credits and pilot admission were not changed.
+
+## October 10 optimization pass (deployed dpl_HejMMQwMPuMoqMYhrdVoR2ATpqNz, commit b5edea5)
+
+Cost
+- Grade requests now send the ~14,600-character static rules first, then the per-request photo description, then the photos in the same order. Wording is unchanged. OpenAI can therefore cache the shared prefix at the cached-input rate. Expected effect: roughly $0.007 less per grade when the cache hits (about 3.5k tokens at $2.00 vs $0.10 per 1M). Hits are most likely in batches and back-to-back grades; isolated grades may miss after the cache expires. This is not yet measured: `cached_prompt_tokens` in PROVIDER_USAGE will show it after the next real grade.
+- The paid Ximilar sports retry runs only after a TCG `no_match`, never after `no_card_detected` (an empty photo). This saves one paid call per empty-photo scan. The user's refund is unchanged.
+
+Conversion
+- When a scan or grade runs out of credits, the Shop now shows the next plan's monthly ID/Grade credits and price above the packs, with "Compare plans". Grade moments list Grade packs first. No per-unit or savings math is shown. The panel appears only when purchasing is enabled for the account.
+- Fixed: reason ids containing digits (`grade_scan_402`, `id_scan_402`) were silently discarded.
+
+Scan accuracy
+- 7-day production data showed 44 TCG identify attempts: 21 success, 19 `low_confidence`, 4 `no_match`. Most came from a single burst on Oct 9. Ximilar match distance and second-candidate gap are now logged (numbers only) so the 0.55 low-confidence cutoff can be calibrated on real scans. Thresholds are not changed until there is data.
+- First-visit Charizard demo now stops if any card is selected while it polls. Before, a scan or collection pick in that window could be replaced. This was also the cause of the intermittent draft-review test failure, which is fixed (8 of 8 clean runs).
+
+Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
