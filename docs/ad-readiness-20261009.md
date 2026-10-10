@@ -44,3 +44,13 @@ Scan accuracy
 - First-visit Charizard demo now stops if any card is selected while it polls. Before, a scan or collection pick in that window could be replaced. This was also the cause of the intermittent draft-review test failure, which is fixed (8 of 8 clean runs).
 
 Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
+
+## October 10 second pass (deployed dpl_Dn1ERH39YvmMUbsWgr7fasQbGeJC, commit 18cf2d4)
+
+- Production logs (7 days) show no user-facing server errors. The 5xx responses are the intentionally fenced legacy purchase routes, which are hit by smoke checks. Error-level lines are Node `url.parse` deprecation notices plus the expected eBay sold-comp failures.
+- Mobile landing measured against live with a throttled phone profile: LCP about 1.8 s and about 1 MB transferred, 438 KB of it the main bundle (brotli). Acceptable for an ad test. Splitting the bundle is a larger refactor and was deferred.
+- Fixed: the ID-scan miss screen's "Search by name" focused a nonexistent `#cardSearchInput`, so it only closed the scanner. It now switches to Card Lookup and focuses the real search box (real-browser test at 390 px and 1280 px).
+- Fixed: five "scroll to payout results" fallbacks named removed elements. Collection "View full card" and graded re-identify now fall back to `#resultsArea`.
+- Shop telemetry: `membership_shop_open` and the checkout events now carry the trigger reason (a public label), so out-of-credit nudges can be measured against direct opens.
+- Full suite at 18cf2d4: 110 of 110 parts, 10,140 checks passed, 0 failed.
+- Owner live tests: CardResell-Live-Tests-2026-10-10.md (8 tests, no purchases).
