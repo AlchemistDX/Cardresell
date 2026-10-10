@@ -74,3 +74,19 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - Added: advice to use the original camera-roll photo when pockets are under 700 px.
 - Added: the instructions now ask the user to untick empty pockets too.
 - Tests: binder-autoselect-browser now has 44 checks, including 2 real-photo pages. The previous bundle fails 4 of them. Full suite: 111 of 111 parts, 10,184 checks, 0 failed.
+
+## October 10 binder auto-fit from a real page (deployed dpl_3HDbhr919v2FXAJYfNvGah3EKUUL, commit 78c7c57)
+
+- Input: owner photo IMG_4652 (1500×2000). A real 9-pocket page on a couch, with the page filling about 82% of the width. Cards: Scovillain OBF 25, Relicanth Plasma Blast 24, Carracosta SCR 38, Heliolisk CRZ 50, Plusle Secret Wonders 36, Dubwool CRZ 122, Dwebble PAR 6, Venipede TWM 115, Froslass TWM 53.
+- Catalogue: all 9 exact printings are present in card-index.json.
+- Before the fix, the default full-photo grid cut across 2–4 cards per pocket. The on-device matcher named 0 of 9 and returned nonsense guesses, including Magic cards.
+- Fix: the grid now auto-fits. It finds the band of columns and rows dense with printed detail, merges the normal gaps between pockets, and accepts the fit only when pockets come out portrait card-shaped (cell width/height 0.66–0.86). Otherwise it leaves the grid at 0, as before. A manual edge edit wins until a new photo or rotation.
+- After the fix, the grid fits at 6/12/6/10. The matcher named 5 of 9 exact printings (Carracosta, Heliolisk, Dubwool, Dwebble, Venipede). Its misses were Scovillain (heavy holo glare), Relicanth, Plusle and Froslass. The matcher is diagnostic only; the bulk scan uses the server identifier, which has not been run on this page yet.
+- Rejected approaches, for the record:
+  - colour (the pink couch reads as colourful)
+  - a periodic gap search (the text boxes inside cards repeat in a regular pattern)
+  - card-sized blobs (couch folds merge into the cards)
+- The auto-fit declines on synthetic pages with empty pockets in outer rows or columns. Those keep the manual grid.
+- New tool: tools/binder-photo-eval.mjs runs any binder photo through the shipped flow locally and reports ticks, pocket sizes, the photo-quality result and matcher guesses, with no network.
+- Tests: binder-autoselect-browser now has 53 checks, including the real page; the previous bundle fails the auto-fit checks. Full suite: 111 of 111 parts, 10,193 checks, 0 failed.
+- Follow-up: the combined status message is long on a phone (about 7 lines) and could be shortened.
