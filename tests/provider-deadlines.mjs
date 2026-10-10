@@ -53,4 +53,4 @@ try {
   Object.assign(globalThis, { fetch: original.fetch, setTimeout: original.setTimeout, clearTimeout: original.clearTimeout });
   console.log = original.log; console.warn = original.warn;
 }
-console.log(`provider-deadlines: ${cases} passed, 0 failed`);
+console.log(`provider-deadlines: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);

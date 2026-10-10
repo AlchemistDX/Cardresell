@@ -62,4 +62,4 @@ try{for(const width of [390,1280]){
  await page.evaluate(()=>seed([{id:'5" onmouseover="window.pwned=1',card:'Quote " card',buyPrice:1}]));check(await page.locator('#collectionWrap [onmouseover]').count()===0,'row ID cannot escape attributes');
  const bounds=await page.locator('#collectionDraftTools').boundingBox();check(bounds.x>=0&&bounds.x+bounds.width<=width+1,'toolbar fits viewport');
  check(errors.length===0,errors.join('\n'));await page.close();
-}console.log(`Collection drafts browser: ${checks} checks passed.`)}finally{await browser.close();await new Promise(r=>server.close(r))}
+}console.log(`Collection drafts browser: ${checks} checks passed. -- SUITE COMPLETE, exit=0`)}finally{await browser.close();await new Promise(r=>server.close(r))}

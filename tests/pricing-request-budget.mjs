@@ -115,4 +115,4 @@ try {
   Date.now = original.now; console.warn = original.warn;
   for (const [key, value] of Object.entries(priorEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
 }
-console.log(`pricing-request-budget: ${checks} passed, 0 failed`);
+console.log(`pricing-request-budget: ${checks} passed, 0 failed -- SUITE COMPLETE, exit=0`);

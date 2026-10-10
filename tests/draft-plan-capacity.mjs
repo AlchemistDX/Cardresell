@@ -117,5 +117,5 @@ check((await call('GET',{}, {id:saved})).code===200,'billing outage preserves ex
 check((await call('POST',body0,{},key0)).code===200,'HTTP completed retry survives authority outage');
 check((await call('POST',httpBody(7))).code===503,'HTTP new creation fails closed during authority outage');
 
-console.log(`draft-plan-capacity: ${checks} passed`);
+console.log(`draft-plan-capacity: ${checks} passed -- SUITE COMPLETE, exit=0`);
 process.exit(0);

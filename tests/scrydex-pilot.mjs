@@ -137,5 +137,5 @@ try {
   check(result.code === 502 && Date.now() - started < 1500, 'stalled response body deadline');
   check(await kv('GET', config.budgetKey) === '1', 'timeout never refunds uncertain provider request');
 } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-console.log(`Scrydex pilot: ${checks} checks passed; isolated Redis and local HTTP only.`);
+console.log(`Scrydex pilot: ${checks} checks passed; isolated Redis and local HTTP only. -- SUITE COMPLETE, exit=0`);
 process.exit(0);

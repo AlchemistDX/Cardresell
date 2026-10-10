@@ -68,5 +68,5 @@ try {for(const viewport of [{width:320,height:568},{width:390,height:844},{width
  check(errors.length===0,errors.join('\n'));
  await page.close();
  }
- console.log(`Rapid Scan browser: ${checks} checks passed across four viewports.`);
+ console.log(`Rapid Scan browser: ${checks} checks passed across four viewports. -- SUITE COMPLETE, exit=0`);
 }finally{await browser.close();await new Promise(r=>server.close(r))}

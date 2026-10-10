@@ -18,13 +18,15 @@ const cases = [
   ['/api/tcgp-resolve?url=https://evil.example.com',                                              'GET', [400]],  // SSRF whitelist check
 
   // Auth-required endpoints — should 401 without token
-  ['/api/stripe-checkout',               'POST', [401],       {}],
-  ['/api/stripe-annual-checkout',        'POST', [401],       {}],
-  ['/api/stripe-grade-checkout',         'POST', [401, 400],  {}],
-  ['/api/stripe-id-checkout',            'POST', [401, 400],  {}],
-  ['/api/stripe-portal',                 'POST', [401],       {}],
+  // Legacy purchase routes are fenced by api/_membershipLegacyFence.js and must
+  // stay closed (503 membership_legacy_fenced / payment_cutover_pending).
+  ['/api/stripe-checkout',               'POST', [503],       {}],
+  ['/api/stripe-annual-checkout',        'POST', [503],       {}],
+  ['/api/stripe-grade-checkout',         'POST', [503],  {}],
+  ['/api/stripe-id-checkout',            'POST', [503],  {}],
+  ['/api/stripe-portal',                 'POST', [503],       {}],
   ['/api/scan',                          'POST', [401],       {}],
-  ['/api/scan-credits',                  'POST', [401, 400],  {}],
+  ['/api/scan-credits',                  'POST', [503],  {}],
   ['/api/collection',                    'POST', [401, 400],  {}],
 ];
 

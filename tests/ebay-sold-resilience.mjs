@@ -90,4 +90,4 @@ try {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
 }
-console.log(`ebay-sold-resilience: ${cases} passed, 0 failed`);
+console.log(`ebay-sold-resilience: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);

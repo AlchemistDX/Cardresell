@@ -87,7 +87,9 @@ const TOKENS = {
 
 /* Floors, not exact counts. An exact count turns every unrelated copy change
    into a red assertion and trains people to bump the number without reading. */
-const MIN_NODES = { light: 200, dark: 200 };
+// 2026-10-09: the single-row header (docs/single-row-header-20261008.md) merged controls;
+// live sweeps match 193 (light) / 197 (dark). 180 still rejects a vacuous sweep.
+const MIN_NODES = { light: 180, dark: 180 };
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',

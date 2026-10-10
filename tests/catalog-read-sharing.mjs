@@ -60,4 +60,4 @@ try {
   await Promise.all(Array.from({ length: 140 }, (_, i) => getProducts('', '', 1000 + i, 3)));
   check(providerCalls === 140, 'bounded sharing table does not deny unrelated lookups at capacity');
 } finally { globalThis.fetch = original; }
-console.log(`catalog-read-sharing: ${checks} passed, 0 failed`);
+console.log(`catalog-read-sharing: ${checks} passed, 0 failed -- SUITE COMPLETE, exit=0`);

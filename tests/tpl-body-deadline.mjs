@@ -21,7 +21,7 @@ try {
     assert.equal(res.headers['Cache-Control'], 'no-store');
     assert.ok(Date.now() - start < 11000, `${q} exceeded deadline`);
   }));
-  console.log('TPL deadline: 6 checks passed against stalled headers and body.');
+  console.log('TPL deadline: 6 checks passed against stalled headers and body. -- SUITE COMPLETE, exit=0');
 } finally {
   globalThis.fetch = realFetch;
   server.closeAllConnections();

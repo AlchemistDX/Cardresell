@@ -37,4 +37,4 @@ window._fbAuth.currentUser=owner;
 let resume;c.compressImage=()=>new Promise(r=>{resume=r});const preparing=run();
 await new Promise(r=>setImmediate(r));window._bulkQueue=[];c.compressImage=async()=> 'fixture';resume('fixture');
 check(await preparing==='STOP'&&calls===2,'cancel during compression cannot start provider request');
-console.log(`Bulk photo preflight: ${checks} checks passed; no provider calls.`);
+console.log(`Bulk photo preflight: ${checks} checks passed; no provider calls. -- SUITE COMPLETE, exit=0`);
