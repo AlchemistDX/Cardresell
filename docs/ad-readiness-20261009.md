@@ -114,3 +114,14 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - Bulk ID has no plan batch cap; plan batch sizes (Business 25, Pro 10) apply to batch grading only. Credits still bound the scan.
 - Tests: new binder-multipage-browser (24 checks). Full suite: 113 of 113 parts, 10,239 checks, 0 failed.
 - Live check: two pages ran on www.cardresell.org with scan requests blocked. Page 1 was the real IMG_4652 page with 9 ticked; page 2 was a synthetic page with 7. The button showed "Review 16 cards · 16 ID credits", with 0 scan calls and 0 page errors.
+
+## October 10 owner live two-page batch (screen recording) and fixes (commit 269036d, dpl_AWxwYqu11qeCS7dfX1evawdgDPhg)
+
+- Owner picked 2 pages (Magic, Secrets of Strixhaven, 9 cards; and the Pokémon IMG_4652 page, 9 cards). The multi-page flow worked as built: page 1 of 2, "Next page", then one quote of 18 cards and 18 ID credits. The result was 12 of 18 identified: Pokémon 9 of 9; Magic 3 or 4 of 9 (Fields of Strife, Summoned Dromedary, Elite Interceptor // Rejoinder, plus possibly Killian's Confidence).
+- Failure 1: the first 3 requests hung for about 13 s and failed with "Connection interrupted". The server logs show no /api/scan request before 02:24:09 UTC, so none arrived and no credit could have been taken. This is consistent with iPhone Safari reusing a stale keep-alive connection after the page sat idle during review.
+  - Fix: one automatic retry after 0.9 s, with the same operation id. The server replays any existing result, so a retry cannot charge twice; a scan still in flight answers 202. Account-change checks run again before the retry. Two failures in a row still show the recoverable message.
+- Failure 2: the header showed the previous batch's "Done!" while the new batch's first cards were identifying. Fix: the label and progress bar reset to "Scanning 0 of N…" before the workers start.
+- Magic accuracy (the owner's Magic-only batch at 02:22–02:23 UTC): 5 of 9 accepted at match distances 0.42–0.55, and 4 rejected at 0.57–0.75. Pokémon typically scores 0.19–0.38, so the identifier matches Magic cards much less closely. Most of the recorded batch's provider lines are missing from the logs.
+- Foil reading is in use: Scovillain, Carracosta and Froslass now show "Holofoil". Dubwool, Dwebble and Venipede still show "Reverse Holofoil" because the identifier read them as foil. Whether they really are reverse holos is not verified.
+- Credits: the header showed 953 before and after both batches. Not investigated; it may reflect the monthly allowance being used first.
+- Tests: scan-request-recovery now covers a single drop (retry succeeds, same operation id) and a double drop (exactly one retry). It fails on the previous file. bulk-variant-choice now has 23 checks. Full suite: 113 of 113 parts, 10,240 checks, 0 failed. Live: page and both assets byte-match; smoke 15 of 15.
