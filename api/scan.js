@@ -20,6 +20,7 @@ import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingF
   membershipRouteMode, membershipBilling, publishMembershipScan, membershipBalances } from './_membershipRouteBilling.js';
 import { legacyCreditFetch as fetch, membershipRedis } from './_membershipLegacyFence.js';
 import { createMembershipScanIntents, scanIntentDigest } from './_membershipScanIntent.js';
+import { ownerFeaturePlan } from './_membershipFeaturePolicy.js';
 
 // ── YGOProDeck grounding (extracted helper) ──
 // Mutates cardInfo in place. Returns nothing.
@@ -747,6 +748,8 @@ export default async function handler(req, res) {
   // Single-card grading is unaffected: only requests that declare bulkGrade
   // are checked.
   const isBulkGrade    = isGradeMode && (req.body || {}).bulkGrade === true;
+  // Owner test account: Bulk Grade is granted by the server check below, so the
+  // ledger's plan-feature gate is not asked. The debit itself is unchanged.
   const gradeCost      = isDeepGrade ? 2 : 1;
 
   // Pull edge photos early so we can validate BEFORE deducting any credits
@@ -884,7 +887,7 @@ export default async function handler(req, res) {
   const scanId = scanIntent?.scan || _shortId();
   const idContext = { receipt: scanIntent?.receipt || newIdReceipt(), owner: key, scan: scanId };
   const billingContext = { ...idContext, mode: isIdentifyMode ? 'identify' : 'grade', cost: isIdentifyMode ? 1 : gradeCost,
-    bulkGrade: isBulkGrade };
+    bulkGrade: isBulkGrade && !ownerFeaturePlan(key) };
   // The ledger operation that currently holds this request's grade charge.
   // A Deep Grade whose CV step does not complete is re-settled as a 1-credit
   // Quick Grade operation (settleDeepGradeWithoutCv), after which refunds must
@@ -1111,7 +1114,7 @@ export default async function handler(req, res) {
       if (!refund.ok) throw new Error('billing_reconciliation_required');
       consumedFrom = null; consumedAmount = 0; out.charged = 0; out.refunded = 2;
       const quick = { receipt: newIdReceipt(), owner: key, scan: scanId, mode: 'grade', cost: 1,
-        bulkGrade: isBulkGrade };
+        bulkGrade: isBulkGrade && !ownerFeaturePlan(key) };
       try {
         const debit = await membershipBilling('debit', quick);
         if (debit.ok) {

@@ -1,0 +1,43 @@
+// 2026-10-10: owner test account (single MEMBERSHIP_LIVE_OWNERS entry) gets
+// Business FEATURES only, behind MEMBERSHIP_OWNER_FEATURE_PLAN=business.
+import fs from 'node:fs';
+import vm from 'node:vm';
+import { ownerFeaturePlan } from '../api/_membershipFeaturePolicy.js';
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL', m); } };
+const on = { MEMBERSHIP_OWNER_FEATURE_PLAN: 'business', MEMBERSHIP_LIVE_OWNERS: '["owner-uid"]' };
+ok(ownerFeaturePlan('owner-uid', on) === 'business', 'reserved owner gets business features');
+ok(ownerFeaturePlan('someone-else', on) === null, 'any other account gets nothing');
+ok(ownerFeaturePlan('owner-uid', { ...on, MEMBERSHIP_OWNER_FEATURE_PLAN: '' }) === null, 'off unless switched on');
+ok(ownerFeaturePlan('owner-uid', { ...on, MEMBERSHIP_OWNER_FEATURE_PLAN: 'true' }) === null, 'only the exact value "business" switches it on');
+ok(ownerFeaturePlan('owner-uid', { ...on, MEMBERSHIP_LIVE_OWNERS: '["owner-uid","b"]' }) === null, 'two owners -> fails closed');
+ok(ownerFeaturePlan('owner-uid', { ...on, MEMBERSHIP_LIVE_OWNERS: 'owner-uid' }) === null, 'non-JSON owners -> fails closed');
+ok(ownerFeaturePlan('owner-uid', { ...on, MEMBERSHIP_LIVE_OWNERS: '[]' }) === null, 'no owner -> nothing');
+ok(ownerFeaturePlan('', on) === null && ownerFeaturePlan(undefined, on) === null, 'empty owner -> nothing');
+ok(ownerFeaturePlan('owner-uid', {}) === null, 'default environment -> off');
+const rb = fs.readFileSync(new URL('../api/_membershipRouteBilling.js', import.meta.url), 'utf8');
+ok(/capabilities: ownerFeaturePlan\(owner\)\s*\? \{ bulkGrade: true, venueTier: membershipVenueAccess\('business'\)\.tier, bulkGradeCards: BULK_GRADE_CARD_LIMITS\.business, featurePlan: 'business' \}\s*: \{ bulkGrade: id\.bulk_grade, venueTier: membershipVenueAccess\(tier\)\.tier \}/.test(rb), 'balances: owner capabilities Business, everyone else unchanged');
+ok(/const tier = id\.period_active \? id\.plan : 'free';/.test(rb), 'plan tier itself is not overridden');
+ok(!/credits:.*ownerFeaturePlan/.test(rb), 'credit fields untouched');
+const dp = fs.readFileSync(new URL('../api/_draftPlanPolicy.js', import.meta.url), 'utf8');
+ok(dp.indexOf('ownerFeaturePlan(owner)') > dp.indexOf('membershipRouteMode()'), 'draft override only in launch mode');
+ok(/Math\.max\(b\.activeLimit, 500\)/.test(dp), 'draft capacity never drops below imported 500');
+const scan = fs.readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
+ok((scan.match(/bulkGrade: isBulkGrade && !ownerFeaturePlan\(key\) \}/g) || []).length === 2, 'ledger feature flag skipped only for owner, debit + Deep->Quick paths');
+ok(/if \(membershipV2 && isBulkGrade\) \{\s*try \{\s*const balance = await membershipBalances\(key\);/.test(scan), 'server Bulk Grade check still runs for everyone');
+const lua = fs.readFileSync(new URL('../api/_membershipConsumption.js', import.meta.url), 'utf8');
+ok(!lua.includes('ownerFeaturePlan'), 'atomic billing script untouched');
+// Client cap.
+const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const ui = fs.readFileSync(new URL('../js/' + html.match(/\/js\/(ui\.[0-9a-f]{8}\.js)/)[1], import.meta.url), 'utf8');
+const st = ui.indexOf('function _bulkGradeCapForTier'), en = ui.indexOf('\n}\n', st) + 3;
+const cap = (access, tier, sub = 'u1') => { const c = { window: { _membershipVenueAccess: access, _userTier: tier, googleUser: { sub } } }; vm.createContext(c); vm.runInContext(ui.slice(st, en) + ';this.r=_bulkGradeCapForTier();', c); return c.r; };
+ok(cap({ owner: 'u1', plan: 'casual', bulkGradeCards: 25 }, 'casual') === 25, 'owner on Casual plan gets 25-card batches');
+ok(cap({ owner: 'u1', plan: 'pro', bulkGradeCards: null }, 'pro') === 10, 'Pro stays 10');
+ok(cap({ owner: 'u1', plan: 'business', bulkGradeCards: null }, 'business') === 25, 'Business stays 25');
+ok(cap({ owner: 'other', plan: 'casual', bulkGradeCards: 25 }, 'casual', 'u1') === 10, 'stale access for another account ignored');
+ok(cap({ owner: 'u1', plan: 'casual', bulkGradeCards: 99 }, 'casual') === 25, 'never above 25');
+const core = fs.readFileSync(new URL('../js/' + html.match(/\/js\/(core\.[0-9a-f]{8}\.js)/)[1], import.meta.url), 'utf8');
+ok(/bulkGradeCards: Number\.isInteger\(d\.capabilities\?\.bulkGradeCards\) && d\.capabilities\.bulkGradeCards > 0/.test(core), 'client reads server batch size');
+console.log(`owner-feature-plan: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
+process.exit(fail ? 1 : 0);

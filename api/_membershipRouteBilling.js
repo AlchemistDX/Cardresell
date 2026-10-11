@@ -7,6 +7,7 @@ import { membershipRedis, membershipRouteMode } from './_membershipLegacyFence.j
 import { grantMembership } from './_membershipLedger.js';
 import { withWelcomeDailyCap, clearWelcomeDeferral } from './_welcomeDailyCap.js';
 import { createMembershipFreeIssuance } from './_membershipFreeIssuance.js';
+import { ownerFeaturePlan, BULK_GRADE_CARD_LIMITS } from './_membershipFeaturePolicy.js';
 export { newIdReceipt, candidateHash, idBillingFailure } from './_idBilling.js';
 export { membershipRouteMode } from './_membershipLegacyFence.js';
 
@@ -89,7 +90,9 @@ export async function membershipBalances(owner) {
     idPaidCredits: id.purchased, freeCredits: grade.monthly + grade.welcome,
     idFreeCredits: id.monthly + id.welcome, included: { id: id.monthly, grade: grade.monthly },
     welcome: { id: id.welcome, grade: grade.welcome }, purchased: { id: id.purchased, grade: grade.purchased },
-    capabilities: { bulkGrade: id.bulk_grade, venueTier: membershipVenueAccess(tier).tier },
+    capabilities: ownerFeaturePlan(owner)
+      ? { bulkGrade: true, venueTier: membershipVenueAccess('business').tier, bulkGradeCards: BULK_GRADE_CARD_LIMITS.business, featurePlan: 'business' }
+      : { bulkGrade: id.bulk_grade, venueTier: membershipVenueAccess(tier).tier },
     periodEnd: id.period_end, tier, isPro: tier !== 'free', entitlementStatus: id.period_active ? 'active' : 'expired',
     kvAvailable: true, billing_version: 'launch-v2' };
 }
