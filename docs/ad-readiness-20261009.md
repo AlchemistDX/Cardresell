@@ -125,3 +125,17 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - Foil reading is in use: Scovillain, Carracosta and Froslass now show "Holofoil". Dubwool, Dwebble and Venipede still show "Reverse Holofoil" because the identifier read them as foil. Whether they really are reverse holos is not verified.
 - Credits: the header showed 953 before and after both batches. Not investigated; it may reflect the monthly allowance being used first.
 - Tests: scan-request-recovery now covers a single drop (retry succeeds, same operation id) and a double drop (exactly one retry). It fails on the previous file. bulk-variant-choice now has 23 checks. Full suite: 113 of 113 parts, 10,240 checks, 0 failed. Live: page and both assets byte-match; smoke 15 of 15.
+
+## October 10 owner test account gets Business features (commit 00dba77, dpl_3M2jPe5QhB5N5fykjbvDNubGVTTM)
+
+- Owner decision: willsep202 needs Business-level features for testing, without breaking anything.
+- How it works: `ownerFeaturePlan(owner)` is true only for the single MEMBERSHIP_LIVE_OWNERS entry (the reserved/imported owner, willsep202), and only while MEMBERSHIP_OWNER_FEATURE_PLAN is exactly `business`. It is now set in Production. Any malformed owners list fails closed.
+- What changes for that one account:
+  - Balance capabilities report bulkGrade true, venueTier pro_max (Business venues), bulkGradeCards 25 and featurePlan business.
+  - Draft capacity is Business (2,000 active), never below the imported 500/500.
+  - The app takes the 25-card batch size from the server.
+  - Bulk Grade debits skip only the ledger's yes/no plan-feature flag, after the server's own Bulk Grade check has granted it.
+- What does not change: the plan tier, subscription, Stripe objects, credits and balances, pack discounts, debit/refund amounts, and the atomic billing script (`_membershipConsumption.js`, unmodified). Every scan and grade is still charged normally. Photo-storage policy is not wired into a live route, so nothing changes there.
+- To turn it off: remove MEMBERSHIP_OWNER_FEATURE_PLAN from Production and redeploy.
+- Not done: test credits. The owner chose "Business features + test credits" but gave no amount, and willsep202 already has about 953 ID credits. A balance change waits for the owner's amount.
+- Tests: new owner-feature-plan (23 checks). Full suite: 114 of 114 parts, 10,263 checks, 0 failed. Live: page and assets byte-match; smoke 15 of 15. The owner-side confirmation on willsep202 (25-card batch grading, all venues) is still open.
