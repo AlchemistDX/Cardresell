@@ -180,3 +180,21 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - On willsep202 the header reads "Business" (Production, owner-confirmed). That closes the badge part of live test 11.
 - Test credits: the owner says the current balance is enough (about 1,185 ID / 1,089 Grade). No grant was made, and the item is closed.
 - Still open: the owner's phone rerun of the Magic page with the printed-name rescue (live test 12, expected 9 of 9).
+
+## October 11 photo check before grading (commit d98619f, core.7cbace6e)
+
+- Owner feedback, item 1: Deep Grade results kept citing soft focus and weak edge shots. Before this change, the only check before a charge was "at least 2 edges".
+- Change: `submitGradeScan` (both Quick and Deep) measures every photo about to be sent, on the device and before any request or credit:
+  - Sharpness: variance of a 3×3 Laplacian at 1024 px over the central 75%. Front/back are flagged below 60, edges below 25.
+  - Brightness: flagged below 45 (dark) or above 225 (bright). When either applies, soft focus is not reported, because dimming lowers the focus score.
+  - Glare: more than 5% of pixels above 250.
+  - Resolution: front/back short side under 500 px; edge long side under 700 px (edges are card-cropped strips).
+- If anything is flagged, the screen says "Check these photos before grading. No credits used yet." Each flagged photo has a reason and a Retake button. The other options are "Grade anyway — N credits" and Back. Accepting is remembered for that exact photo set, and a retaken photo is checked again.
+- Advisory, not a block: the limits come from 13 real owner card photos (sharp 310–1479, none flagged) and blurred copies (3–40). No real edge close-ups were available for calibration.
+- The server logs the client's results, whitelisted and as numbers only, under `[capture-meta] photo_check` for calibration. They are never used for billing or grading. Billing, prompts and thresholds are unchanged.
+- Tests: grade-photo-check-browser (23 checks, real browser) as part [115/116]. Full suite: 116 of 116 parts, 10,316 checks, 0 failed. Live: index and core byte-match; smoke 15 of 15. On www.cardresell.org, a soft front plus soft top edge showed the check screen with 0 /api/scan requests.
+- Owner feedback items already present: live camera coaching (photo-guide), the "worth grading" recommendation, "Last verified" fee pills, CSV export, and CV-measured labels.
+- Owner decisions, not done:
+  - The pilot purchase gate stays (owner decision).
+  - A public grade-accuracy log needs real PSA return data, which doesn't exist yet.
+  - Gating the result distribution is a server/product decision.
