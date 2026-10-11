@@ -34,6 +34,9 @@ ok(/data\.foil_hint === 'foil' \|\| data\.foil_hint === 'non_foil'/.test(src), '
 ok(/result\.definiteMiss = true;/.test(src), 'miss marks definiteMiss');
 ok(/\(result\.photoRejected \|\| result\.definiteMiss\) \? '' :/.test(src), 'retry hidden on definite miss');
 ok(src.includes('The same photo gives the same result.'), 'miss hint explains');
+// A new batch never starts on the previous batch's "Done!".
+{const i=src.indexOf("'Scanning 0 of ' + total + '…'"),w=src.indexOf('async function worker()');
+ ok(i>0&&i<w&&w-i<600,'progress label reset before workers start');}
 // Server mapping (Ximilar taxonomy: "Foil/Holo", "Non-Foil").
 const scan = fs.readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
 const fs0 = scan.indexOf('function foilHintFrom');

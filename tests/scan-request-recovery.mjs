@@ -5,12 +5,12 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 const source = readFileSync('js/scan-request.js', 'utf8');
-const records = new Map(); let requests = [], status = 200, offline = false, refreshes = 0;
+const records = new Map(); let requests = [], status = 200, offline = false, refreshes = 0, flaky = 0;
 const make = (uid='owner-a', storage=true) => {
  const user={uid,getIdToken:async()=> 'synthetic-token'};
- const sandbox={ window:{_fbAuth:{currentUser:user},loadSettingsScanCredits:async()=>{refreshes++;}}, crypto:webcrypto, TextEncoder,
+ const sandbox={ window:{_fbAuth:{currentUser:user},loadSettingsScanCredits:async()=>{refreshes++;}}, crypto:webcrypto, TextEncoder, setTimeout:(f)=>setTimeout(f,0),
   sessionStorage:{getItem:k=>records.get(k)??null,setItem:(k,v)=>{if(!storage)throw Error();records.set(k,v);}},
-  fetch:async(url,options)=>{requests.push(JSON.parse(options.body));if(offline)throw Error('offline');return {status,ok:status<400};}};
+  fetch:async(url,options)=>{requests.push(JSON.parse(options.body));if(offline)throw Error('offline');if(flaky>0){flaky--;throw Error('Load failed');}return {status,ok:status<400};}};
  vm.runInNewContext(source,sandbox);return sandbox.window;
 };
 const req=(w,body={imageBase64:'synthetic-front',mode:'identify'})=>w.cardResellScanRequest('/api/scan',{method:'POST',headers:{},body:JSON.stringify(body)});
@@ -18,6 +18,10 @@ let w=make();await Promise.all([req(w),req(w)]);
 assert.equal(requests[0].operation_id,requests[1].operation_id);assert.match(requests[0].operation_id,/^[a-f0-9]{64}$/);
 const first=requests[0].operation_id;
 offline=true;await assert.rejects(()=>req(w),/Connection interrupted/);offline=false;
+// A stale keep-alive connection fails once: one automatic retry, SAME operation id.
+{const n=requests.length;flaky=1;const r=await req(w);assert.equal(r.status,200);assert.equal(requests.length,n+2);assert.equal(requests.at(-1).operation_id,requests.at(-2).operation_id);assert.equal(requests.at(-1).operation_id,first);}
+// Two failures in a row: exactly one retry, then the recoverable message.
+{const n=requests.length;offline=true;await assert.rejects(()=>req(w),/Connection interrupted/);assert.equal(requests.length,n+2);offline=false;}
 w=make();await req(w);assert.equal(requests.at(-1).operation_id,first);
 await req(w,{mode:'identify',imageBase64:'synthetic-front'});assert.equal(requests.at(-1).operation_id,first);
 status=202;await assert.rejects(()=>req(w),/still processing/);assert.equal(requests.at(-1).operation_id,first);status=200;

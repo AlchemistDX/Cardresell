@@ -30,12 +30,29 @@ window.cardResellScanRequest = async function (url, options) {
   } catch (_) { throw Error('This browser could not save scan recovery. Enable site storage before scanning.'); }
   const token = await user.getIdToken();
   current();
+  const send = auth => fetch(url, { ...options,
+    headers: { ...options.headers, Authorization: 'Bearer ' + auth },
+    body: JSON.stringify({ ...body, operation_id: operation }) });
   let response;
   try {
-    response = await fetch(url, { ...options,
-      headers: { ...options.headers, Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ ...body, operation_id: operation }) });
-  } catch (_) { throw Error('Connection interrupted. Retry this same photo to check the existing scan.'); }
+    response = await send(token);
+  } catch (_) {
+    // 2026-10-10: iPhone Safari reuses a keep-alive connection that went stale
+    // while the page sat idle (owner's 18-card binder batch: the first three
+    // requests hung and failed; none reached the server). Retry ONCE with the
+    // same operation id, so the server replays an existing scan instead of
+    // charging again; a scan still in flight answers 202 below.
+    try {
+      await new Promise(resolve => setTimeout(resolve, 900));
+      current();
+      const retryToken = await user.getIdToken();
+      current();
+      response = await send(retryToken);
+    } catch (error) {
+      if (/^Account changed/.test(error?.message || '')) throw error;
+      throw Error('Connection interrupted. Retry this same photo to check the existing scan.');
+    }
+  }
   current();
   if (response.status === 202) {
     throw Error('This scan is still processing or being checked. Retry the same photo to recover it; do not start another scan.');
