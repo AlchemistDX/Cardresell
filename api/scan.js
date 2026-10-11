@@ -741,7 +741,19 @@ export default async function handler(req, res) {
   if (isGradeMode) {
     const _cm = (req.body && req.body.captureMeta) || {};
     const _num = v => (typeof v === 'number' && isFinite(v) && v >= 0 && v < 1000) ? Math.round(v * 10) / 10 : null;
-    try { console.log('[capture-meta] ' + JSON.stringify({ deep: isDeepGrade, front_sharpness: _num(_cm.frontSharpness), back_sharpness: _num(_cm.backSharpness) })); } catch (_) {}
+    // 2026-10-11: on-device photo-check results (calibration only; never trusted for billing or grading).
+    const _pc = {};
+    try {
+      const raw = _cm.photoCheck && typeof _cm.photoCheck === 'object' ? _cm.photoCheck : {};
+      for (const slot of ['front', 'back', 'top', 'bottom', 'left', 'right']) {
+        const r = raw[slot]; if (!r || typeof r !== 'object') continue;
+        const big = v => (typeof v === 'number' && isFinite(v) && v >= 0 && v < 1e6) ? Math.round(v * 10) / 10 : null;
+        _pc[slot] = { sharp: big(r.sharp), mean: big(r.mean), glare: (typeof r.glare === 'number' && r.glare >= 0 && r.glare <= 1) ? Math.round(r.glare * 1000) / 1000 : null,
+          flags: Array.isArray(r.flags) ? r.flags.filter(f => ['small', 'dark', 'bright', 'glare', 'soft'].includes(f)).slice(0, 5) : [],
+          accepted: r.accepted === true };
+      }
+    } catch (_) {}
+    try { console.log('[capture-meta] ' + JSON.stringify({ deep: isDeepGrade, front_sharpness: _num(_cm.frontSharpness), back_sharpness: _num(_cm.backSharpness), photo_check: _pc })); } catch (_) {}
   }
   // Bulk Grade is a Pro Max benefit. The client gate reads window._userTier,
   // which anyone can set in DevTools, so the entitlement is enforced here too.
