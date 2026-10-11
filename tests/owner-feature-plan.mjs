@@ -27,6 +27,10 @@ ok((scan.match(/bulkGrade: isBulkGrade && !ownerFeaturePlan\(key\) \}/g) || []).
 ok(/if \(membershipV2 && isBulkGrade\) \{\s*try \{\s*const balance = await membershipBalances\(key\);/.test(scan), 'server Bulk Grade check still runs for everyone');
 const lua = fs.readFileSync(new URL('../api/_membershipConsumption.js', import.meta.url), 'utf8');
 ok(!lua.includes('ownerFeaturePlan'), 'atomic billing script untouched');
+const ps = fs.readFileSync(new URL('../api/pro-status.js', import.meta.url), 'utf8');
+ok(/if \(b\.capabilities\?\.featurePlan === 'business' && b\.tier !== 'free'\) b = \{ \.\.\.b, billingTier: b\.tier, tier: 'business' \};/.test(ps), 'status route presents owner as Business, keeps billingTier');
+ok(ps.indexOf("tier: 'business'") < ps.indexOf("return res.status(200).json({ ...b,"), 'override applied before the response');
+for (const f of ['membership-account.js', 'scan-credits.js']) { let src = ''; try { src = fs.readFileSync(new URL('../api/' + f, import.meta.url), 'utf8'); } catch {} ok(!src.includes("tier: 'business'"), f + ' keeps the real plan (no plan-change offers from a display label)'); }
 // Client cap.
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ui = fs.readFileSync(new URL('../js/' + html.match(/\/js\/(ui\.[0-9a-f]{8}\.js)/)[1], import.meta.url), 'utf8');
