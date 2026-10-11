@@ -71,7 +71,8 @@ export default async function handler(req, res) {
       // (badge, plan-keyed UI) while its real plan stays in billingTier. Only
       // this display route is changed; checkout, plan changes and the
       // Subscriptions screen keep reading the real plan from their own routes.
-      if (b.capabilities?.featurePlan === 'business' && b.tier !== 'free') b = { ...b, billingTier: b.tier, tier: 'business' };
+      // Applies whatever the real plan reads (an imported owner between renewals reads 'free').
+      if (b.capabilities?.featurePlan === 'business') b = { ...b, billingTier: b.tier, billingIsPro: b.isPro, tier: 'business', isPro: true };
       return res.status(200).json({ ...b, status: b.isPro ? 'active' : 'free',
         email: userEmail, emailVerified, verifiedEmail: saved ? verifiedEmail : userEmail, signInProvider,
         freeScansLeft: b.freeCredits, idFreeLeft: b.idFreeCredits,
