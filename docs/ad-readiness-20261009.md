@@ -174,3 +174,9 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
   - Production: 4 of 4 rescued in a headless browser on www.cardresell.org, 0 page errors.
 - Expected result for this page: 9 of 9 (5 from the identifier plus 4 rescued). This is bounded evidence from one page. The owner's live phone run is still open.
 - Tests: new bulk-text-rescue (26 checks) as part [114/115]. Full suite: 115 of 115 parts, 10,293 checks, 0 failed. Live: index and ui byte-match; smoke 15 of 15. The first production redeploy failed with Vercel `git_info_fail` before building; one retry succeeded.
+
+## October 11 owner confirmations
+
+- On willsep202 the header reads "Business" (Production, owner-confirmed). That closes the badge part of live test 11.
+- Test credits: the owner says the current balance is enough (about 1,185 ID / 1,089 Grade). No grant was made, and the item is closed.
+- Still open: the owner's phone rerun of the Magic page with the printed-name rescue (live test 12, expected 9 of 9).
