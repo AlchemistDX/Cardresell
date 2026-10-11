@@ -41,7 +41,7 @@ Catalog snapshot: 20,699 Pokémon image-reference records/173 represented sets; 
 | `tests/seller-workflow.mjs` | Executable adversarial scenarios for the journal and cost conservation | `npm run workflow:check` |
 | `tools/sync-catalog-stats.mjs` | Derives public catalog counts and source hashes from the two actual indexes | `npm run catalog:stats`; `--check` is in the build command |
 | `data/catalog-stats.json` | Reproducible, scoped catalog evidence | Static route explicitly configured; no general data-directory publishing |
-| `.github/workflows/workflow-foundation.yml` | Read-only, dependency-free journal/catalog/release checks on PRs and the working branches; pinned checkout action | Prepared workflow; first hosted run still needs verification after publishing |
+| `.github/workflows/workflow-foundation.yml` | Read-only, dependency-free journal/catalog/release checks on PRs and the working branches; pinned checkout action | First hosted run passed on `8e0204f`; subsequent commits require their own readback |
 | Single ID lifecycle correction | Abandoned/account-switched preparation cannot dispatch; missing QC fails closed; stale callbacks cannot repaint another scan | Prepared for release; see `single-scan-parity-20261011.md` |
 | Bulk collection save correction | A failed local write cannot continue into a success toast, success telemetry or “saved” state | Prepared for release; tested against the actual saver |
 
@@ -184,7 +184,29 @@ A feature is complete only when its normal UI path, authenticated server boundar
 
 ## First implementation handoff
 
-Next task: WF-101/102. Implement transactional session storage and a scan-row adapter that calls the existing `_bulkScanRowToCard`, captures `_bulkCopyUids`, allocates collection IDs once, and persists the mapping before save. Add a read-only review of the planned actions before connecting any writes. Then add WF-103 using the actual user-data handler and isolated Redis. The library added here is the starting contract; expand it with receipt/generation fields only when required by the real adapter, with explicit schema handling.
+### October 11 continuation: transactional storage and scan mapping
+
+The next implementation slice is prepared on the same review branch and remains dormant. No production browser entry point imports these modules, no public feature claim or entitlement changed, and there are no new provider requests.
+
+| Component | Implemented and locally verified | Still needed before enabling for sellers |
+| --- | --- | --- |
+| `shared/seller-workflow-store.mjs` | Real IndexedDB transactions; account-scoped records; compare-and-set revisions; resolves writes only after transaction completion; requests strict durability | Verified-auth lifecycle wiring, recovery UI, Safari/Android acceptance and device-loss/export guidance |
+| Physical-copy reservations | Session and copy links commit atomically; unique Collection/instance identities per account; a second session cannot allocate new inventory IDs for an already assigned copy | Server-side validation of the owned Collection link; legacy draft recovery; deletion/tombstone integration |
+| Corruption and storage failures | Corrupt/future records remain intact; list reports damaged records; quota/abort failures refuse success; no localStorage fallback | Recovery/export tooling and safe archive policy; never prune uncertain operations or release a deleted copy for replay |
+| `shared/seller-workflow-scan.mjs` | Uses the existing scan copy/card helpers; keeps `inst_scan_<copyUid>`; allocates Collection IDs once within initialization; read-only planned-action projection | Actual scanner UI handoff and review screen; photo reattachment state; complete inventory payload mapping before cloud writes |
+| Metadata and cost | No photos/tokens/URLs in the journal; unknown cost is distinct from zero; unchosen condition/finish/language stay unknown | Preserve additional catalog/sports evidence needed by existing inventory fields; explicit condition/printing review before execution |
+
+The scan row's `variant` field currently carries pricing-source labels such as `usd` or `tcgplayer_live`. The adapter deliberately does not treat it as a foil/printing finish. Review must supply a real finish separately.
+
+The store currently caps retained sessions at 25 per account/device. This is a safety bound for the dormant adapter, **not** a subscription allowance. Existing sessions stay readable at capacity; new sessions fail clearly. Archive/export and retention rules must be implemented before general activation. The browser can still lose local data through eviction, clearing or device loss; this is not cloud sync or a backup guarantee.
+
+Verification for this continuation: `npm run workflow:check` passed (23 journal scenarios, 19 scan-mapping scenarios, 10 catalog checks and current evidence); `npm run workflow:browser` passed 22 real-Chromium scenarios using a persistent profile and the shipped scan helper functions. They cover full browser restart, two-tab initialization/revision races, account switching, immutable recovery, copy/Collection collisions, corrupt/future records, injected quota failure, request-success followed by transaction abort, the 500-copy technical envelope and bounded session capacity. Test registry (12 checks), configured build and diff checks also passed. No provider calls or customer writes were used. Quota is failure injection, not a physical device storage-exhaustion test. Chromium is not owner-phone acceptance.
+
+Next task: connect the read-only review and verified-auth lifecycle, then WF-103 using the actual `/api/user-data` handler with isolated Redis. Persist pending before dispatch, retain the existing CAS/tombstone transport, distinguish on-device persistence from confirmed account sync, and verify the returned collection IDs. Extend canonical inventory metadata deliberately before connecting writes; never reconstruct missing sports/catalog fields from card names. Then connect the existing draft service and its generation/receipt recovery. WF-101/102 have tested library groundwork; their production integration and the end-to-end Phase 1 gate remain open.
+
+Storage semantics references used during implementation:
+- https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction
+- https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction
 
 ## Primary references checked October 11, 2026
 

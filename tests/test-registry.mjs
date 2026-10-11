@@ -70,6 +70,10 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'seller-workflow-scan.mjs':
+    'Required workflow mapping gate: npm run workflow:check. Pure stable scan-copy mapping, identity/cost validation and retry contract; also run in hosted foundation CI.',
+  'seller-workflow-store-browser.mjs':
+    'Required workflow persistence gate: CR_CHROMIUM=<binary> npm run workflow:browser. Requires Playwright, Acorn and a real Chromium persistent profile; tests actual IndexedDB transactions, two tabs, restart, account isolation and shipped scan helpers. No production adapter activation claimed.',
   'catalog-stats.mjs':
     'Required catalog-evidence gate: node tests/catalog-stats.mjs. Runs the real generator against isolated indexes/markup and verifies stale evidence, duplicate IDs and missing markers fail.',
   'bulk-save-failure.mjs':
