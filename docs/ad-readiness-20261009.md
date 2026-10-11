@@ -103,3 +103,14 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
   - Log the best-guess identity on low-confidence misses.
   - Shorten the binder status message.
 - Tests: new bulk-variant-choice (22 checks; fails on the previous bundle). Full suite: 112 of 112 parts, 10,215 checks, 0 failed. One earlier run hit a draft-delete timing race that passes 113 of 113 on its own.
+
+## October 10 several binder pages per batch (commit c464a36, dpl_4ZQKLkrcbTrDGC5Ee9Aq9Wcmc1Wj)
+
+- Owner report: the second live scan of the page got all 9 cards. But picking two binder photos opened only one, because the input accepted a single file.
+- Now the photo picker accepts up to 10 photos (extra photos beyond 10 are dropped, with a note).
+- Pages are reviewed one at a time. Each page gets its own automatic grid fit and pre-ticked pockets, and its status starts "Page N of M." The button reads "Next page (N of M) · X cards so far", then "Review X cards · X ID credits" on the last page.
+- Every ticked pocket from all pages goes into one bulk queue with a single credit confirmation. Nothing is sent before that confirmation.
+- Pocket file names carry the page number (for example binder-page-2-row-1-col-3.jpg) when there are several pages. Single-page names are unchanged.
+- Bulk ID has no plan batch cap; plan batch sizes (Business 25, Pro 10) apply to batch grading only. Credits still bound the scan.
+- Tests: new binder-multipage-browser (24 checks). Full suite: 113 of 113 parts, 10,239 checks, 0 failed.
+- Live check: two pages ran on www.cardresell.org with scan requests blocked. Page 1 was the real IMG_4652 page with 9 ticked; page 2 was a synthetic page with 7. The button showed "Review 16 cards · 16 ID credits", with 0 scan calls and 0 page errors.
