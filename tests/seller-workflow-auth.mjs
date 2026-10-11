@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {workflowAuth} from '../shared/seller-workflow-auth.mjs';
+let callback,unsubscribed=0,events=0,resolve;
+const user=id=>({uid:id,getIdTokenResult:async()=>({claims:{sub:id},token:'never-return'})});
+const sdk={currentUser:user('a')};
+const auth=workflowAuth({auth:sdk,onAuthStateChanged:(a,fn)=>{assert.equal(a,sdk);callback=fn;return()=>unsubscribed++}});
+auth.subscribe(()=>events++);
+let passed=0;const test=async(name,run)=>{await run();passed++;console.log('PASS '+name)};
+await test('SDK-bound identity verifies without returning token',async()=>{const p=await auth.verify();assert.deepEqual(p,{ownerId:'a',generation:0});assert.equal(auth.matches(p),true)});
+await test('wrong token subject is refused',async()=>{sdk.currentUser={uid:'a',getIdTokenResult:async()=>({claims:{sub:'other'}})};await assert.rejects(()=>auth.verify(),/WORKFLOW_AUTH_UNCONFIRMED/)});
+await test('switch-away-and-back cannot accept a stale token response',async()=>{const a=user('a');a.getIdTokenResult=()=>new Promise(r=>resolve=r);sdk.currentUser=a;const pending=auth.verify();sdk.currentUser=user('b');callback();sdk.currentUser=a;callback();resolve({claims:{sub:'a'}});await assert.rejects(()=>pending,/WORKFLOW_ACCOUNT_CHANGED/);assert.equal(events,2)});
+await test('changing SDK user without notification still fails binding',async()=>{const a=user('a');a.getIdTokenResult=()=>new Promise(r=>resolve=r);sdk.currentUser=a;const pending=auth.verify();sdk.currentUser=user('b');resolve({claims:{sub:'a'}});await assert.rejects(()=>pending,/WORKFLOW_ACCOUNT_CHANGED/)});
+await test('signed-out sessions cannot open account storage',async()=>{sdk.currentUser=null;callback();await assert.rejects(()=>auth.verify(),/WORKFLOW_SIGN_IN_REQUIRED/)});
+await test('close invalidates principals and unsubscribes once',async()=>{sdk.currentUser=user('a');const p=await auth.verify();auth.close();auth.close();assert.equal(auth.matches(p),false);assert.equal(unsubscribed,1);await assert.rejects(()=>auth.verify(),/WORKFLOW_ACCOUNT_CHANGED/)});
+console.log(`seller-workflow-auth: ${passed} scenarios passed -- SUITE COMPLETE, exit=0`);

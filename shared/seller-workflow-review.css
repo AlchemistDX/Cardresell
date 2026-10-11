@@ -1,0 +1,17 @@
+.seller-workflow-review{font:16px/1.5 system-ui,sans-serif;color:var(--text,#e8e6e3);background:var(--bg,#171719);padding:16px;max-width:900px;margin:auto;overflow-wrap:anywhere;color-scheme:dark}
+.seller-workflow-review *{box-sizing:border-box}
+.seller-workflow-review h2{font-size:1.4rem;margin:0 0 12px}
+.seller-workflow-review h3{font-size:1.1rem;margin:0 0 8px}
+.seller-workflow-review p{margin:8px 0 16px}
+.seller-workflow-review button{font:inherit;min-height:44px;padding:8px 12px;border:1px solid #777;border-radius:8px;background:#27242e;color:inherit;cursor:pointer;max-width:100%;white-space:normal}
+.seller-workflow-review button:disabled{opacity:.5;cursor:default}
+.seller-workflow-review input{display:block;width:100%;min-height:44px;margin:4px 0 12px;padding:8px;font:inherit;background:#111;color:#eee;border:1px solid #777;border-radius:6px}
+.seller-workflow-review input[type=checkbox]{display:inline-block;width:24px;min-height:24px;vertical-align:middle;margin-right:8px}
+.seller-workflow-review label{display:block;font-size:.9rem}
+.seller-workflow-review article{border:1px solid #666;border-radius:12px;padding:16px;margin:16px 0}
+.seller-workflow-review form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+.seller-workflow-review form>label:nth-last-of-type(-n+2),.seller-workflow-review form>button{grid-column:1/-1}
+.seller-workflow-review :focus-visible{outline:3px solid #c4b5fd;outline-offset:3px}
+.seller-workflow-review .workflow-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}
+.seller-workflow-review .workflow-notice{padding:12px;border-left:3px solid #e7bc65;background:#2a251d}
+@media(max-width:480px){.seller-workflow-review form{grid-template-columns:minmax(0,1fr)}.seller-workflow-review{padding:12px}.seller-workflow-review article{padding:12px}}

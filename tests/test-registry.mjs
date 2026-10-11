@@ -70,6 +70,12 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'bulk-market-total.mjs':
+    'Required bulk-value gate: node tests/bulk-market-total.mjs. Executes the referenced UI tracker with no cost, zero/missing/invalid prices, multiple physical copies and changing cost state.',
+  'seller-workflow-auth.mjs':
+    'Required auth adapter gate: npm run workflow:check. Synthetic Firebase SDK token-subject and session-generation checks; not a server authorization test.',
+  'seller-workflow-review-browser.mjs':
+    'Required saved-review integration gate: npm run workflow:browser with CR_CHROMIUM. Real DOM, IndexedDB and shipped scanner mapping; account/revision/quota/reload/export and mobile layout. Dormant; no Collection or draft mutations.',
   'seller-workflow-scan.mjs':
     'Required workflow mapping gate: npm run workflow:check. Pure stable scan-copy mapping, identity/cost validation and retry contract; also run in hosted foundation CI.',
   'seller-workflow-store-browser.mjs':

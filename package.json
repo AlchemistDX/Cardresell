@@ -3,7 +3,7 @@
   "scripts": {
     "vercel-build": "node tools/membership-release-inspect.mjs && node tools/sync-catalog-stats.mjs --check",
     "catalog:stats": "node tools/sync-catalog-stats.mjs",
-    "workflow:check": "node tests/seller-workflow.mjs && node tests/seller-workflow-scan.mjs && node tests/catalog-stats.mjs && node tools/sync-catalog-stats.mjs --check",
-    "workflow:browser": "node tests/seller-workflow-store-browser.mjs"
+    "workflow:check": "node tests/seller-workflow.mjs && node tests/seller-workflow-scan.mjs && node tests/seller-workflow-auth.mjs && node tests/catalog-stats.mjs && node tools/sync-catalog-stats.mjs --check",
+    "workflow:browser": "node tests/seller-workflow-store-browser.mjs && node tests/seller-workflow-review-browser.mjs"
   }
 }

@@ -208,6 +208,79 @@ Storage semantics references used during implementation:
 - https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction
 - https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction
 
+## October 11 continuation: persisted review and market totals
+
+The next review slice is implemented in `shared/seller-workflow-auth.mjs`,
+`shared/seller-workflow-review.mjs` and its stylesheet. It remains **dormant**:
+the production HTML/bundles do not import it, and the new shared assets are not
+published by the static route configuration. The actual scanner helper functions
+are exercised with the review DOM and real IndexedDB in browser acceptance.
+
+- Resume account-scoped batches after reload, edit exact-printing/condition
+  metadata, and explicitly confirm each physical copy. Editing identity or cost
+  clears the previous confirmation. Unknown condition/finish/language stay blank.
+- Keep unknown purchase cost distinct from zero. Parse decimal input as integer
+  cents and sum with integer arithmetic, including the maximum safe per-copy
+  cent value. Review pages show 25 copies at a time within the existing 500-copy
+  technical envelope; this grants no plan entitlement.
+- Bind local access to the existing Firebase SDK user and token subject. An auth
+  generation invalidates even a switch away and back to the same account; late
+  token/store callbacks cannot restore another account's screen. This is client
+  session binding, not a replacement for authenticated server authorization.
+- Export the latest validated metadata journal, excluding photos/tokens. This
+  is not an import/restore feature or a full Collection backup. Corrupt/future
+  records are retained and reported; raw damaged-record recovery is still open.
+- Show local persistence truthfully. Pending/uncertain/blocked operations show
+  **Needs recovery** and cannot be edited. The screen offers no Collection save,
+  draft creation, billing or provider action yet.
+- Finish the shared bulk market-value tracker: priced copies contribute even
+  without purchase cost; quantities and genuine zero prices are retained;
+  missing/invalid prices are identified; comparisons say above/below purchase
+  cost, not realized profit. The percentage can exceed 100%, while only the bar
+  width is capped. Updated immutable UI asset: `ui.34d2009e.js`.
+
+Verification: 18 real-Chromium review scenarios, 6 auth-adapter scenarios and 9
+market-total scenarios passed. Existing storage-browser scenarios (22), scan
+mapping (19), journal (23), catalog evidence (10), bulk save failure (16), scan
+hygiene (182), asset fingerprints (109), test registry (12) and the configured
+build also passed. Review includes 320/390px portrait and 844px landscape,
+two-tab revisions, reload, account races, injected quota failure, hostile text,
+metadata export, safe-cent boundaries and 500-copy pagination. Browser screenshots
+were visually inspected. Auth responses are synthetic; this is not phone or
+real-account acceptance. Auth checks run in hosted foundation CI via
+`workflow:check`; both browser suites are explicit `workflow:browser` gates.
+The existing Collection handler also passed its 24-check isolated Redis suite;
+those checks cover current snapshot/CAS behavior, not the future replay adapter.
+
+**Next integration requirements (WF-103 / WF-106):**
+
+1. Extend canonical saved metadata deliberately to retain existing grounded
+   catalog IDs, rarity and sports/year evidence before constructing real
+   Collection rows. Do not create a partial inventory record from the current
+   review-only card whitelist. Identity edits must invalidate associated pricing
+   and eligibility evidence when those adapters are attached.
+2. Use `/api/user-data` with its CAS merge. Its current tombstones are bounded
+   to 2,000 and expire after 90 days; they are insufficient by themselves to
+   prevent an arbitrarily old batch replay from resurrecting a deleted copy.
+   Design and test durable save receipts/copy retirement across that boundary,
+   including tombstone expiry/compaction, before enabling session replay writes.
+3. Persist the immutable pending operation before dispatch; verify the actual
+   returned Collection ID and owned physical-copy link before confirming it.
+   A lost response requires receipt reconciliation, not fresh entry IDs or
+   restamped old records. Keep local persistence and cloud confirmation distinct.
+4. Teach both Collection draft entry points and existing-draft lookups to use
+   the validated scan-instance link; legacy rows retain `inst_col_<entryId>`.
+   Integrate the existing bulk capacity/eligibility/generation/receipt path.
+5. Mount the review through the normal scan UI behind a default-off pilot flag
+   only after those server gates. Add complete normal-entry browser/isolated
+   Redis acceptance, photo reattachment and owner-phone acceptance. Do not
+   enable this module by simply adding a production import.
+
+Planning estimate: about 25% of Phase 1 implementation is prepared. No part of
+the new connected workflow is enabled for customers, and its end-to-end release
+gate remains incomplete. This is an engineering estimate, not a test coverage
+or production-completion percentage.
+
 ## Primary references checked October 11, 2026
 
 - Shiny published collection/scanning features: https://www.getshiny.io/
