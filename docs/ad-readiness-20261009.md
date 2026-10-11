@@ -156,3 +156,21 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - Fix: for the owner test account, /api/pro-status now reports tier business and isPro true on any real plan, keeping billingTier and billingIsPro. Nothing else changed.
 - If the header still does not read Business after a reload, the remaining explanation is that willsep202 is not the single MEMBERSHIP_LIVE_OWNERS entry. That needs a different, owner-approved key.
 - Full suite: 114 of 114 parts, 10,267 checks, 0 failed. Live: index byte-match; smoke 15 of 15.
+
+## October 11 Magic printed-name rescue in bulk/binder (commit 616d6ce, ui.dd6f7208, dpl_G7eFHZGVphfvmVJd6JcvspNHsCbw)
+
+- Evidence: the owner's Magic page (IMG_4657, Secrets of Strixhaven) scored 5 of 9 in repeated runs. With auto-fit (6/6/5/8) every card is fully inside its pocket, so the misses were not caused by cropping. The missed cards scored far past the identifier cutoff (0.569–0.748), likely because the identifier has weak references for this 2026 set.
+- Change: after a batch finishes, each definite miss has its name strip read on the device (tesseract.js 5 from jsdelivr, the same reader the single-scan rescue already uses). The read is matched with Scryfall `cards/named?fuzzy=…&set=…`.
+  - Lookups only use Magic sets this batch already identified (at most 3).
+  - The read must be a close spelling of the front-face name: bigram Dice ≥ 0.7 after dropping tokens shorter than 3 letters. One shared word is not enough.
+  - At most 9 lookups per card, paced at about 8 per second. The batch is not touched if it was closed or replaced.
+  - Nothing loads unless the batch has an identified Magic card and at least one definite miss.
+  - The rescued row is priced as normal and labelled "Matched from the printed name. Please check it." A seller rename clears the label.
+  - No credit change: the miss was already refunded. No server, billing or threshold change.
+- Measured on the owner's photo copy (1500×2000):
+  - The 4 misses were all rescued with the exact printing: Rubble Rouser #128, Killian's Confidence #197, Chase Inspiration #41, Sneering Shadewriter #101.
+  - The 5 already-identified Magic cards came back either correct (3) or left alone (2), never wrong.
+  - Worst-case false-match check: 9 Pokémon pockets from IMG_4652 with set SOS forced gave 0 matches.
+  - Production: 4 of 4 rescued in a headless browser on www.cardresell.org, 0 page errors.
+- Expected result for this page: 9 of 9 (5 from the identifier plus 4 rescued). This is bounded evidence from one page. The owner's live phone run is still open.
+- Tests: new bulk-text-rescue (26 checks) as part [114/115]. Full suite: 115 of 115 parts, 10,293 checks, 0 failed. Live: index and ui byte-match; smoke 15 of 15. The first production redeploy failed with Vercel `git_info_fail` before building; one retry succeeded.
