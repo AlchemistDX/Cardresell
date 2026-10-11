@@ -139,3 +139,13 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
 - To turn it off: remove MEMBERSHIP_OWNER_FEATURE_PLAN from Production and redeploy.
 - Not done: test credits. The owner chose "Business features + test credits" but gave no amount, and willsep202 already has about 953 ID credits. A balance change waits for the owner's amount.
 - Tests: new owner-feature-plan (23 checks). Full suite: 114 of 114 parts, 10,263 checks, 0 failed. Live: page and assets byte-match; smoke 15 of 15. The owner-side confirmation on willsep202 (25-card batch grading, all venues) is still open.
+
+## October 11 owner test account shows as Business (commit 4bc30bb, dpl_BmvT1jLBSz1XLz6VJ9CvtKZJb5fJ)
+
+- Owner request: put the full Business tier on willsep202 so the badge and every feature can be tested.
+- Change: /api/pro-status reports `tier: 'business'` for the owner test account (only while MEMBERSHIP_OWNER_FEATURE_PLAN=business), with the real plan kept in `billingTier`. That route sets the app's plan, so the badge, the plan-keyed screens and the 25-card cap all read Business.
+- Deliberately unchanged:
+  - /api/membership-account still reports the real plan, so the Subscriptions screen never offers a real "Change to … at renewal" or a downgrade from a display label.
+  - /api/scan-credits, checkout, the ledger and Stripe.
+- Credits: Business's monthly allowance (750 ID, 100 Grade) was not granted; that is a balance change and waits for the owner's amount.
+- Tests: owner-feature-plan has 27 checks. Full suite: 114 of 114 parts, 10,267 checks, 0 failed. Live: index byte-match; smoke 15 of 15. The owner's badge check on willsep202 is still open.
