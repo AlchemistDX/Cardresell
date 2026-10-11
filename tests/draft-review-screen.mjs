@@ -1129,7 +1129,11 @@ try {
         /^\d{4}-\d{2}-\d{2}$/.test(stamp || ''), `feeAuditedOn = ${JSON.stringify(stamp)}`);
       const sm = String(stamp).match(/^(\d{4})-(\d{2})-(\d{2})$/);
       const anchorMs = Date.UTC(+sm[1], +sm[2] - 1, +sm[3]);
-      for (const at of ['2026-09-07T14:00:00Z', '2026-09-08T02:06:00Z', '2026-10-17T00:00:00Z']) {
+      /* 2026-10-11: instants are offsets from the stamp, not fixed dates, so a
+         re-audit cannot push them before the audit (which correctly reads as
+         Infinity). Same shape as before: 6d 14h, 7d 2h 6m, and 46 days. */
+      const H = 3600000;
+      for (const at of [anchorMs + (6 * 24 + 14) * H, anchorMs + (7 * 24 + 2.1) * H, anchorMs + 46 * 24 * H].map(t => new Date(t).toISOString())) {
         const want = Math.floor((Date.parse(at) - anchorMs) / 86400000);
         await page.clock.setFixedTime(new Date(Date.parse(at)));
         const got = await page.evaluate(() => window.verifiedAgeDays('ebay'));

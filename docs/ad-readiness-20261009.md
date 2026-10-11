@@ -198,3 +198,36 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
   - The pilot purchase gate stays (owner decision).
   - A public grade-accuracy log needs real PSA return data, which doesn't exist yet.
   - Gating the result distribution is a server/product decision.
+
+## October 11 grade results explain their confidence (core.6e9981d4 together with the fee re-audit below)
+
+- Owner feedback, items 2 and 7: say why a grade is moderate, keep centering apart from condition, make "Most likely" larger and the confidence badge more visible.
+- The result header now reads "MOST LIKELY", then "PSA X" at 2.1rem with a confidence badge coloured by level.
+- A moderate or low result opens with a "WHY MODERATE/LOW CONFIDENCE" box. Each reason comes with its fix. The reasons come from three places:
+  - the grader's own `confidence_drivers`;
+  - any phone photo-check issues the user graded through anyway;
+  - the photo-count ceiling: Quick Grade tops out at moderate, and Deep Grade needs all 6 photos for high. This ceiling is merged into the edge reason when both apply, so the advice isn't repeated.
+- High confidence shows no box.
+- Two tiles: "CENTERING: Up to PSA N" (measured, partly measured or estimated) and "OVERALL: PSA X". A line below says whether centering is the limit. When centering wasn't measured, the app makes no claim either way.
+- Display only. Grading, prompts, billing and thresholds are unchanged.
+- Test: grade-result-explain-browser, 20 checks in a real browser, part [116/118]. Mobile screenshot reviewed.
+
+## October 11 fee re-audit of the eight ranked marketplaces
+
+- Why now: all 15 venues carried a Sep 1, 2026 audit date. On Oct 17 they would all pass the 45-day window. At that point every payout comparison would show "Rankings are shown for reference only", and no venue could be ranked first.
+- Each fee was re-read on the venue's own pages. Results:
+  - eBay: 13.25% up to $7,500, then 2.35%; $0.30/$0.40 per order; Store 12.35% with a $2,500 boundary; 10% Top Rated Plus discount; 1.65% international fee; 3% currency conversion. Matches.
+  - TCGplayer: 10.75% with a $75 cap from Feb 10, 2026; Pro 9.25% + 2.5%; Direct 8.95%, with the $0.30 removed and per-item fees of 50% / $1.12 from Jun 18, 2026. Matches.
+  - COMC: 5% transaction fee; cash-out 10%, plus $1 under $250; checks $5 / $15; intake from $0.65 raw / $1.25 graded. Matches.
+  - Fanatics Collect: 6% below 120% of Card Ladder value, 12% at or above; FanCash 0%. Matches; the accuracy page already disclosed it.
+  - Whatnot: tiered from Sep 21, 2026, with a base tier of 8%. The official schedule still lists 0% on the portion over $1,500 for trading cards (limited time). The model is unchanged. Lower tiers for high-volume sellers aren't modelled, so fees err high for them.
+  - Mercari: 10% of item plus shipping; buyer pays 3.6%. Matches.
+  - Mana Pool: 5% of merchandise only, plus 2.9% + $0.30. Matches.
+  - Poshmark: the terms say "$2.95 for sales $15 and under", but the model charged 20% at exactly $15.00. Fixed: $15.00 now pays $2.95.
+- The `feeAuditedOn` date for these eight is now 2026-10-11, in the code and on /accuracy, with a changelog entry and the page date set to Oct 11.
+- Not re-read in this pass, keeping their Sep 1 dates: Cardsphere, Cardmarket, Card Kingdom, CoolStuffInc, Star City Games, CardNexus and TCG Bulk. These will show "stale" from Oct 17. Stale venues sit below fresh ones in the ranking, and the "reference only" banner can't appear while any ranked venue is fresh.
+- Not modelled, and an owner decision: eBay's trading-card singles promotion, which gives 50% off the final value fee on sales of $1,000 or more, with no end date stated. Its absence makes eBay estimates on $1,000+ singles conservative.
+- Fee pills now show the age, for example "Fee schedule verified Oct 11, 2026 · 3 days ago".
+- Each fee breakdown has a "Report a fee problem" link. It opens the user's own mail app with a message to will@cardresell.org, pre-filled with the venue, card, price used, net shown and schedule date. Nothing is sent automatically.
+- Tests: fee-pill-report-browser, 25 checks, part [117/118]. accuracy-fee-parity, copy-truth-offline and fee-truth-offline are green.
+- Next re-audit is due by Nov 25, 2026 (45 days).

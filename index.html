@@ -782,7 +782,10 @@ select:focus{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-border)}
 .payout-rank-amt{font-family:var(--mono);font-weight:600;color:var(--text);font-size:.85rem;min-width:64px;text-align:right}
 
 /* 2026-08-30: "Last verified" pill on every venue's fee block. Links to /accuracy. */
-.fee-verified-row{margin-top:.4rem;display:flex;justify-content:flex-end}
+.fee-verified-row{margin-top:.4rem;display:flex;justify-content:flex-end;align-items:center;gap:.6rem;flex-wrap:wrap}
+/* 2026-10-11: "Report a fee problem" opens the user's own mail app, pre-filled. */
+.fee-report-link{font-size:.62rem;color:var(--text-muted);text-decoration:underline;text-underline-offset:2px;margin-right:auto;padding:.25rem 0}
+.fee-report-link:hover{color:var(--text)}
 .fee-verified-pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.62rem;font-weight:700;letter-spacing:.02em;color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent);border:1px solid color-mix(in srgb,var(--green) 25%,transparent);border-radius:99px;padding:.15rem .55rem;text-decoration:none;transition:all var(--ease)}
 .fee-verified-pill:hover{background:color-mix(in srgb,var(--green) 20%,transparent);border-color:color-mix(in srgb,var(--green) 45%,transparent)}
 .fee-verified-dot{font-size:1.1rem;line-height:.5;color:var(--green)}
@@ -4136,7 +4139,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
-<script defer src="/js/core.7cbace6e.js"></script>
+<script defer src="/js/core.6e9981d4.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }

@@ -395,8 +395,8 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'the Aug 31 fee-correction changelog entry exists');
   // CHANGED 2026-09-07: the stamp column was `<td>Sep 2026</td>`. A month is not
   // a date; see the block below.
-  ok(/<td>Poshmark<\/td>[^<]*<td>[^<]*\$2\.95[^<]*<\/td>[^<]*<td>Sep 1, 2026<\/td>/.test(ac.replace(/\s+/g,' ')),
-     'Poshmark row keeps $2.95/20% and stamps the Sep 1, 2026 audit date');
+  ok(/<td>Poshmark<\/td>[^<]*<td>[^<]*\$2\.95[^<]*<\/td>[^<]*<td>Oct 11, 2026<\/td>/.test(ac.replace(/\s+/g,' ')),
+     'Poshmark row keeps $2.95/20% and stamps the Oct 11, 2026 re-audit date');
   ok(/6% below 120%, 12% at or above/.test(ac.replace(/&nbsp;/g,' ')),
      'Fanatics tiered 6/12 fee stated (checklist 8% was wrong)');
 
