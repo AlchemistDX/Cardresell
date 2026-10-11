@@ -1,0 +1,32 @@
+name: Seller workflow foundation
+
+on:
+  pull_request:
+  push:
+    branches: [codex/profit-readiness, codex/seller-workflow-foundation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check runtime
+        run: node -e "if (Number(process.versions.node.split('.')[0]) < 20) process.exit(1)"
+      - name: Verify workflow journal and catalog evidence
+        run: npm run workflow:check
+      - name: Verify release inspection
+        run: npm run vercel-build
+
+# No deployment, provider requests, private credentials or package installation.
+# Scanner/browser/Redis suites remain additional release gates.

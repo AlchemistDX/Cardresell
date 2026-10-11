@@ -1,6 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "vercel-build": "node tools/membership-release-inspect.mjs"
+    "vercel-build": "node tools/membership-release-inspect.mjs && node tools/sync-catalog-stats.mjs --check",
+    "catalog:stats": "node tools/sync-catalog-stats.mjs",
+    "workflow:check": "node tests/seller-workflow.mjs && node tests/catalog-stats.mjs && node tools/sync-catalog-stats.mjs --check"
   }
 }

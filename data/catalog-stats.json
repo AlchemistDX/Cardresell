@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "scope": "Local image-reference indexes; not complete catalog coverage or measured recognition accuracy.",
+  "indexes": {
+    "pokemon": {
+      "records": 20699,
+      "representedSets": 173,
+      "source": "card-index.json",
+      "sha256": "eb57b82a8a9521a0c037a0541dbbeb67cead73fd6e872329a4ad7fef4cea4e9c"
+    },
+    "mtg": {
+      "records": 18618,
+      "representedSets": 121,
+      "source": "mtg-index.json",
+      "sha256": "09444d5e0b8a41eae300222b92ee99fa0f0cddeeac817a7f19b45df48536f986"
+    }
+  }
+}

@@ -70,6 +70,14 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'catalog-stats.mjs':
+    'Required catalog-evidence gate: node tests/catalog-stats.mjs. Runs the real generator against isolated indexes/markup and verifies stale evidence, duplicate IDs and missing markers fail.',
+  'bulk-save-failure.mjs':
+    'Required batch-save gate: node tests/bulk-save-failure.mjs. Executes the shipped saver with failed/successful storage; a failed write must not show success or mark a batch saved.',
+  'seller-workflow.mjs':
+    'Required dormant workflow foundation gate: node tests/seller-workflow.mjs. Pure journal transitions, copy identity, recovery snapshots, account isolation and integer-cent allocation; no production adapter integration claimed.',
+  'single-scan-preflight.mjs':
+    'Required single ID release gate: node tests/single-scan-preflight.mjs. Synthetic deferred preparation, cancellation/account changes and late responses; no paid provider calls.',
   'brand-ui-browser.mjs':
     'Required brand/UI release gate: CR_CHROMIUM=<binary> node tests/brand-ui-browser.mjs. Full local app, two themes, four viewports, isolated service fixtures.',
   'binder-scan-browser.mjs':
