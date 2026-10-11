@@ -149,3 +149,10 @@ Full suite at b5edea5: 109 of 109 parts, 10,127 checks passed, 0 failed.
   - /api/scan-credits, checkout, the ledger and Stripe.
 - Credits: Business's monthly allowance (750 ID, 100 Grade) was not granted; that is a balance change and waits for the owner's amount.
 - Tests: owner-feature-plan has 27 checks. Full suite: 114 of 114 parts, 10,267 checks, 0 failed. Live: index byte-match; smoke 15 of 15. The owner's badge check on willsep202 is still open.
+
+## October 11 owner Business display fix (commit 0eaff8a)
+
+- The owner's screenshot (IMG_4660) showed "Subscriptions" in the header instead of a plan name, so the status route was not presenting Business. Likely cause: the earlier condition `b.tier !== 'free'`. The imported owner's real plan probably reads free between renewals (not verifiable from here; sensitive environment variables and the ledger cannot be read).
+- Fix: for the owner test account, /api/pro-status now reports tier business and isPro true on any real plan, keeping billingTier and billingIsPro. Nothing else changed.
+- If the header still does not read Business after a reload, the remaining explanation is that willsep202 is not the single MEMBERSHIP_LIVE_OWNERS entry. That needs a different, owner-approved key.
+- Full suite: 114 of 114 parts, 10,267 checks, 0 failed. Live: index byte-match; smoke 15 of 15.
