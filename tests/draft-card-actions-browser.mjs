@@ -594,6 +594,16 @@ try {
     ok('second card keeps its hosted photo', retryText.includes('https://photos.example.test/' + b.id + '.jpg'));
     ok('unselected photo excluded', !retryText.includes('https://photos.example.test/' + c.id + '.jpg'));
     eq('retry produces one combined file', downloads.length, 2);
+    await page.evaluate(() => { ensureExportablePhotos = () => new Promise(resolve => { window.__finishBulkPhoto = resolve; }); });
+    await page.click('[data-draft-download-selected]');
+    await page.waitForFunction(() => typeof window.__finishBulkPhoto === 'function');
+    await page.evaluate(() => window.loadDraftsFirstPage());
+    await page.waitForFunction(() => !window._draftsState.loading);
+    await page.evaluate(() => window.__finishBulkPhoto({ok:false,reason:'NONE',urls:[],localCount:0}));
+    await settle(page, 200);
+    eq('reload cancels without a download', downloads.length, 2);
+    ok('reload clears the per-card preparation state', await page.evaluate(() => window._draftsState.dl === null));
+    ok('download is usable after cancellation', await page.locator('[data-draft-download-selected]').isEnabled());
     // A changed account while preparation is pending cancels the export.
     await page.evaluate(() => { ensureExportablePhotos = async () => { window.googleUser = {sub:'different-owner'}; return {ok:false,reason:'NONE',urls:[],localCount:0}; }; });
     await page.click('[data-draft-download-selected]');
