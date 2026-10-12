@@ -594,6 +594,39 @@ try {
     eq('clear selection', await page.locator('[data-draft-select]:checked').count(), 0);
     await page.click(`[data-draft-select="${a.id}"]`);
     await page.click(`[data-draft-select="${b.id}"]`);
+    // Required Category ID must survive the read gate before any upload.
+    await page.evaluate(id => {
+      window.__categoryRead = _reviewFetch;
+      window.__categoryPhoto = ensureExportablePhotos;
+      window.__categoryPhotoCalls = 0;
+      ensureExportablePhotos = async () => { window.__categoryPhotoCalls++; return {ok:false,reason:'NONE',urls:[],localCount:0}; };
+      _reviewFetch = async draftId => {
+        const response = await window.__categoryRead(draftId);
+        if (draftId === id) response.body.packet = null;
+        return response;
+      };
+    }, b.id);
+    await page.click('[data-draft-download-selected]');
+    await page.waitForFunction(() => window._draftsState.bulk?.busy === false);
+    eq('missing second category emits no partial file', downloads.length, 1);
+    ok('missing category explains the repair', (await page.locator('.draft-bulk').innerText()).includes('refresh its listing details'));
+    eq('missing category preserves both selected drafts', await page.locator('[data-draft-select]:checked').count(), 2);
+    eq('invalid row does not start photo hosting', await page.evaluate(() => window.__categoryPhotoCalls), 1);
+    // Individual downloads follow the same rule, including malformed IDs.
+    for (const category of ['', '0', '-1', '183454x']) {
+      await page.evaluate(({id, category}) => {
+        _reviewFetch = async draftId => {
+          const response = await window.__categoryRead(draftId);
+          if (draftId === id) response.body.packet = {category:{id:category}};
+          return response;
+        };
+      }, {id:b.id, category});
+      await page.click(`${cardSel(b.id)} [data-draft-download]`);
+      await page.waitForFunction(() => window._draftsState.dl?.busy === false);
+      eq('invalid category ' + JSON.stringify(category) + ' prevents individual download', downloads.length, 1);
+      ok('individual error explains required category', (await page.locator('.draft-dl-err').innerText()).includes('no valid eBay category'));
+    }
+    await page.evaluate(() => { _reviewFetch = window.__categoryRead; ensureExportablePhotos = window.__categoryPhoto; });
     // A failure after one prepared row must not emit a partial file.
     await page.evaluate(() => {
       window.__savedPhotoExport = ensureExportablePhotos;
