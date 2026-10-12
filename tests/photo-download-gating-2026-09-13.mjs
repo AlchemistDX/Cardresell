@@ -59,7 +59,7 @@ import { harness } from './_assert.mjs';
 import { signUploadReceipt, verifyUploadReceipt } from '../api/_photoReceipt.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || process.env.PLAYWRIGHT_MODULE || 'playwright';
 const T = harness('photo download gating (draft-list button)');
 
 const TYPES = {
@@ -155,7 +155,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const APP_ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
 const { chromium } = (await import(PW)).default;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || process.env.CHROMIUM_EXECUTABLE || undefined, args: ['--no-sandbox'] });
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 

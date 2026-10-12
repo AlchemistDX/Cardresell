@@ -121,13 +121,14 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 </div>
 
 <div class="stat-grid">
-  <div class="stat"><div class="stat-num">20,506</div><div class="stat-lab">Pokémon cards indexed</div></div>
-  <div class="stat"><div class="stat-num">171</div><div class="stat-lab">Sets covered</div></div>
+  <div class="stat"><div class="stat-num" data-catalog-stat="pokemon-records">20,699</div><div class="stat-lab">Pokémon image references</div></div>
+  <div class="stat"><div class="stat-num" data-catalog-stat="pokemon-sets">173</div><div class="stat-lab">Represented Pokémon sets</div></div>
   <div class="stat"><div class="stat-num">15</div><div class="stat-lab">Sell venues compared</div></div>
   <div class="stat"><div class="stat-num">Weekly</div><div class="stat-lab">Auto-index refresh</div></div>
 </div>
 
 <h2 id="prices">Live pricing</h2>
+<p class="fee-note">The counts above are generated from the local image-reference index. Represented sets may be partial; these counts do not measure recognition accuracy, all searchable cards, finishes or languages. <a href="/data/catalog-stats.json">Download catalog count evidence</a>.</p>
 <p>When you look up a card, we fetch its live market price from up to three sources in parallel and merge them into a single price ladder per printing (Normal, Holofoil, Reverse Holo, Unlimited, 1st Edition, etc.).</p>
 <ul>
   <li><strong>TCGplayer Market Price</strong> — pulled via the official TCGplayer / TCGcsv feed on every card load. This is the primary price for ungraded Pokémon, MTG, Yu-Gi-Oh!, Lorcana, and One Piece singles.</li>

@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {spawnSync} from 'node:child_process';
+const root=mkdtempSync(join(tmpdir(),'catalog-stats-'));
+let passed=0;
+const check=(condition,message)=>{assert.ok(condition,message);passed++};
+try{
+  mkdirSync(join(root,'tools'));mkdirSync(join(root,'data'));
+  copyFileSync(new URL('../tools/sync-catalog-stats.mjs',import.meta.url),join(root,'tools/sync-catalog-stats.mjs'));
+  const write=(path,value)=>writeFileSync(join(root,path),typeof value==='string'?value:JSON.stringify(value));
+  const rows=[{id:'one',si:'set1'},{id:'two',si:'set1'}];
+  write('card-index.json',rows);write('mtg-index.json',[{id:'magic',si:'m1'}]);
+  write('accuracy.html','<div class="stat-num" data-catalog-stat="pokemon-records">old</div><div class="stat-num" data-catalog-stat="pokemon-sets">old</div>');
+  const run=(...args)=>spawnSync(process.execPath,[join(root,'tools/sync-catalog-stats.mjs'),...args],{encoding:'utf8'});
+  check(run('--check').status!==0,'missing evidence fails check');
+  check(run().status===0,'generation succeeds');
+  check(run('--check').status===0,'fresh evidence passes');
+  let manifest=JSON.parse(readFileSync(join(root,'data/catalog-stats.json')));
+  check(manifest.indexes.pokemon.records===2&&manifest.indexes.pokemon.representedSets===1,'counts describe records and distinct set IDs');
+  check(/^[a-f0-9]{64}$/.test(manifest.indexes.pokemon.sha256),'evidence includes source hash');
+  const before=readFileSync(join(root,'data/catalog-stats.json'),'utf8');
+  check(run().status===0&&readFileSync(join(root,'data/catalog-stats.json'),'utf8')===before,'unchanged generation is deterministic');
+  write('card-index.json',[...rows,{id:'three',si:'set2'}]);
+  check(run('--check').status!==0,'index growth fails stale evidence check');
+  check(run().status===0&&readFileSync(join(root,'accuracy.html'),'utf8').includes('pokemon-records">3<'),'generation updates public count');
+  write('card-index.json',[...rows,rows[0]]);
+  check(run().status!==0,'duplicate printing IDs stop generation');
+  write('card-index.json',rows);write('accuracy.html','No markers');
+  check(run().status!==0,'missing markup marker fails instead of silently skipping');
+}finally{rmSync(root,{recursive:true,force:true})}
+console.log(`catalog-stats: ${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);

@@ -4139,7 +4139,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
-<script defer src="/js/core.6e9981d4.js"></script>
+<script defer src="/js/core.d921811b.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4212,7 +4212,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </style>
 <script defer src="/js/membership-shop.0c5ddcfc.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.dd6f7208.js"></script>
+<script defer src="/js/ui.34d2009e.js"></script>
 <script defer src="/js/collection-drafts.b143be43.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.24f4d4ca.js"></script>
@@ -4516,18 +4516,17 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div style="height:4px;background:#1a1a1a;border-radius:99px;overflow:hidden">
           <div id="bulkProgressBar" style="height:100%;background:linear-gradient(90deg,rgba(139,92,246,1),rgba(167,139,250,1));border-radius:99px;width:0%;transition:width .3s ease"></div>
         </div>
-        <!-- 2026-08-15: pack-cost recovery tracker — only shown when the user
-             entered a pack cost on the start screen. Updates after every scan. -->
+        <!-- Market total is independent of purchase cost; shared by every bulk mode. -->
         <div id="bulkPackTracker" style="display:none;margin-top:.65rem;padding:.55rem .75rem;background:linear-gradient(90deg,rgba(139,92,246,.14),rgba(139,92,246,.04));border:1px solid rgba(139,92,246,.35);border-radius:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
-            <span style="font-size:.68rem;font-weight:800;color:rgba(167,139,250,.9);letter-spacing:.05em;text-transform:uppercase">Pack Recovery</span>
+            <span style="font-size:.68rem;font-weight:800;color:rgba(167,139,250,.9);letter-spacing:.05em;text-transform:uppercase">Estimated market value</span>
             <span id="bulkPackTrackerPct" style="font-size:.72rem;font-weight:800;color:#a78bfa">0%</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.35rem">
             <span id="bulkPackTrackerAmt" style="font-family:var(--mono,ui-monospace);font-size:.92rem;font-weight:700;color:#fff">$0.00</span>
             <span id="bulkPackTrackerGoal" style="font-size:.7rem;color:rgba(255,255,255,.5)">of $0.00</span>
           </div>
-          <div style="height:5px;background:#0a0a0a;border-radius:99px;overflow:hidden">
+          <div id="bulkPackTrackerTrack" style="height:5px;background:#0a0a0a;border-radius:99px;overflow:hidden">
             <div id="bulkPackTrackerBar" style="height:100%;background:linear-gradient(90deg,#a78bfa,#4ade80);border-radius:99px;width:0%;transition:width .4s ease"></div>
           </div>
           <div id="bulkPackTrackerStatus" style="font-size:.66rem;color:rgba(255,255,255,.5);margin-top:.4rem;line-height:1.35">Scanning…</div>

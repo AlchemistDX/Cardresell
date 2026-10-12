@@ -70,6 +70,26 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'ebay-seller-consent.mjs':
+    'Required dormant eBay seller-consent gate: npm run ebay:consent:check. Isolated real Redis expiry, ownership/session/config binding, concurrency and ambiguous-response tests. No eBay request or authenticated route is exercised.',
+  'bulk-market-total.mjs':
+    'Required bulk-value gate: node tests/bulk-market-total.mjs. Executes the referenced UI tracker with no cost, zero/missing/invalid prices, multiple physical copies and changing cost state.',
+  'seller-workflow-auth.mjs':
+    'Required auth adapter gate: npm run workflow:check. Synthetic Firebase SDK token-subject and session-generation checks; not a server authorization test.',
+  'seller-workflow-review-browser.mjs':
+    'Required saved-review integration gate: npm run workflow:browser with CR_CHROMIUM. Real DOM, IndexedDB and shipped scanner mapping; account/revision/quota/reload/export and mobile layout. Dormant; no Collection or draft mutations.',
+  'seller-workflow-scan.mjs':
+    'Required workflow mapping gate: npm run workflow:check. Pure stable scan-copy mapping, identity/cost validation and retry contract; also run in hosted foundation CI.',
+  'seller-workflow-store-browser.mjs':
+    'Required workflow persistence gate: CR_CHROMIUM=<binary> npm run workflow:browser. Requires Playwright, Acorn and a real Chromium persistent profile; tests actual IndexedDB transactions, two tabs, restart, account isolation and shipped scan helpers. No production adapter activation claimed.',
+  'catalog-stats.mjs':
+    'Required catalog-evidence gate: node tests/catalog-stats.mjs. Runs the real generator against isolated indexes/markup and verifies stale evidence, duplicate IDs and missing markers fail.',
+  'bulk-save-failure.mjs':
+    'Required batch-save gate: node tests/bulk-save-failure.mjs. Executes the shipped saver with failed/successful storage; a failed write must not show success or mark a batch saved.',
+  'seller-workflow.mjs':
+    'Required dormant workflow foundation gate: node tests/seller-workflow.mjs. Pure journal transitions, copy identity, recovery snapshots, account isolation and integer-cent allocation; no production adapter integration claimed.',
+  'single-scan-preflight.mjs':
+    'Required single ID release gate: node tests/single-scan-preflight.mjs. Synthetic deferred preparation, cancellation/account changes and late responses; no paid provider calls.',
   'brand-ui-browser.mjs':
     'Required brand/UI release gate: CR_CHROMIUM=<binary> node tests/brand-ui-browser.mjs. Full local app, two themes, four viewports, isolated service fixtures.',
   'binder-scan-browser.mjs':
