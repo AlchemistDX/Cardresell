@@ -4215,8 +4215,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </style>
 <script defer src="/js/membership-shop.fb7fd2a9.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.f7e16c74.js"></script>
-<script defer src="/js/collection-drafts.b143be43.js"></script>
+<script defer src="/js/ui.e1dc44cb.js"></script>
+<script defer src="/js/selling-plan.e9536c59.js"></script>
+<script defer src="/js/collection-drafts.49ba8e73.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.d49de77b.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
@@ -4509,7 +4510,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
 
     <!-- Processing view -->
-    <div id="bulkProcessing" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div id="bulkProcessing" style="display:none;flex-direction:column;flex:1;overflow-y:auto">
       <!-- Progress bar -->
       <div style="padding:.75rem 1.25rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
@@ -4519,36 +4520,31 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div style="height:4px;background:#1a1a1a;border-radius:99px;overflow:hidden">
           <div id="bulkProgressBar" style="height:100%;background:linear-gradient(90deg,rgba(139,92,246,1),rgba(167,139,250,1));border-radius:99px;width:0%;transition:width .3s ease"></div>
         </div>
-        <!-- 2026-08-15: pack-cost recovery tracker — only shown when the user
-             entered a pack cost on the start screen. Updates after every scan. -->
-        <div id="bulkPackTracker" style="display:none;margin-top:.65rem;padding:.55rem .75rem;background:linear-gradient(90deg,rgba(139,92,246,.14),rgba(139,92,246,.04));border:1px solid rgba(139,92,246,.35);border-radius:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
-            <span style="font-size:.68rem;font-weight:800;color:rgba(167,139,250,.9);letter-spacing:.05em;text-transform:uppercase">Pack Recovery</span>
-            <span id="bulkPackTrackerPct" style="font-size:.72rem;font-weight:800;color:#a78bfa">0%</span>
+        <!-- Card value is independent of optional purchase cost. -->
+        <div id="bulkPackTracker" aria-live="polite" style="display:none;margin-top:.65rem;padding:.65rem .75rem;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.35);border-radius:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap">
+            <span id="bulkPackTrackerTitle" style="font-size:.75rem;font-weight:700;color:#c4b5fd">Total card value</span>
+            <strong id="bulkPackTrackerAmt" style="font-size:1.2rem;color:#fff">$0.00</strong>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.35rem">
-            <span id="bulkPackTrackerAmt" style="font-family:var(--mono,ui-monospace);font-size:.92rem;font-weight:700;color:#fff">$0.00</span>
-            <span id="bulkPackTrackerGoal" style="font-size:.7rem;color:rgba(255,255,255,.5)">of $0.00</span>
-          </div>
-          <div style="height:5px;background:#0a0a0a;border-radius:99px;overflow:hidden">
-            <div id="bulkPackTrackerBar" style="height:100%;background:linear-gradient(90deg,#a78bfa,#4ade80);border-radius:99px;width:0%;transition:width .4s ease"></div>
-          </div>
-          <div id="bulkPackTrackerStatus" style="font-size:.66rem;color:rgba(255,255,255,.5);margin-top:.4rem;line-height:1.35">Scanning…</div>
+          <div id="bulkPackTrackerGoal" style="font-size:.75rem;color:#ccc">Purchase cost $0.00</div>
+          <div id="bulkPackTrackerStatus" style="font-size:.72rem;color:#aaa;margin-top:.3rem;line-height:1.4">Scanning…</div>
+          <div id="bulkSelectedValue" style="font-size:.75rem;color:#ddd;margin-top:.3rem">0 selected · $0.00 total value</div>
         </div>
       </div>
       <!-- Draft selection bar. Hidden until there is at least one identified
            card, so an empty or still-scanning list shows no controls. The count
            is populated by _bulkDraftSyncSelectionUI in js/ui. -->
       <div id="bulkDraftSelectBar" style="display:none;align-items:center;gap:.6rem;padding:.5rem 1rem;border-bottom:1px solid #1a1a1a;background:#0d0d0d;flex-shrink:0">
-        <button id="bulkDraftSelectAllBox" role="checkbox" aria-checked="false" aria-label="Select all identified cards for drafting" onclick="bulkDraftSelectAll()" style="flex-shrink:0;width:22px;height:22px;padding:0;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.25);color:transparent;font-size:.7rem;font-weight:900;line-height:1;cursor:pointer">✓</button>
+        <button id="bulkDraftSelectAllBox" role="checkbox" aria-checked="false" aria-label="Select all identified cards" onclick="bulkDraftSelectAll()" style="flex-shrink:0;width:22px;height:22px;padding:0;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.25);color:transparent;font-size:.7rem;font-weight:900;line-height:1;cursor:pointer">✓</button>
         <button onclick="bulkDraftSelectAll()" style="background:none;border:none;padding:0;color:rgba(255,255,255,.75);font-size:.75rem;font-weight:700;cursor:pointer">Select all</button>
-        <div id="bulkDraftSelectCount" style="margin-left:auto;font-size:.72rem;color:rgba(255,255,255,.45)">Select cards to draft</div>
+        <div id="bulkDraftSelectCount" style="margin-left:auto;font-size:.72rem;color:rgba(255,255,255,.45)">Select cards to compare or draft</div>
       </div>
       <!-- Results list -->
-      <div id="bulkResultsList" style="flex:1;overflow-y:auto;padding:.75rem 1rem 1rem;display:flex;flex-direction:column;gap:.5rem"></div>
+      <div id="bulkResultsList" style="flex:1 0 160px;overflow-y:auto;padding:.75rem 1rem 1rem;display:flex;flex-direction:column;gap:.5rem"></div>
       <!-- Bottom action bar -->
       <div id="bulkBottomBar" style="display:none;padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0">
         <div id="bulkSummaryLine" style="font-size:.78rem;color:rgba(255,255,255,.45);text-align:center;margin-bottom:.65rem"></div>
+        <button id="bulkCompareSellingBtn" type="button" onclick="CardResellSellingPlan.openBulk()" style="width:100%;min-height:44px;margin-bottom:.65rem;padding:.65rem;background:#6d43bc;color:#fff;border:0;border-radius:10px;font-weight:700">Compare selling these cards</button>
         <div id="bulkDraftHeadroomNote" style="display:none;font-size:.7rem;color:rgba(251,191,36,.9);text-align:center;margin-bottom:.5rem;line-height:1.4"></div>
         <div style="display:flex;gap:.75rem">
           <button onclick="closeBulkScan()" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">Close</button>
