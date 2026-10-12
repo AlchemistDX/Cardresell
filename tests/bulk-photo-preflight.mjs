@@ -37,4 +37,29 @@ window._fbAuth.currentUser=owner;
 let resume;c.compressImage=()=>new Promise(r=>{resume=r});const preparing=run();
 await new Promise(r=>setImmediate(r));window._bulkQueue=[];c.compressImage=async()=> 'fixture';resume('fixture');
 check(await preparing==='STOP'&&calls===2,'cancel during compression cannot start provider request');
+// Included monthly/welcome credits are spendable too. The local precheck must
+// match the Settings total while leaving the server in charge of actual debits.
+const balanceNames=new Set(['bulkRapidDone','processBulkUploadFiles','startBulkQueue']);
+const ui=readFileSync(referencedHashedAssets().find(a=>a.base==='ui').path,'utf8');
+const balanceCode=parse(ui,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&balanceNames.has(n.id.name)).map(n=>ui.slice(n.start,n.end)).join('\n');
+const elements=new Map();let attempted=0,stop=false;
+const balanceWindow={_bulkQueue:[],_bulkRapidState:{active:true,capturing:false},_idScanCredits:0,_freeIdLeft:15};
+const b={window:balanceWindow,console,URL:{createObjectURL:()=> 'blob:test'},
+ document:{getElementById:id=>{if(id==='bulkAddAnotherBtn')return null;if(!elements.has(id))elements.set(id,{style:{},insertAdjacentHTML(){},querySelector(){return null}});return elements.get(id)}},
+ _partitionScanFiles:files=>({okFiles:files,rejected:[]}),_bulkNewScanUid:()=> 'test-id',
+ _bulkShowSection(){},showToast(){},_bulkClearDupBanner(){},_bulkUpdatePackTracker(){},_bulkUpdateRow(){},_bulkFinishQueue(){},
+ _bulkScanOne:async()=>{attempted++;if(stop)return 'STOP';balanceWindow._freeIdLeft--;return {success:false,error:'synthetic result'}}};
+vm.createContext(b);vm.runInContext(balanceCode,b);
+for(const [paid,included,total] of [[0,15,15],[3,4,7],[2,0,2],[0,0,0]]){
+ balanceWindow._idScanCredits=paid;balanceWindow._freeIdLeft=included;
+ b.processBulkUploadFiles({files:[file],value:'test'});
+ check(elements.get('bulkCreditConfirmCredit').textContent===`Uses 1 credit · You have ${total} available`,'upload quote includes all spendable ID credits');
+ b.bulkRapidDone();
+ check(elements.get('bulkCreditConfirmCredit').textContent===`Uses 1 credit · You have ${total} available`,'rapid quote includes all spendable ID credits');
+}
+await b.startBulkQueue();check(attempted===0,'zero total credits cannot start the queue');
+balanceWindow._freeIdLeft=15;await b.startBulkQueue();
+check(attempted===1,'included-only balance can start the queue');
+check(elements.get('bulkProgressCredits').textContent==='14 credits remaining','progress includes the remaining included balance');
+stop=true;await b.startBulkQueue();check(attempted===2&&balanceWindow._bulkResults.length===0,'server STOP remains authoritative with a positive local balance');
 console.log(`Bulk photo preflight: ${checks} checks passed; no provider calls. -- SUITE COMPLETE, exit=0`);
