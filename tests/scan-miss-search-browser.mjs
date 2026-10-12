@@ -20,7 +20,7 @@ const server = createServer((q, s) => { let p = decodeURIComponent(new URL(q.url
   if (!existsSync(p)) { s.statusCode = 404; return s.end(); } s.setHeader('content-type', types[extname(p)] || 'application/octet-stream'); s.end(readFileSync(p)); });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || process.env.CHROMIUM_EXECUTABLE || undefined, args: ['--no-sandbox'] });
 try {
   for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
     const page = await browser.newPage({ viewport });

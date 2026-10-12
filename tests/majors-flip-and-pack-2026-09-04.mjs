@@ -14,6 +14,7 @@ import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('majors-flip-and-pack-2026-09-04');
 
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { readAppSource } from './_appsource.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -316,24 +317,32 @@ ok('CSV export carries the cost columns',
 // Pack tracker must count every copy and must refresh after edits.
 {
   const src = grabFn('_bulkUpdatePackTracker');
-  ok('pack tracker multiplies market price by qty', /p \* qty/.test(src));
-  ok('pack tracker reads qty off the result row', /r\.qty && r\.qty > 1/.test(src));
-  ok('pack tracker no longer sums bare market prices', !/return s \+ \(p > 0 \? p : 0\);/.test(src));
-
-  // Executable: three copies of a $10 card must count as $30 recovered.
-  const recovered = (rows) => rows.reduce((s, r) => {
-    const p = (r && r.success && typeof r.marketPrice === 'number') ? r.marketPrice : 0;
-    const qty = (r && r.qty && r.qty > 1) ? r.qty : 1;
-    return s + (p > 0 ? p * qty : 0);
-  }, 0);
-  near('a x3 row of $10 cards counts as $30 recovered',
+  // Exercise the shipped function, including its integer-cent path. A local
+  // reimplementation or spelling-specific regex can pass while the app breaks.
+  const elements = Object.fromEntries(['','Amt','Goal','Pct','Bar','Track','Status']
+    .map(suffix => ['bulkPackTracker'+suffix, {style:{},textContent:''}]));
+  const context = {window:{},document:{getElementById:id=>elements[id]}};
+  vm.createContext(context); vm.runInContext(src, context);
+  const recovered = rows => {
+    context.window._bulkResults = rows;
+    context.window._bulkStartPackCost = 10;
+    context._bulkUpdatePackTracker();
+    return Number(elements.bulkPackTrackerAmt.textContent.replace('$',''));
+  };
+  near('a x3 row of $10 cards counts as $30 market value',
     recovered([{ success: true, marketPrice: 10, qty: 3 }]), 30);
   near('qty-1 rows are unaffected',
     recovered([{ success: true, marketPrice: 10, qty: 1 }]), 10);
-  near('failed rows contribute nothing',
-    recovered([{ success: false, marketPrice: 10, qty: 3 }]), 0);
+  near('failed rows contribute nothing beside a priced row',
+    recovered([{success:true,marketPrice:2}, {success:false,marketPrice:10,qty:3}]), 2);
   near('missing qty defaults to a single copy',
     recovered([{ success: true, marketPrice: 10 }]), 10);
+  near('fractional dollar prices retain exact per-copy cents',
+    recovered([{success:true,marketPrice:0.1,qty:3},{success:true,marketPrice:0.2,qty:2}]), 0.7);
+  context.window._bulkStartPackCost = '';
+  context._bulkUpdatePackTracker();
+  eq('no-cost market total remains visible', elements.bulkPackTrackerAmt.textContent, '$0.70');
+  eq('no-cost market total does not claim realized profit', elements.bulkPackTrackerGoal.style.display, 'none');
 
   ok('_bulkUpdateRow refreshes the tracker so post-scan edits are not stale',
     /_bulkUpdatePackTracker\(/.test(stripComments(grabFn('_bulkUpdateRow'))));

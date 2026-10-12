@@ -23,7 +23,7 @@ const sandbox = { console:{log(){},warn(){},error(...x){throw new Error(x.join('
   Image:class{naturalWidth=900;naturalHeight=1200;set src(v){this.onload?.()}},
   detectCardBounds:()=>null,computePHash:()=> 'same',computeDHash:()=> 'same',
   hamming:(a,b)=>a===b?0:30,enrichCard:c=>c,compressImage:async()=> 'fixture',
-  _validateScanFile:()=>null,_dialogOpened(){},maybeAutoSwitchGameFromScan(){},
+  _validateScanFile:()=>null,_clearScanAutoAdvance(){},CardResellPhotoQC:{check:async()=>({ok:true,details:{}})},_dialogOpened(){},maybeAutoSwitchGameFromScan(){},
   showScanGradeCTA(){},_persistLastIdentified(){},_scheduleScanAutoAdvance(){},
   esc:String,setTimeout(){},fetch:async()=>{throw new Error('Unexpected external fetch')}
 };
@@ -51,7 +51,7 @@ check('Magic aliases accepted only with same printing details',()=>assert.equal(
 sandbox.loadCardIndex=async()=>[{...card,p:'same',d:'same'},{...card,id:'far',p:'different',d:'different'}];
 const perfect=await sandbox.scanFile({});
 check('zero-distance artwork with huge gap never accepts printing',()=>{assert.equal(perfect.hit,false);assert.equal(perfect.artworkCandidate,true);assert.equal(perfect.bestGuess.id,card.id);assert.equal(perfect.bestDist,0)});
-sandbox.googleUser={email:'fixture@example.invalid'};sandbox._googleIdToken='fixture';sandbox._isPro=true;
+sandbox.googleUser={uid:'fixture-owner',email:'fixture@example.invalid'};sandbox._googleIdToken='fixture';sandbox._isPro=true;
 let calls=0;let response={...info,grounded_id:'server-id',set_name:'Absent set'};
 sandbox.cardResellScanRequest=async(url,opts)=>{assert.equal(url,'/api/scan');assert.equal(JSON.parse(opts.body).imageBase64,'fixture');calls++;return{ok:true,status:200,json:async()=>response}};
 sandbox.CardResellFastPath={scanFile:async()=>({hit:true,card}),loadCardIndex:async()=>[card],deriveLargeUrl:u=>u};

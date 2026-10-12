@@ -1,12 +1,11 @@
 // Condition-applicability interaction test.
 // Proves: the Condition pill group is on screen exactly when it can move a
 // price, and that the sports path and the graded path no longer fight over it.
-// Playwright lives outside the repo (this project intentionally has no
-// package.json), so the path is overridable for other machines.
+// Playwright and Chromium paths are overridable for managed test runtimes.
 import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('condition-applicability');
 
-const PW = process.env.PLAYWRIGHT_PATH || '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || process.env.PLAYWRIGHT_MODULE || process.env.PLAYWRIGHT_PATH || 'playwright';
 const _pw = (await import(PW)).default;
 const { chromium } = _pw;
 
@@ -16,11 +15,13 @@ const check = (label, cond) => {
   else { fail++; console.log('  FAIL ' + label); }
 };
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || process.env.CHROMIUM_EXECUTABLE || undefined, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const errs = [];
 page.on('pageerror', e => errs.push(String(e)));
 const BASE = process.env.SITE_BASE || 'http://127.0.0.1:8097';
+await page.addInitScript(() => localStorage.setItem('cs_landing_seen', '1'));
+await page.route('**/*', route => new URL(route.request().url()).origin === new URL(BASE).origin ? route.continue() : route.fulfill({status:204,body:''}));
 await page.goto(BASE + '/index.html', { waitUntil: 'load' });
 await page.waitForTimeout(1200);
 

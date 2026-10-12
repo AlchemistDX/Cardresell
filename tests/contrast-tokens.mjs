@@ -72,7 +72,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || process.env.PLAYWRIGHT_MODULE || 'playwright';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const T = harness('contrast-tokens');
 
@@ -197,7 +197,7 @@ function sweep(tokenHexes) {
 
 const { server, port } = await startHost();
 const _pw = (await import(PW)).default;
-const browser = await _pw.chromium.launch();
+const browser = await _pw.chromium.launch({ executablePath: process.env.CR_CHROMIUM || process.env.CHROMIUM_EXECUTABLE || undefined, args: ['--no-sandbox'] });
 
 try {
   for (const theme of ['light', 'dark']) {
