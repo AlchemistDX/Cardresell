@@ -11,7 +11,7 @@ const extracted=['core','ui'].map(name=>{const src=asset(name);return parse(src,
 const fixture=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+`<script>
 const SCAN_MAX_BYTES=15*1024*1024,SCAN_MIME_TYPES=new Set(['image/jpeg','image/png','image/webp']);
 window._idScanCredits=20;window._bulkQueue=[];window._bulkResults=[];function _dialogClosed(){}function showToast(m){window.toast=m}
-${extracted}\n${asset('binder')}</script>`;
+${extracted}\n${readFileSync(new URL('js/photo-qc.js',root),'utf8')}\n${asset('binder')}</script>`;
 const server=createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end(fixture)});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM||undefined,args:['--no-sandbox']});
@@ -55,6 +55,34 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  check('margin adjustment changes bounds',(await queue()).map(q=>[q.w,q.h]),[[432,520]]);
  await page.evaluate(()=>cancelBulkConfirm());await start();
  if(process.env.CR_SHOT_DIR) await page.screenshot({path:process.env.CR_SHOT_DIR+'/binder-'+viewport.width+'.png'});
+ // A shared 1179px-wide photo has 393px cells but >=409px padded crops.
+ // Validate the actual JPEG dimensions, not the unpadded grid spacing.
+ await page.selectOption('#binderLayout','3,3');
+ const borderline=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1179;c.height=1478;const x=c.getContext('2d');x.fillStyle='#888';x.fillRect(0,0,c.width,c.height);return c.toDataURL('image/png').split(',')[1]});
+ await page.setInputFiles('#binderInput',{name:'shared-page.png',mimeType:'image/png',buffer:Buffer.from(borderline,'base64')});await ready();
+ check('padded 1179px page reaches nine-pocket review',await page.locator('.binder-pocket').count(),9);
+ await page.locator('#binderSelectAll').click();await page.locator('#binderContinue').click();
+ const borderlineCrops=await queue();
+ check('all nine real output crops meet the unchanged 400px gate',borderlineCrops.length===9&&borderlineCrops.every(q=>Math.min(q.w,q.h)>=400),true);
+ check('boundary crop is not upscaled',borderlineCrops[0].w,409);
+ check('nine physical cards keep nine distinct scan identities',new Set(borderlineCrops.map(q=>q.uid)).size,9);
+ await page.evaluate(()=>cancelBulkConfirm());await start();await page.selectOption('#binderLayout','3,3');
+ const under=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1152;c.height=1478;return c.toDataURL('image/png').split(',')[1]});
+ await page.setInputFiles('#binderInput',{name:'undersized-edge.png',mimeType:'image/png',buffer:Buffer.from(under,'base64')});await ready();
+ check('399px corner outputs still reject the whole page',await page.locator('.binder-pocket').count(),0);
+ check('undersized padded outputs cannot reach billing',await page.locator('#binderContinue').isDisabled(),true);
+ // Optional private local reproduction; never commit the owner's photo.
+ if(process.env.CR_BINDER_REGRESSION_PHOTO){
+  await page.setInputFiles('#binderInput',process.env.CR_BINDER_REGRESSION_PHOTO);await ready();
+  console.log('Owner grid:',await page.evaluate(()=>({status:document.getElementById('binderStatus').textContent,margins:['Left','Right','Top','Bottom'].map(e=>document.getElementById('binder'+e).value)})));
+  check('owner photo reaches nine-pocket review',await page.locator('.binder-pocket').count(),9);
+  await page.locator('#binderSelectAll').click();await page.locator('#binderContinue').click();
+  check('owner photo quotes exactly nine credits',await page.locator('#bulkCreditConfirmCredit').textContent(),'Uses 9 credits · You have 20 available');
+  const qc=await page.evaluate(async()=>Promise.all(_bulkQueue.map(q=>CardResellPhotoQC.check(q.file,{skipDupe:true}))));
+  check('all nine owner crops pass unchanged local resolution and blur checks',qc.every(q=>q.ok),true);
+  console.log('Owner crop QC:',JSON.stringify(qc.map(q=>({width:q.details.width,height:q.details.height,blurScore:q.details.blurScore,reasons:q.reasons}))));
+  await page.evaluate(()=>cancelBulkConfirm());
+ }
  const small=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=100;return c.toDataURL('image/png').split(',')[1]});
  await page.setInputFiles('#binderInput',{name:'tiny.png',mimeType:'image/png',buffer:Buffer.from(small,'base64')});await ready();
  check('undersized pockets cannot be submitted',await page.locator('#binderContinue').isDisabled(),true);
