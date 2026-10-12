@@ -310,3 +310,91 @@ new scheduled entry. Enabling the setting is complete; verification of the
 first scheduled backup remains outstanding. This does not establish full
 application recovery or change the scope of the earlier isolated restore.
 No ads or provider permission messages were sent.
+
+## Cost reconciliation continuation — October 12 afternoon
+
+Reopened production through Vercel's Upstash integration after the browser's
+SSO session expired. Daily Backup remains ON with Last 1 day retention. The
+loaded table still shows only the two manual snapshots; no first scheduled
+backup completion is verified yet.
+
+### Ximilar operation export and prepaid packs
+
+Downloaded the account's operation JSON from Statistics, with both TCG and
+sports selected. Its explicit coverage is October 1 at 04:00 UTC through
+October 12 at 17:00 UTC (midnight October 1 through 1 p.m. October 12 Eastern),
+in hourly buckets. Do not describe it as the entire October 12 day.
+
+| Operation | Provider requests | Provider credits |
+| --- | ---: | ---: |
+| Identify a TCG card | 381 | 3,810 |
+| Identify a sports card | 7 | 70 |
+| Total | 388 | 3,880 |
+
+The series totals match the exported totals. These are account-level requests,
+not delivered customer scans; the export has no production/test or refund join.
+The Credit Packs page says there are no active packs and explicitly describes
+one-time, prepaid, non-expiring purchases used after the monthly allowance.
+Its displayed offer is $11 for 10,000 credits. No pack was bought. The inspected
+page does not establish the account's exact behavior when all credits run out,
+nor a contractual guarantee against automatic charges; ask support to confirm.
+
+Official operation pricing confirms 10 credits for TCG ID, 10 for sports ID,
+and 100 for Grade a card. These are provider operations, not the customer-facing
+physical grading-company submission fees. Public Business 100K pricing is $69;
+the owner's two paid invoices are $64 each. The planning tool now uses the
+observed account price and the observed 10K-pack offer, with source/date labels.
+Stripe fee and OpenAI unit-cost inputs remain explicitly historical/unreconciled
+assumptions. No customer price or allowance was changed.
+
+Sources: https://www.ximilar.com/pricing/#operations and authenticated Statistics,
+Credit Packs and previously verified Invoices pages. The FAQ describes monthly
+expiry, usage notices and purchased-pack fallback:
+https://www.ximilar.com/faq/technology-api/
+
+### Current-release provider observations
+
+A project-wide October 1–12 query timed out. Scoped the follow-up to production
+deployment dpl_H1gdQphFCj5yknFzRihx8BVRpVR3 and October 12, with an 18:53:02 UTC
+cutoff. The first result hit the 100-row limit; retrieved the earlier interval
+ending at its oldest timestamp. The second result had 28 records. The existing
+usage-report tool accepted 128 attempts, with zero duplicates or ignored rows.
+Observed event times span 17:27:23.309–18:10:10.664 UTC.
+
+| Provider operation / mode | Attempts | Wrapper successes | Wrapper failures |
+| --- | ---: | ---: | ---: |
+| Ximilar TCG / identify | 126 | 122 | 4 low-confidence results |
+| Ximilar TCG / grade | 1 | 1 | 0 |
+| OpenAI chat completion / grade | 1 | 1 | 0 |
+
+OpenAI reported 8,292 prompt tokens, zero cached prompt tokens and 485 completion
+tokens, including 53 reasoning tokens: 8,777 total for this one attempt. Dollar
+costs remain null. Ximilar units are not reported by the runtime observations.
+These current-release events occur AFTER the Ximilar export's 17:00 UTC cutoff;
+they cannot be reconciled by comparing their totals. This is not a complete
+monthly sample, recognition accuracy, delivered-scan count or margin proof.
+No synthetic paid scan was generated to obtain this evidence.
+
+### Vercel billing coverage mismatch
+
+The October 1–12 billing response exceeded the connector's size limit. Two
+one-day reads succeeded, but their charge periods differ from requested UTC
+windows: October 11–12 returned October 10 07:00–October 11 07:00 UTC; October
+10–11 returned October 9 07:00–October 10 07:00 UTC. Each summary covers 748
+records but only 100 sampled records and 50 of 68 service groups are exposed.
+These are team-level summaries, not proven CardResell production allocations.
+Do not turn the samples into project totals or combine them with provider
+invoices to claim a reconciled cost. Full export and billing-period alignment
+remain necessary; no missing amount is treated as zero.
+
+### Commercial permission source refreshed
+
+PriceCharting's API documentation fetched successfully on this pass, superseding
+the earlier refetch limitation. Its Usage & Attribution section explicitly
+requires a commercial license and written permission for apps used by others:
+https://www.pricecharting.com/api-documentation
+TCG Price Lookup's contact page explicitly handles commercial-use questions:
+https://tcgpricelookup.com/contact
+The existing permission drafts remain unsent. A Ximilar exhaustion/failed-call
+billing draft is now included in the launch packet. Written answers remain a
+launch dependency; this evidence does not assume permission to contact anyone.

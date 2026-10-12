@@ -1,5 +1,12 @@
 # Subscription benefits and margin review — 2026-10-09 UTC
 
+> October 12 update: the figures below preserve the October 9 scenario, not the
+> current account evidence. The planning tool now uses the observed $64 Business
+> 100K invoice and $11/10K credit-pack offer. Its evidence labels distinguish
+> verified provider inputs from historical OpenAI and unreconciled payment-fee
+> assumptions. See advertising-gates-20261012.md; regenerate the tool for updated
+> scenarios. Actual profitability and customer prices remain unchanged/unproven.
+
 ## Shipped scope
 
 Subscription modal and /pricing explain who each plan serves and why to move up:

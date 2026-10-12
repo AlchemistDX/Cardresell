@@ -284,13 +284,43 @@ Will — CardResell
 Send only after the owner approves outreach and the correct account support
 recipient/channel is verified. No account secrets are needed in either draft.
 
+### Ximilar account support — draft, not sent
+
+Verified support destination: tech@ximilar.com, linked by the account Credit
+Packs page and the official Collectibles Recognition documentation.
+
+Subject: Confirm CardResell credit exhaustion and failed-request billing
+
+Hello,
+
+I operate CardResell.org and use Ximilar for card identification and optional
+card grading. Our account shows Business 100K, with no active credit packs.
+We are checking operating costs before a small advertising launch.
+
+Please confirm what happens when the monthly allowance and any prepaid packs
+are exhausted: are further calls blocked, can the balance go negative, and can
+any top-up or overage charge occur automatically? Please confirm whether any
+automatic-purchase or overage arrangement is enabled for this account.
+
+Please also clarify credit charges for no-card/no-match results, rejected or
+malformed images, timeouts, failed asynchronous grading jobs, and repeated
+submissions. Is the 100-credit card-grading price per card assessment including
+front and back, or per image? What usage export lets us reconcile operation
+credits and timestamps, including failures, to our application attempts?
+
+We are requesting clarification only, with no plan change, credit purchase
+or activation of automatic charges.
+
+Thank you,
+Will — CardResell
+
 ## Concrete next decisions
 
 1. Verify the first completed scheduled backup on production upstash-kv-bistre-arrow.
    Daily Backup is enabled with Last 1 day retention at the owner-approved
    $0.25 per GB-month rate. No Prod Pack upgrade was purchased. Retain the
    isolated-restore evidence separately; a saved setting is not a completed run.
-2. Approve sending the two permission requests through verified support channels,
+2. Approve sending the two permission requests and the Ximilar billing question through verified support channels,
    or supply existing written commercial agreements if already held.
 3. Supply or securely expose the provider billing/usage exports listed above.
    Reconcile these before requesting ad-budget sign-off.
@@ -337,3 +367,17 @@ operation was cancelled pending specific rate approval. The owner subsequently
 approved that rate; Daily Backup is now saved ON with Last 1 day retention.
 The first scheduled backup has not appeared in the table yet. One-day retention
 does not require Prod Pack, but it is not free storage.
+
+### Cost evidence update
+
+The Ximilar operation export separates 381 TCG requests / 3,810 credits and
+seven sports requests / 70 credits through October 12 at 13:00 Eastern.
+Current-release logs yielded 128 provider attempts after that cutoff; the two
+datasets are not an aligned delivered-unit reconciliation. Vercel billing
+samples also require period and production allocation checks. See the detailed
+coverage in advertising-gates-20261012.md.
+
+The local planning tool now uses the verified $64 account subscription and
+the offered $11/10K prepaid pack instead of unverified public/pack assumptions.
+It retains explicit unknowns; its output is a sensitivity scenario, not margin
+proof or a recommendation to change customer pricing. No pack was purchased.

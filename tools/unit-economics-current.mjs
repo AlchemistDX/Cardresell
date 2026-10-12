@@ -2,9 +2,22 @@
 // Scenario planning, not realized profit. Canonical prices; no provider calls.
 import { LAUNCH_PLANS, LAUNCH_PACKS } from '../api/_launchMembershipConfig.js';
 const fee = { processing: .029, fixed: .30, subscriptionBilling: .007 };
-const x = { monthlyFixed: 69, monthlyCredits: 100000, extraPackCost: 99, extraPackCredits: 100000, identify: 10, deepGrader: 100 };
+// Account invoice and offered 10K pack observed October 12, 2026. No pack bought.
+// Public plan pricing differs; use the account evidence for this planning run.
+const x = { monthlyFixed: 64, monthlyCredits: 100000, extraPackCost: 11, extraPackCredits: 10000, identify: 10, deepGrader: 100 };
 // Small historical live sample; not an average or an upper bound. See Oct 7 handoff.
 const ai = { quick: .017, deep: .03 };
+const evidence = {
+  reviewedOn: '2026-10-12',
+  ximilarMonthly: 'Business 100K; August and September paid invoices $64 each',
+  ximilarPack: 'Account offer: $11 for 10K prepaid credits, one-time purchase; no active packs',
+  ximilarOperations: 'https://www.ximilar.com/pricing/#operations; ID 10 credits, card grade 100 credits',
+  paymentFees: 'Unreconciled planning assumptions, not actual Stripe balance-transaction fees',
+  openai: 'Historical small-sample assumptions, not current measured delivered-grade costs',
+  unknowns: ['provider charges on failed/retried attempts', 'Ximilar exhaustion behavior',
+    'other provider licenses and infrastructure', 'outstanding credit obligations',
+    'actual delivered operations and free-user allocation'],
+};
 const centsAfterDiscount = (base, discount) => Math.floor((base * (100 - discount) + 50) / 100);
 const net = (cents, subscription = false) => cents / 100 * (1 - fee.processing - (subscription ? fee.subscriptionBilling : 0)) - fee.fixed;
 const round = n => Math.round(n * 10000) / 10000;
@@ -24,4 +37,4 @@ const packs = [25,20,15].map(discount => {
   const twoIdCost = p.credits * 2 * x.identify * x.extraPackCost / x.extraPackCredits;
   return { businessDiscountProposal: discount, price: cents/100, afterProcessing: round(net(cents)), contributionWithTwoIdCalls: round(net(cents)-twoIdCost), contributionWithTwoIdCallsAnd30PctRefundedAttempts: round(net(cents)-twoIdCost/.7) };
 });
-console.log(JSON.stringify({ label:'scenario_estimates_not_invoices_or_profit', assumptions:{ fee,x,ai, fullAllowanceUse:true, deepGraderOnlyOnDeep:true, fixedCostsNotAllocated:true, notes:'Shared $69 quota overhead counted once at company level. Extra-pack scenario prices incremental credits, not the quota twice. Larger Ximilar packs/plans may be cheaper. Excludes other infrastructure, support, tax, disputes, payment refunds, and AI fallback/retry costs. Credit refunds still consume provider resources. 30% sensitivity is hypothetical, not observed. Non-expiring credits can be redeemed in later months.' }, plans,packs },null,2));
+console.log(JSON.stringify({ label:'scenario_estimates_not_invoices_or_profit', evidence, assumptions:{ fee,x,ai, fullAllowanceUse:true, deepGraderOnlyOnDeep:true, fixedCostsNotAllocated:true, notes:'Shared $64 quota overhead counted once at company level; zero within-quota variable cost does not mean scans are free. Quota is shared by every user and operation. Extra-pack scenario assumes a separately approved purchase at the observed 10K pack rate; no automatic overage purchase or charge is established. Larger pack rates remain unverified. Excludes other infrastructure, support, tax, disputes, payment refunds, and AI fallback/retry costs. Credit refunds still consume provider resources. 30% sensitivity is hypothetical, not observed. Non-expiring credits can be redeemed in later months.' }, plans,packs },null,2));
