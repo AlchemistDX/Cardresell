@@ -281,6 +281,21 @@ the new connected workflow is enabled for customers, and its end-to-end release
 gate remains incomplete. This is an engineering estimate, not a test coverage
 or production-completion percentage.
 
+## October 12 continuation: seller consent and launch evidence
+
+Added a dormant server-side eBay consent-intent primitive with account/browser
+session/configuration binding, ten-minute Redis expiry and atomic one-use claim.
+Its 51-check isolated Redis suite passed, as did existing workflow checks,
+registry and build. No HTTP auth route, token exchange, token vault or publisher
+is enabled. This is a prerequisite, not a completed connected-account feature.
+
+See `connected-selling-and-launch-20261012.md` for verified production evidence,
+concrete seller-connection/publication gates, current platform-access limits,
+competitive measurement and a staged advertising decision. A blank anonymous
+pilot scorecard is provided in `seller-pilot-scorecard.csv`. The core Collection
+receipt/retirement and draft integration work above remains the next workflow
+milestone. The Phase 1 estimate remains approximately 25% prepared.
+
 ## Primary references checked October 11, 2026
 
 - Shiny published collection/scanning features: https://www.getshiny.io/

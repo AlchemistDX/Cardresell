@@ -70,6 +70,8 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'ebay-seller-consent.mjs':
+    'Required dormant eBay seller-consent gate: npm run ebay:consent:check. Isolated real Redis expiry, ownership/session/config binding, concurrency and ambiguous-response tests. No eBay request or authenticated route is exercised.',
   'bulk-market-total.mjs':
     'Required bulk-value gate: node tests/bulk-market-total.mjs. Executes the referenced UI tracker with no cost, zero/missing/invalid prices, multiple physical copies and changing cost state.',
   'seller-workflow-auth.mjs':
