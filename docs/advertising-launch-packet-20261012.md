@@ -251,6 +251,45 @@ not all operating expenses. PriceCharting, hosting/storage, OpenAI usage and
 credit-redemption costs cannot be treated as zero or charged against this
 small purchase sample without aligned periods and allocation.
 
+### Free-user exposure and current pack review
+
+The offline cost planner now reads the actual welcome grant, Free allowance,
+credit consumption rules and every plan's current pack quote from the canonical
+configuration. It covers all 35 plan/pack combinations in two scenarios. It
+does not change customer prices or make provider requests.
+
+A new eligible Free account can receive 10 ID + 1 Grade welcome credits and
+5 ID + 1 Grade for one calendar month: **15 ID + 2 Grade combined**. Credits do
+not expire; usage may happen later, and another calendar month adds another
+monthly grant. Treat unused balances as future service obligations.
+
+For 100 accounts fully redeeming that combined allowance:
+
+| Scenario | Modeled resource cost | What it means |
+| --- | ---: | --- |
+| Remaining shared Ximilar monthly quota, one ID call per operation | $3.40 OpenAI variable cost | Excludes the real $64 monthly Ximilar commitment and all other costs |
+| Extra credits valued at the observed $11/10K offer, two ID calls per operation | $49.20 | $46.20 of Ximilar credits + $3.00 assumed OpenAI cost; the most expensive modeled grade mix is one Deep Grade per account |
+| Same extra-credit scenario, hypothetical 30% of equally costly attempts refunded | $70.29 | Sensitivity only, not an observed failure rate or spending ceiling |
+
+The $49.20 is allocated resource cost, not an invoice: buying from zero prepaid
+and included balance would require five whole 10K packs ($55) plus the modeled
+$3 OpenAI usage, or **$58 cash**, with 8K credits left over. No packs were bought.
+AI rates here remain historical sample assumptions. Fixed subscriptions,
+hosting, free users from other cohorts, retries beyond the sensitivity, existing
+balances and support remain outside these figures. This is not a forecast of
+100 signups or an enforceable signup cap.
+
+All 35 current plan/pack combinations retain positive modeled contribution
+before fixed/other costs in the two scenarios, including the 30% sensitivity.
+That is not a profit finding. For example, the Business 1,000-ID pack leaves
+only $4.67 in the extra-credit / 30% sensitivity before those omitted costs.
+Do not use the pack's $37.49 sale price as an allowable acquisition cost.
+
+Validation: 70 distinct scenario/plan/pack rows, six free-grant rows, canonical
+Business pricing, whole-grade redemption and the 100-account arithmetic checked.
+Real delivered-unit costs still require aligned invoices and delivery evidence;
+these scenarios do not fill those missing observations with assumed actuals.
+
 ## Provider permissions and warnings — established context
 
 The owner confirmed on October 12 at 15:12 Eastern that TCG Price Lookup,

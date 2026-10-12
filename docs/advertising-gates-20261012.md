@@ -34,6 +34,13 @@ The historical entries below that call permissions unresolved are superseded.
 Remaining preparation: delivered-unit cost reconciliation, first completed
 scheduled backup evidence, and a separately approved advertising budget.
 
+Continuation check: production Backups still shows Daily Backup enabled with
+Last 1 day retention and only the two completed manual snapshots. The first
+scheduled snapshot is still pending observation; no setting was changed.
+The active launch packet now includes canonical free/welcome-credit exposure
+and all current pack prices across two offline cost scenarios. These scenarios
+are useful for budgeting, but do not replace missing provider invoice allocation.
+
 ## Payment fulfillment: verified for current checkout history
 
 Read-only Stripe inspection paginated the complete-session query: 31 sessions,
