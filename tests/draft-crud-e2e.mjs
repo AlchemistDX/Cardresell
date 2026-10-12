@@ -1775,4 +1775,36 @@ console.log('\nsell-eligibility distinguishes unknown from empty');
         `${R[liveRow].generation}/${R[goneRow].generation}/${R[unknownRow].generation}`);
 }
 
+// Live Collection -> Draft acceptance exposed this only when the title builder
+// dropped a lower-priority segment to fit the venue's 80-character limit.
+console.log('\nvenue title shortening survives the HTTP create and replay path');
+reset();
+{
+  const card = { game: 'pokemon', card_name: 'QA live test 20261012 — Minun 194/182',
+    set_name: 'SV04: Paradox Rift', card_number: '194/182', rarity: 'Illustration Rare', language: 'en' };
+  const body = { card, instanceId: 'inst_title_drop_live', slot: 'ebay:fixed-price', price: 44.80, priceSource: 'seller' };
+  const normalized = EP.normalizeCreateInput(structuredClone(body));
+  check('fixture actually requires dropping title segments', normalized.titleDropped?.length > 0);
+  check('the derived title still meets the venue limit', normalized.title.length > 0 && normalized.title.length <= 80);
+  const request = async value => {
+    const res = fakeRes();
+    await EP.default(fakeReq({ method: 'POST', body: structuredClone(value),
+      headers: { authorization: 'Bearer ' + 'x'.repeat(40), 'idempotency-key': K('title-drop-http') } }), res);
+    return res;
+  };
+  const first = await request(body);
+  check('a shortened title creates through the actual HTTP handler', first.statusCode === 201 && first.body.saved === true,
+    `${first.statusCode} ${first.body?.error || first.body?.code || ''}`);
+  const replay = await request(body);
+  check('the same request replays the same draft', replay.statusCode === 200 && replay.body.replayed === true
+    && replay.body.draftId === first.body.draftId);
+  const changed = await request({ ...body, price: 45 });
+  check('a changed price still conflicts on the same key', changed.statusCode === 409 && changed.body.retryable === false);
+  check('only one draft was stored', (sets.get(`drafts:${SUB}`) || new Set()).size === 1);
+  let refused = false;
+  try { IDEM.selectMutation('draft-create', { ...normalized, unexpectedDiagnostic: true }); }
+  catch (e) { refused = e.message.startsWith(IDEM.UNDECLARED_FIELD); }
+  check('unrelated undeclared fields remain refused', refused);
+}
+
 done();
