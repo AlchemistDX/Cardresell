@@ -1,5 +1,31 @@
 # Live acceptance — 2026-10-12 UTC
 
+## Owner update and account-access findings — October 12, 12:03 a.m. EDT
+
+The owner reports that completed-payment and real-phone testing (steps 1 and 2
+of the launch checklist) are already complete. Record these as owner-confirmed;
+do not keep requesting repetition. The agent's own payment observation remains
+checkout-only and must not be described as independent fulfillment verification.
+
+Two supplied screenshots show different account states. Correlated production
+logs on the deployed release explain the distinction:
+
+- At 04:00:16 UTC, `membership-account` logged
+  `pilot_provider_email_not_admitted` and `membership_access_restricted`.
+  The screenshot shows a verified account with billing unavailable. The current
+  runtime refuses verified identities outside the admitted pilot audience when
+  public launch is not enabled; this is not an email-verification failure.
+- At 04:01:49 UTC, the same route logged `email_not_verified_password` and
+  `authentication_required`. The screenshot's verification prompt is consistent
+  with that state. Completing verification does not itself guarantee admission
+  while the pilot audience restriction remains.
+
+Revised launch priority: resolve intended customer admission and verify the
+normal fresh-customer path before advertising. Successful purchases by admitted
+pilot accounts do not establish public billing availability. No access list,
+public-launch flag, account verification, balances or credentials were changed
+during this diagnosis.
+
 ## Release and live retest completed
 
 The owner approved deployment after reviewing PR #34. That PR merged as
