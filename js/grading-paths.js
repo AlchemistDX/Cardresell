@@ -139,6 +139,21 @@
     }
     function drawResults() {
       const computed = rows.map(row => priceRow(row, prices, grader, state, context.net));
+      const priced = computed.filter(r => !r.error);
+      const services = [...new Map(priced.map(r => [r.tier.id, r.tier])).values()];
+      panel.querySelector('[data-service-summary]').innerHTML = '<strong>Grading fee &amp; estimated wait</strong>' +
+        (services.length ? services.map(t => {
+          const fees = priced.filter(r => r.tier.id === t.id).map(r => r.fee);
+          const low = Math.min(...fees), high = Math.max(...fees);
+          return '<div class="gp-service-line"><span>' + esc(t.name) + ' · ' + money(low) + (high !== low ? '–' + money(high) : '') + ' / card</span><b>' + waitLabel(t) + ' working days · ' + monthLabel(t) + '</b></div>';
+        }).join('') + '<small>' + (services.length > 1 ? 'Automatic service varies by grade value. Each outcome below uses its eligible tier. ' : '') + 'Grading time only; transit and selling time are additional.</small>' :
+          '<p>' + (!fresh() ? 'Published fee snapshot expired. Updated fee and wait estimates are unavailable.' : 'No eligible estimate. Check available grade values, service and submission details below.') + '</p>');
+      const missing = ['shipping', 'saleShip'].filter(field => state[field] === '');
+      const invalid = ['shipping', 'saleShip'].some(field => state[field] !== '' && number(state[field]) === null);
+      panel.querySelector('[data-cost-coverage]').textContent = invalid ? 'Check shipping amounts below.' : missing.length ?
+        'Still excluded: ' + missing.map(field => field === 'shipping' ? 'submission shipping + insurance' : 'sale shipping').join(' and ') + '.' :
+        'Both shipping amounts entered. Optional costs set to 0 stay excluded.';
+      panel.querySelector('[data-edit-costs]').textContent = missing.length ? 'Add shipping costs' : 'Edit submission costs';
       const comparable = computed.filter(r => !r.error && Number.isFinite(r.difference));
       const best = comparable.sort((a,b) => b.difference-a.difference)[0];
       bestKey = best && best.difference > 0 ? best.key : null;
@@ -167,15 +182,16 @@
       panel.innerHTML = '<h3>Grade-by-grade value</h3><div class="gp-graders" role="group" aria-label="Grading company">' +
         ['PSA','CGC','BGS','SGC'].map(g => '<button type="button" data-grader="' + g + '" aria-pressed="' + (grader === g) + '">' + g + '</button>').join('') + '</div>' +
         '<p>Prices and fees follow your selected company. AI condition estimate: PSA ' + esc(context.psaEst ?? 'unavailable') + '; other grading standards have not been estimated.</p>' +
-        '<div class="gp-comparison"><div class="gp-baseline" data-baseline></div><div class="gp-baseline" data-decision></div></div>' +
         '<label>Grading service<select data-field="tier"><option value="auto"' + (state.tier === 'auto' ? ' selected' : '') + '>Automatic · lowest eligible published fee</option>' +
-        tiers.filter(t => t.grader === grader).map(t => '<option value="' + t.id + '"' + (state.tier === t.id ? ' selected' : '') + '>' + t.name + ' · ' + (t.stepSize || t.valueRate ? 'from ' : '') + '$' + t.fee.toFixed(2) + ' · ' + waitLabel(t) + ' working days</option>').join('') + '</select></label>' +
-        '<p><a href="' + sources[grader] + '" target="_blank" rel="noopener">Official fees</a> checked ' + checkedAt + '. Standard-size, unsigned cards submitted in the US; before tax, shipping, discounts and optional extras. ' + (grader === 'PSA' ? 'Value services are paused. ' : grader === 'BGS' ? 'Express with subgrades is currently available; Base and Standard are paused. No value-based surcharge is published for this service. ' : '') +
+        tiers.filter(t => t.grader === grader).map(t => '<option value="' + t.id + '"' + (state.tier === t.id ? ' selected' : '') + '>' + t.name + ' · ' + (t.stepSize || t.valueRate ? 'from ' : '') + '$' + t.fee.toFixed(2) + ' · ' + waitLabel(t) + ' working days</option>').join('') + '</select></label><div class="gp-service-summary" data-service-summary></div>' +
+        '<p><a href="' + sources[grader] + '" target="_blank" rel="noopener">Published fees &amp; waits</a> · snapshot checked ' + checkedAt + '. Standard-size, unsigned cards submitted in the US; before tax, shipping, discounts and optional extras. ' + (grader === 'PSA' ? 'Value services are paused. ' : grader === 'BGS' ? 'Express with subgrades is currently available; Base and Standard are paused. No value-based surcharge is published for this service. ' : '') +
           'Fees are calculated from each guide value and your submission size; the grader confirms final value and charges. ' + (!fresh() ? 'Fee snapshot expired; updated fees are unavailable.' : '') + '</p>' +
+        '<div class="gp-cost-coverage"><strong>What your estimate includes</strong><p>eBay selling fees and the eligible grading fee are calculated automatically.</p><p data-cost-coverage></p><button type="button" data-edit-costs>Add shipping costs</button></div>' +
         '<details data-settings' + (state.open ? ' open' : '') + '><summary>Your submission details · assumed 1 card unless changed</summary><p>Only details we cannot know. Blank shipping stays excluded; enter 0 if none. Sale shipping below applies to both raw and graded scenarios.</p><div class="gp-grid">' +
         input('Cards in your submission', 'count', state.count) + input('Submission shipping + insurance per card ($)', 'shipping', state.shipping) + input('Sale shipping per card ($)', 'saleShip', state.saleShip) +
         input('Other grading costs per card · tax, supplies, time ($)', 'other', state.other) +
         input('Annual capital cost (%) · 0 = off', 'rate', state.rate) + input('Extra calendar days · transit + selling', 'extra', state.extra) + '</div></details>' +
+        '<div class="gp-comparison"><div class="gp-baseline" data-baseline></div><div class="gp-baseline" data-decision></div></div>' +
         '<p class="gp-price-note">PriceCharting guide values, not individual sold listings or guaranteed sale prices. Sale dates and sample sizes are unavailable in this guide. Mixed-grader rows remain the same when no company-specific value is available. Tap a grade for its price breakdown.</p><div data-rows></div>' +
         '<details data-lower' + (state.lower ? ' open' : '') + '><summary>Grades 1–6</summary><div data-lower-rows></div></details>' +
         '<button type="button" data-export>Export ' + grader + ' comparison (.csv)</button><p data-export-status role="status"></p>' +
@@ -183,6 +199,13 @@
       drawResults();
     }
     panel.addEventListener('click', e => {
+      if (e.target.closest('[data-edit-costs]')) {
+        state.open = true;
+        panel.querySelector('[data-settings]').open = true;
+        const field = ['shipping', 'saleShip'].find(f => state[f] === '' || number(state[f]) === null) || 'shipping';
+        panel.querySelector('[data-field="' + field + '"]').focus();
+        return;
+      }
       if (e.target.closest('[data-export]')) {
         const header = ['Grader','Grade','Price basis','Guide USD','Service','Working days','Approx grading months','Grading fee USD','Selling fees USD','Submission shipping USD','Sale shipping USD','Other grading costs USD','Capital cost USD','Proceeds USD','Difference vs raw USD','Cost coverage / issue'];
         const records = rows.map(row => {

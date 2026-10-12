@@ -37,3 +37,11 @@
 .gp-grade .gp-wait{color:var(--text);font-weight:600}
 .grading-paths [data-export]{min-height:44px;padding:.6rem .8rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer}
 @media(min-width:760px){.gp-comparison{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.gp-service-summary,.gp-cost-coverage{padding:.75rem;margin:.7rem 0;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);overflow-wrap:anywhere}
+.gp-service-summary{border-left:3px solid var(--gold)}
+.gp-service-line{display:flex;flex-direction:column;gap:.2rem;margin:.55rem 0}
+.gp-service-line b{font-size:.9rem;color:var(--text)}
+.gp-service-summary small{display:block;color:var(--text-muted);font-size:.75rem}
+.gp-cost-coverage [data-cost-coverage]{color:var(--text)}
+.grading-paths [data-edit-costs]{min-height:44px;padding:.6rem .8rem;background:var(--surface);color:var(--text);border:1px solid var(--gold);border-radius:8px;font-weight:700;cursor:pointer}
