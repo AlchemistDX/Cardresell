@@ -159,7 +159,7 @@ Existing provider log summaries explicitly report unknown dollars as unknown.
 | Gate | Status | Next concrete evidence |
 | --- | --- | --- |
 | Phone and core workflow | Owner accepted; PR #44 live | Repeat only when a relevant regression appears |
-| Current-system payments | Four payments reconciled | Continue monitoring new payments and reversals |
+| Current-system payments | Four payments and their charge balance fees reconciled | Continue monitoring new payments and reversals; separate account Billing fee allocation |
 | Recovery | Isolated restore passes scoped checks; one-day daily backup enabled at approved $0.25/GB-month | First completed scheduled backup; timed application recovery exercise |
 | Provider permissions | Owner confirms prior replies granting permission for existing use | Complete; no duplicate outreach |
 | Unit economics | Incomplete | Actual billed scan/grade/retry costs and bounded overage exposure |
@@ -422,3 +422,43 @@ have been removed from the active launch packet. Ximilar low-credit warnings
 are confirmed by the owner and must remain in operating notes. No new outreach
 was sent. This correction does not alter customer prices, provider settings or
 assert unprovided details about hard-stop behavior or exact contract scope.
+
+## Actual Stripe fee reconciliation — October 12, after 15:22 Eastern
+
+Read-only inspection of the CardResell live Stripe account listed 31 completed
+Checkout Sessions with has_more false. Four carry membership_version launch-v2,
+matching the earlier fulfilled-purchase set; no new completed current-system
+purchase was found. Three reference PaymentIntents directly. The subscription
+invoice's paid invoice-payment list contains one entry, has_more false, which
+supplies its PaymentIntent.
+
+Expanded each PaymentIntent's latest charge and balance transaction. Confirmed
+the balance entry's source matches that charge, amount/currency matches the
+payment, gross minus fee equals net, fee-detail amounts sum to the fee, and no
+balance entry is counted twice. All payments succeeded, charges are paid, no
+refund or dispute is present, and all four balance entries are available.
+The four sessions each have zero tax. These checks are point-in-time only.
+
+| Purchase | Gross USD | Actual processing fee | Net to Stripe balance |
+| --- | ---: | ---: | ---: |
+| Starter initial subscription | $4.99 | $0.44 | $4.55 |
+| 25 ID pack, Free price | $2.99 | $0.39 | $2.60 |
+| 10 Grade pack, Business price | $4.49 | $0.43 | $4.06 |
+| 25 ID pack, Business price | $2.24 | $0.36 | $1.88 |
+| Total | $14.71 | $1.62 | $13.09 |
+
+All charge fee details say Stripe processing fees. A separate stripe_fee query
+returned four account fee entries with has_more false: an October 5 Billing
+usage fee of $0.03, created October 6 UTC, and older July/August/September fees.
+Do not deduct the older fees from the four-purchase sample. The October fee has
+no direct invoice reference in the returned data; record it as a separate
+account expense rather than claim an exact per-purchase join. A balance marked
+available does not establish a completed bank payout.
+
+The planner's 2.9% + $0.30 processing assumption rounds to the observed fees
+for these four amounts. This small sample does not prove the rate for every
+payment method, currency or future transaction. Its future subscription Billing
+rate remains a planning input, distinct from the observed $0.03 account fee.
+These owner/testing purchases remain excluded from acquired-customer metrics.
+Full provider-cost allocation and future credit obligations are not reconciled
+by this payment check. No charges, refunds, payouts or account settings changed.

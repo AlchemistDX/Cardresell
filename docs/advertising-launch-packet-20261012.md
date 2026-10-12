@@ -215,8 +215,8 @@ paste keys, customer identifiers or full request bodies into this document.
 | Ximilar | Plan invoice, purchased/included units, per-operation debits, overage rules and hard limits | Separate single-card, binder and grading use; count detected cards when billed per card |
 | TCG Price Lookup | Actual account plan, invoice, quota reset, overage/hard-stop terms and sharing with other apps | Prior observation: Pro $49.99/month, 10,000/day; do not replace with conflicting public plan names |
 | Vercel / Upstash | Project/resource usage bill, storage, compute and backup charges | Separate preview/testing and production; earlier $0.21 installation usage estimate was not a final production invoice |
-| PriceCharting | Account invoice and written commercial agreement | Keep fixed licensing expense separate from marginal lookups |
-| Stripe | Actual balance transaction fees, refunds and disputes for included purchases | Use actual charged fees, not a generic percentage guess |
+| PriceCharting | Account invoice; commercial permission already owner-confirmed | Keep fixed licensing expense separate from marginal lookups; no duplicate permission request |
+| Stripe | Four charge balance transactions reconciled: $14.71 gross, $1.62 processing fees, $13.09 net; separate $0.03 October Billing usage fee | The $0.03 is an account-level fee with no direct invoice reference; neither amount is provider-adjusted profit |
 
 For each row record period, currency, gross charge, credits/discounts, net billed
 amount, production share, evidence location and unresolved difference. Blank
@@ -227,6 +227,29 @@ Fully loaded cost per delivered ID/grade should include the operation's
 failed/retried attempts, allocated fixed costs and free-user activity. If
 operations cannot be allocated reliably, report a range with the unallocated
 pool separately. Do not create a precise CAC target until this is reconciled.
+
+### Payment fees now reconciled
+
+| Current-system purchase | Gross | Processing fee | Net to Stripe balance |
+| --- | ---: | ---: | ---: |
+| Starter initial subscription | $4.99 | $0.44 | $4.55 |
+| 25 ID pack, Free price | $2.99 | $0.39 | $2.60 |
+| 10 Grade pack, Business price | $4.49 | $0.43 | $4.06 |
+| 25 ID pack, Business price | $2.24 | $0.36 | $1.88 |
+| Total | $14.71 | $1.62 | $13.09 |
+
+Read-only Stripe verification on October 12: all four charge balance entries
+are available; matching payments succeeded; no refund or dispute was present.
+Checkout tax amounts are zero. Available balance is not proof of a bank payout.
+The separate $0.03 Billing fee is outside the processing-fee table; its direct
+purchase allocation remains unconfirmed. These owner/testing purchases are
+not advertising conversions, and provider expenses are still outstanding.
+
+Known recurring provider commitments observed so far are Ximilar $64/month and
+TCG Price Lookup $49.99/month: $113.99/month combined. That is a partial subtotal,
+not all operating expenses. PriceCharting, hosting/storage, OpenAI usage and
+credit-redemption costs cannot be treated as zero or charged against this
+small purchase sample without aligned periods and allocation.
 
 ## Provider permissions and warnings — established context
 
