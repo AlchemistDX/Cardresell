@@ -225,7 +225,7 @@ export default async function handler(req, res) {
   const keywords = grade ? `${q} ${grade}` : q;
   // Separate grade filtering from keywords. Confidence is recalculated using
   // this request's comparison price, so raw comps remain reusable across prices.
-  const cacheKey = `v4|${JSON.stringify([q.toLowerCase(), grade.toLowerCase(), limit])}`;
+  const cacheKey = `v5|${JSON.stringify([q.toLowerCase(), grade.toLowerCase(), limit])}`;
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
@@ -279,6 +279,17 @@ export default async function handler(req, res) {
     // eBay wraps each result in <li class="s-item ...">, so we split on that boundary.
     const blocks = html.split(/<li[^>]*class="[^"]*s-item[^"]*"[^>]*>/i).slice(1); // drop pre-list junk
 
+    // A successful HTTP response is not necessarily a usable search page.
+    // Only an explicit zero-results heading establishes an empty search;
+    // blank, changed or unreadable markup must not be cached as "no sales".
+    const countHeading = html.match(/<h[12]\b[^>]*class=["'][^"']*\bsrp-controls__count-heading\b[^"']*["'][^>]*>([\s\S]*?)<\/h[12]>/i)?.[1];
+    const headingText = (countHeading || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/^0 results(?:\s|$)/i.test(headingText)) {
+      const data = emptyResp({ available: true });
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      return res.status(200).json(data);
+    }
+
     const rawItems = [];
     for (const block of blocks) {
       const priceM = block.match(/class="s-item__price"[^>]*>[^<$]*\$?([\d,]+\.?\d*)/);
@@ -299,6 +310,10 @@ export default async function handler(req, res) {
       const url  = urlM ? urlM[1] : ebaySearchUrl;
 
       rawItems.push({ title, price, url });
+    }
+
+    if (!rawItems.length) {
+      throw new Error('upstream_response_unreadable');
     }
 
     // Grade filtering: word-boundary match
@@ -375,7 +390,8 @@ export default async function handler(req, res) {
     const seconds = [401, 403].includes(e.status) ? 900 : e.status === 429 ? 300 : 30;
     cooldownUntil = Date.now() + seconds * 1000;
     await setCache(kvUrl, kvToken, COOLDOWN_KEY, { until: cooldownUntil }, seconds);
-    console.warn('ebay-sold unavailable:', e.status || (e.name === 'AbortError' ? 'timeout' : 'network'));
+    console.warn('ebay-sold unavailable:', e.status || (e.name === 'AbortError' ? 'timeout'
+      : e.message === 'upstream_response_unreadable' ? 'unreadable_response' : 'network'));
     return res.status(200).json(unavailable());
   }
 }
