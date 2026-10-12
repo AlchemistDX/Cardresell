@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readCoreBundle } from './_assetRefs.mjs';
 
 const original = { fetch, setTimeout, clearTimeout, warn: console.warn, now: Date.now,
   kvUrl: process.env.KV_REST_API_URL, kvToken: process.env.KV_REST_API_TOKEN };
@@ -36,6 +38,10 @@ try {
     assert.equal(u.hostname, 'www.ebay.com'); calls++;
     assert.equal(init.headers['User-Agent'], 'CardResell/1.0 (+https://cardresell.org)');
     if (behavior === 'challenge') return { ok: true, text: async () => '<h1>Pardon our interruption</h1>' };
+    if (behavior === 'empty_body') return { ok: true, text: async () => '' };
+    if (behavior === 'changed_markup') return { ok: true, text: async () => '<main>Search layout changed</main>' };
+    if (behavior === 'unreadable_items') return { ok: true, text: async () => '<li class="s-item"><span>Unrecognized price and title fields</span></li>' };
+    if (behavior === 'no_results') return { ok: true, text: async () => '<h1 class="srp-controls__count-heading"><span>0</span> results for Fixture</h1>' };
     if (behavior === 'grades') return { ok: true, text: async () => ['PSA-9', 'PSA  9', 'PSA 9.5', 'Raw card']
       .map(t => `<li class="s-item"><span class="s-item__title">Fixture ${t}</span><span class="s-item__price">$10.00</span></li>`).join('') };
     if (behavior === 'body_stall') return { ok: true, text: () => stalled(init.signal) };
@@ -64,6 +70,21 @@ try {
   assert.equal((await invoke(handler, { q: 'grade filtering', grade: 'PSA 9' })).body.count, 2, 'PSA 9 excludes PSA 9.5; accepts spaces/hyphen');
   assert.equal((await invoke(handler, { q: 'grade filtering' })).body.count, 1, 'raw comps exclude hyphenated slabs');
   cases++;
+  for (const failure of ['empty_body', 'changed_markup', 'unreadable_items']) {
+    clock += 1000000; kv.clear(); handler = await fresh(); behavior = failure;
+    const result = (await invoke(handler)).body;
+    assert.equal(result.available, false, `${failure} is unavailable, not evidence of no sales`);
+    assert.equal(result.median, null);
+    assert.match(result.confidenceReasons[0], /unavailable/);
+    const before = calls;
+    await invoke(await fresh(), { q: 'another card' });
+    assert.equal(calls, before, 'unreadable responses also use the shared cooldown'); cases++;
+  }
+  clock += 1000000; kv.clear(); handler = await fresh(); behavior = 'no_results';
+  const empty = (await invoke(handler)).body;
+  assert.equal(empty.count, 0);
+  assert.notEqual(empty.available, false, 'explicit zero-results page is a successful empty lookup');
+  assert.equal((await invoke(handler)).body.cached, true); cases++;
   for (const [failure, seconds] of [['403', 900], ['challenge', 900], ['429', 300], ['network', 30], ['body_stall', 30]]) {
     clock += 1000000; kv.clear(); handler = await fresh(); behavior = failure;
     const before = calls;
@@ -90,4 +111,29 @@ try {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
 }
+// Check the shipped renderer: a guide price must not hide sold-data status
+// or the manual research link. The unrelated formatting helpers are fixtures.
+const { source } = readCoreBundle();
+const start = source.indexOf('function renderPriceStatus(');
+const end = source.indexOf('// ── Grade opportunity trigger', start);
+assert.ok(start >= 0 && end > start);
+const ctx = vm.createContext({
+  _clampHigh: x => x, _ageStr: () => 'just now', _crRangeHtml: () => '',
+  _PC_NO_ASOF_TIP: 'No price date', _CR_NO_RANGE_NOTE: 'No range', _tcgpCondUrl: x => x,
+});
+vm.runInContext(source.slice(start, end), ctx);
+for (const pc of [null, { source: 'pricecharting', median: 42 }]) {
+  for (const ebay of [null, { available: false, count: 0, median: null }]) {
+    const rendered = ctx.renderPriceStatus({ pc, ebay, fallbackEbayUrl: 'https://www.ebay.com/sch/i.html?_nkw=fixture' });
+    assert.match(rendered, /eBay sold prices unavailable/);
+    assert.match(rendered, /Check sold listings on eBay/);
+    assert.doesNotMatch(rendered, /0 sold|median.*\$0/);
+    if (pc) assert.match(rendered, /Guide value/);
+    cases++;
+  }
+}
+const sparse = ctx.renderPriceStatus({ ebay: { count: 0, median: null }, fallbackEbayUrl: 'https://www.ebay.com/' });
+assert.match(sparse, /Not enough matched eBay sales/); cases++;
+const available = ctx.renderPriceStatus({ ebay: { count: 3, median: 10 }, fallbackEbayUrl: 'https://www.ebay.com/' });
+assert.match(available, /3 sold/); assert.doesNotMatch(available, /prices unavailable/); cases++;
 console.log(`ebay-sold-resilience: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);
