@@ -17,7 +17,7 @@ function browser({query='',ref='',local=memory(),session=memory(),beacon=true}={
 async function event(b){b.window.trackEvent('membership_checkout_attempt',{plan:'starter',campaign:'spoofed'});return JSON.parse(await b.sent.at(-1).blob.text());}
 let passed=0;async function test(n,fn){await fn();passed++;console.log('PASS '+n);}
 for(const [query,channel] of [['','direct'],['?cr_campaign=shop_qr','shop_qr'],['?utm_source=youtube&utm_campaign=launch','youtube'],['?utm_source=discord','discord'],['?utm_source=google&utm_medium=cpc','google_ads'],['?utm_source=google&utm_medium=organic','organic_search'],['?utm_source=instagram&utm_medium=paid_social','meta_ads'],['?utm_source=facebook&utm_medium=social','referral'],['?utm_source=__proto__','other_campaign'],['?cr_campaign=private@example.com','other_campaign']])
- await test('bounded attribution '+query,async()=>{assert.equal((await event(browser({query}))).props.campaign,channel);});
+ await test('bounded attribution '+query,async()=>{const b=browser({query});assert.equal((await event(b)).props.campaign,channel);assert.equal(b.window.getAcquisitionCampaign(),channel);});
 await test('sign-in/payment returns retain channel without extending its lifetime',async()=>{
  const local=memory();let b=browser({query:'?cr_campaign=discord',local});const original=local.getItem('cr_acquisition_v1');
  for(const ref of ['https://accounts.google.com/','https://checkout.stripe.com/pay/private','https://www.cardresell.org/signin']){

@@ -57,6 +57,7 @@ function fixture(options = {}) {
   f.stripe = {
     async createCheckout(order, opts) {
       f.calls++; f.created.push(structuredClone(order));
+      f.creationCampaign = opts.campaign;
       t.check('External creation sees durable order first', (await f.store.inspectIntent(order.intentId)).state === 'intent_persisted');
       const stored = (await Promise.all((await operationKeys())
         .map(async k => JSON.parse(await redis(['GET', k])).data)))
@@ -345,5 +346,33 @@ await t.section('purchase pause preserves existing-operation recovery only', asy
     && f.calls === 1 && f.recoveries === 1);
   await noWrite('paused new request cannot reuse authorization to create again',
     () => f.call(request('b'), { allowNewPurchases: false }), 'purchasing_paused');
+});
+await t.section('Campaign is immutable context, never order authority', async () => {
+  await reset(); const f = fixture();
+  await f.call(request('campaign', { campaign: 'qa' }));
+  t.check('Server sends snapshotted campaign to transport', f.creationCampaign === 'qa');
+  const before = await snapshot();
+  await f.call(request('campaign', { campaign: 'google_ads' }));
+  t.check('Retry cannot reattribute or create another session', f.calls === 1
+    && f.creationCampaign === 'qa' && await snapshot() === before);
+  t.check('Campaign is absent from authoritative financial order', !Object.hasOwn(f.created[0], 'campaign')
+    && f.created[0].amountCents === 269);
+  await f.call(request('arbitrary', { campaign: 'private@example.com?token=secret' }));
+  t.check('Arbitrary campaign text is bounded before persistence', f.creationCampaign === 'other_campaign'
+    && !(await snapshot()).includes('private@example.com'));
+  await f.call(request('missing'));
+  t.check('Old clients are unknown, not incorrectly direct', f.creationCampaign === 'unknown');
+  // A pre-release claimed operation has no campaign property. Re-seal exactly
+  // as the old writer did and ensure recovery remains valid without mutation.
+  const keys = await operationKeys();
+  const key = (await Promise.all(keys.map(async k => [k, JSON.parse(await redis(['GET', k]))])))
+    .find(([, v]) => v.data.requestId === request('missing').requestId)[0];
+  const old = JSON.parse(await redis(['GET', key])); delete old.data.campaign;
+  const canonical = v => JSON.stringify(v, (_, x) => x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.fromEntries(Object.keys(x).sort().map(k => [k, x[k]])) : x);
+  old.hash = sha(canonical(old.data)); await redis(['SET', key, canonical(old)]);
+  const legacy = await snapshot(), calls = f.calls;
+  await f.call(request('missing', { campaign: 'qa' }));
+  t.check('Pre-release record retries unchanged without a new POST', f.calls === calls && await snapshot() === legacy);
 });
 t.done();

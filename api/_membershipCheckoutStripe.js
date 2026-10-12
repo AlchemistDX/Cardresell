@@ -4,6 +4,7 @@
 // Synthetic offline fixtures do not prove real Dahlia/Sandbox write shapes.
 import { MEMBERSHIP_STRIPE_API_VERSION } from './_membershipStripe.js';
 import { MEMBERSHIP_VERSION, LAUNCH_PLANS, LAUNCH_PACKS, quoteLaunchPack } from './_launchMembershipConfig.js';
+import { acquisitionCampaign } from './_acquisition.js';
 
 export const MEMBERSHIP_CHECKOUT_RETURN_ORIGIN = 'https://www.cardresell.org';
 export const MEMBERSHIP_CHECKOUT_WRITE_LIMITS = Object.freeze({
@@ -64,7 +65,7 @@ export function createMembershipCheckoutStripeTransport({
   const limit = MEMBERSHIP_CHECKOUT_WRITE_LIMITS;
 
   async function operation(order, options, task) {
-    insist(object(options) && Object.keys(options).every(k => k === 'signal')
+    insist(object(options) && Object.keys(options).every(k => k === 'signal' || k === 'campaign')
       && (options.signal === undefined || options.signal instanceof AbortSignal), 'write_options');
     const abort = new AbortController();
     let rejectStop, stopped = false;
@@ -195,6 +196,8 @@ export function createMembershipCheckoutStripeTransport({
           success_url: `${returnOrigin}/?membership_return=1&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${returnOrigin}/?membership_cancel=1`,
           'metadata[membership_version]': MEMBERSHIP_VERSION, 'metadata[intent_id]': saved.intentId,
+          'metadata[acquisition_campaign]': acquisitionCampaign(options.campaign),
+          'metadata[acquisition_model]': 'client_last_non_direct_30d_v1',
         });
         // Stripe rejects the presence of both fields, even when promotion codes
         // are false. Omission keeps customer-entered codes disabled.

@@ -270,15 +270,31 @@ await t.section('Exact frozen controller recovers lost POST response through rea
     resolveContext: async owner => ({ owner, customerId: 'cus_synthetic', plan: 'casual', newSubscriptionAllowed: false }),
     stripe: { ...read, ...f.client() }, accountId: ACCOUNT, livemode: false,
   });
-  const input = { token: 'synthetic-auth', request: { requestId: hash('controller'), kind: 'pack', selection: 'id_25' } };
+  const input = { token: 'synthetic-auth', request: { requestId: hash('controller'), kind: 'pack', selection: 'id_25', campaign: 'qa' } };
   try { await controller.checkout(input); t.check('Lost POST outcome surfaces unavailable', false); }
   catch (error) { t.check('Lost POST outcome surfaces unavailable', error.code === 'checkout_unavailable'); }
   const before = await snapshot(); f.losePost = false;
+  input.request.campaign = 'google_ads';
   const reply = await controller.checkout(input);
   t.check('Read-only recovery delivers same hosted session', reply.status === 'checkout_ready' && reply.sessionId === f.sessions[0].id);
   t.check('Controller never sends a second creation POST', f.postCount() === 1);
+  t.check('Lost-response recovery retains the original campaign', f.created[0].get('metadata[acquisition_campaign]') === 'qa');
   t.check('Recovery binds but never grants credits', !(await redis(['KEYS', '*'])).some(k => k.startsWith('scans:')));
   const bound = await snapshot(); await controller.checkout(input);
   t.check('Bound replay leaves durable bytes unchanged', bound === await snapshot() && before !== bound);
+});
+await t.section('Attribution reaches Stripe as bounded metadata only', async () => {
+  await reset(); const order = await store.createIntent(intent('attribution'));
+  for (const [value, expected] of [['qa', 'qa'], ['google_ads', 'google_ads'],
+    ['private@example.com?token=secret', 'other_campaign'], [undefined, 'unknown']]) {
+    const f = fixture(); await f.client().createCheckout(order, { campaign: value });
+    const p = f.created[0];
+    t.check(`Campaign ${expected} is recorded`, p.get('metadata[acquisition_campaign]') === expected);
+    t.check('Attribution model explicitly identifies client origin',
+      p.get('metadata[acquisition_model]') === 'client_last_non_direct_30d_v1');
+    t.check('No arbitrary text or changed order reference in Stripe request',
+      !p.toString().includes('private') && p.get('client_reference_id') === order.intentId
+      && p.get('line_items[0][price]') === order.priceId);
+  }
 });
 t.done();
