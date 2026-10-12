@@ -4548,12 +4548,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div id="bulkSummaryLine" class="sr-only" aria-live="polite"></div>
         <div style="display:flex;gap:.5rem">
           <button id="bulkAddAllBtn" onclick="bulkAddAllToCollection()" style="flex:1;min-height:44px;padding:.6rem;background:#8b5cf6;border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.82rem;cursor:pointer">Add all to Collection</button>
-          <button id="bulkCompareSellingBtn" type="button" onclick="CardResellSellingPlan.openBulk()" style="flex:1;min-height:44px;padding:.6rem;background:#211932;color:#ddd0ff;border:1px solid #7656aa;border-radius:10px;font-weight:700;font-size:.82rem">Compare selling options</button>
+          <button id="bulkCreateDraftsBtn" onclick="bulkCreateSelectedDrafts()" disabled style="flex:1;min-height:44px;padding:.6rem;background:#211932;border:1px solid #7656aa;color:#ddd0ff;border-radius:10px;font-weight:700;font-size:.82rem;opacity:.45">Create Listing Drafts</button>
         </div>
+        <div id="bulkDraftHeadroomNote" style="display:none;font-size:.72rem;color:#fbbf24;margin-top:.5rem;line-height:1.4" aria-live="polite"></div>
         <details id="bulkMoreActions" style="margin-top:.4rem">
           <summary style="min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ccc;font-size:.8rem">More actions ▾</summary>
-          <div id="bulkDraftHeadroomNote" style="display:none;font-size:.72rem;color:#fbbf24;margin-bottom:.5rem;line-height:1.4" aria-live="polite"></div>
-          <button id="bulkCreateDraftsBtn" onclick="bulkCreateSelectedDrafts()" disabled style="width:100%;min-height:44px;padding:.6rem;background:#211932;border:1px solid #7656aa;color:#ddd0ff;border-radius:10px;font-weight:700;opacity:.45">Create Listing Drafts</button>
+          <button id="bulkCompareSellingBtn" type="button" onclick="CardResellSellingPlan.openBulk()" style="width:100%;min-height:44px;padding:.6rem;background:#211932;color:#ddd0ff;border:1px solid #7656aa;border-radius:10px;font-weight:700;font-size:.82rem">Compare selling options</button>
           <button id="bulkScanMoreBtn" onclick="bulkScanMore()" style="width:100%;min-height:44px;margin-top:.4rem;padding:.55rem;background:transparent;border:1px solid #7656aa;color:#ddd0ff;border-radius:10px;font-weight:700;cursor:pointer">Scan more cards</button>
         </details>
       </div>
@@ -4563,12 +4563,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div id="bulkSummaryLine" class="sr-only" aria-live="polite"></div>
         <div style="display:flex;gap:.5rem">
           <button id="bulkAddAllBtn" onclick="bulkAddAllToCollection()" style="flex:1;min-height:44px;padding:.6rem;background:#8b5cf6;border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.82rem;cursor:pointer">Add all to Collection</button>
-          <button id="bulkCompareSellingBtn" type="button" onclick="CardResellSellingPlan.openBulk()" style="flex:1;min-height:44px;padding:.6rem;background:#211932;color:#ddd0ff;border:1px solid #7656aa;border-radius:10px;font-weight:700;font-size:.82rem">Compare selling options</button>
+          <button id="bulkCreateDraftsBtn" onclick="bulkCreateSelectedDrafts()" disabled style="flex:1;min-height:44px;padding:.6rem;background:#211932;border:1px solid #7656aa;color:#ddd0ff;border-radius:10px;font-weight:700;font-size:.82rem;opacity:.45">Create Listing Drafts</button>
         </div>
+        <div id="bulkDraftHeadroomNote" style="display:none;font-size:.72rem;color:#fbbf24;margin-top:.5rem;line-height:1.4" aria-live="polite"></div>
         <details id="bulkMoreActions" style="margin-top:.4rem">
           <summary style="min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#ccc;font-size:.8rem">More actions ▾</summary>
-          <div id="bulkDraftHeadroomNote" style="display:none;font-size:.72rem;color:#fbbf24;margin-bottom:.5rem;line-height:1.4" aria-live="polite"></div>
-          <button id="bulkCreateDraftsBtn" onclick="bulkCreateSelectedDrafts()" disabled style="width:100%;min-height:44px;padding:.6rem;background:#211932;border:1px solid #7656aa;color:#ddd0ff;border-radius:10px;font-weight:700;opacity:.45">Create Listing Drafts</button>
+          <button id="bulkCompareSellingBtn" type="button" onclick="CardResellSellingPlan.openBulk()" style="width:100%;min-height:44px;padding:.6rem;background:#211932;color:#ddd0ff;border:1px solid #7656aa;border-radius:10px;font-weight:700;font-size:.82rem">Compare selling options</button>
           <button id="bulkScanMoreBtn" onclick="bulkScanMore()" style="width:100%;min-height:44px;margin-top:.4rem;padding:.55rem;background:transparent;border:1px solid #7656aa;color:#ddd0ff;border-radius:10px;font-weight:700;cursor:pointer">Scan more cards</button>
         </details>
     </template>

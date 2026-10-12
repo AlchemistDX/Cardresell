@@ -110,3 +110,10 @@ including automatic BGS/SGC defaults, visible collapsed fees, SGC thresholds,
 PSA variable fees, CGC value-based fees and no manual fee entry. The same tested
 core/API mapping is retained; the comparison module and fingerprint are updated.
 The current user screenshot shows the older production UI, not this PR.
+
+Bulk action follow-up: Create Listing Drafts now sits beside Add to Collection
+in both the initial footer and the completion/reset template. Compare selling
+moves into More actions. Draft-limit feedback remains visible beneath the
+primary row. Selection, draft creation and comparison handlers are unchanged.
+The selling-plan browser suite passes 186 checks at 320, 390, 844 and 1280px;
+asset fingerprints pass 115 checks and the release build inspector passes.
