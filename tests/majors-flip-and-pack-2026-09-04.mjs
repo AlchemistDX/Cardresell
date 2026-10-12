@@ -315,26 +315,7 @@ ok('CSV export carries the cost columns',
 
 // Pack tracker must count every copy and must refresh after edits.
 {
-  const src = grabFn('_bulkUpdatePackTracker');
-  ok('pack tracker multiplies market price by qty', /p \* qty/.test(src));
-  ok('pack tracker reads qty off the result row', /r\.qty && r\.qty > 1/.test(src));
-  ok('pack tracker no longer sums bare market prices', !/return s \+ \(p > 0 \? p : 0\);/.test(src));
-
-  // Executable: three copies of a $10 card must count as $30 recovered.
-  const recovered = (rows) => rows.reduce((s, r) => {
-    const p = (r && r.success && typeof r.marketPrice === 'number') ? r.marketPrice : 0;
-    const qty = (r && r.qty && r.qty > 1) ? r.qty : 1;
-    return s + (p > 0 ? p * qty : 0);
-  }, 0);
-  near('a x3 row of $10 cards counts as $30 recovered',
-    recovered([{ success: true, marketPrice: 10, qty: 3 }]), 30);
-  near('qty-1 rows are unaffected',
-    recovered([{ success: true, marketPrice: 10, qty: 1 }]), 10);
-  near('failed rows contribute nothing',
-    recovered([{ success: false, marketPrice: 10, qty: 3 }]), 0);
-  near('missing qty defaults to a single copy',
-    recovered([{ success: true, marketPrice: 10 }]), 10);
-
+  // Executable value/quantity/selection cases now live in selling-plan-browser.mjs.
   ok('_bulkUpdateRow refreshes the tracker so post-scan edits are not stale',
     /_bulkUpdatePackTracker\(/.test(stripComments(grabFn('_bulkUpdateRow'))));
   ok('bulkRemoveResult refreshes the tracker after dropping a row',

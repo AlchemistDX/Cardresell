@@ -70,6 +70,7 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'selling-plan-browser.mjs': 'Required selling-plan release gate: CR_CHROMIUM=<chromium> node tests/selling-plan-browser.mjs; real browser with synthetic results, no provider calls.',
   'restore-navigation.mjs':
     'Required navigation release regression: node tests/restore-navigation.mjs. Shipped restore callback, controlled timers, no network or customer data.',
   'brand-ui-browser.mjs':

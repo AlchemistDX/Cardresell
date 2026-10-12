@@ -33,6 +33,7 @@
     bar.querySelector('[data-count]').textContent = `${selected.size} selected · ${count} of ${rows.length} shown`;
     bar.querySelector('[data-status]').textContent = message;
     bar.querySelectorAll('button[data-selection]').forEach(b => b.disabled = busy);
+    const compare=bar.querySelector('[data-compare]'); if(compare) {compare.disabled=busy;compare.textContent=selected.size?'Compare '+selected.size+' selected card'+(selected.size===1?'':'s'):'Compare entire collection';}
     const create = bar.querySelector('[data-create]'); create.disabled = busy || !selected.size;
     create.textContent = busy ? 'Preparing drafts…' : `Prepare ${selected.size || ''} draft${selected.size === 1 ? '' : 's'}`;
   }
@@ -47,13 +48,14 @@
       document.head.append(style);
     }
     const bar = el('div', '', 'collection-draft-tools'); bar.id = 'collectionDraftTools';
-    bar.append(el('strong', 'Prepare listing drafts'));
+    bar.append(el('strong', 'Plan your sale'));
     const search = el('input'); search.type = 'search'; search.placeholder = 'Find cards by name, set, or number'; search.setAttribute('aria-label','Search collection'); search.value = query;
     search.oninput = () => { query = search.value; paint(); }; bar.append(search);
     const select = button('Select visible', () => { syncOwner(); const available = rowMap(loadPortData()); rows.filter(visible).forEach(p => { if (available.get(key(p))) selected.add(key(p)); }); paint(); }); select.dataset.selection = '';
     const clear = button('Clear selection', () => { selected.clear(); paint(); }); clear.dataset.selection = '';
     const create = button('Prepare drafts', prepare); create.dataset.create = '';
-    bar.append(select, clear, create, button('View drafts', () => switchView('drafts')));
+    const compare=button('Compare selling',()=>{syncOwner();const cards=selected.size?[...selected].map(current).filter(Boolean):loadPortData();if(selected.size && cards.length!==selected.size){message='A selected card changed. Refresh your collection and select it again.';paint();return;}window.CardResellSellingPlan?.openCollection(cards);});compare.dataset.compare='';
+    bar.append(select, clear, compare, create, button('View drafts', () => switchView('drafts')));
     const count = el('div'); count.dataset.count = ''; const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(count,status);
     document.getElementById('collectionWrap').before(bar);
     const byId = rowMap(rows);
