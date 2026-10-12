@@ -4,6 +4,7 @@
 // A creation claim is permanent. Unknown outcome never authorizes another POST.
 import { createHash, randomBytes } from 'node:crypto';
 import { MEMBERSHIP_VERSION, LAUNCH_PLANS, LAUNCH_PACKS, quoteLaunchPack } from './_launchMembershipConfig.js';
+import { acquisitionCampaign } from './_acquisition.js';
 
 const PREFIX = `membership:${MEMBERSHIP_VERSION}:checkout:`;
 const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -78,7 +79,10 @@ export function createMembershipCheckoutController({
       const sealed = JSON.parse(raw), r = sealed.data;
       insist(exact(sealed, ['data', 'hash']) && object(r) && sealed.hash === hash(canonical(r))
         && exact(r, ['version', 'accountId', 'livemode', 'owner', 'requestId', 'kind',
-          'selection', 'createdAt', 'claimedAt', 'state', 'input'])
+          'selection', 'createdAt', 'claimedAt', 'state', 'input',
+          ...(Object.hasOwn(r, 'campaign') ? ['campaign'] : [])])
+        && (!Object.hasOwn(r, 'campaign') || (typeof r.campaign === 'string'
+          && acquisitionCampaign(r.campaign) === r.campaign))
         && r.version === MEMBERSHIP_VERSION && r.accountId === accountId && r.livemode === livemode
         && r.owner === owner && r.requestId === request.requestId
         && ['pack', 'subscription'].includes(r.kind)
@@ -110,12 +114,16 @@ export function createMembershipCheckoutController({
     // token is sent ONLY to authenticate. request contains no authoritative UID,
     // eligible discount, customer, amount, price, provider URL, or return URL.
     async checkout({ token, request }) {
-      insist(exact(request, ['requestId', 'kind', 'selection']) && hex(request.requestId)
+      insist(exact(request, ['requestId', 'kind', 'selection',
+        ...(object(request) && Object.hasOwn(request, 'campaign') ? ['campaign'] : [])]) && hex(request.requestId)
         && typeof request.selection === 'string'
         && (request.kind === 'pack' ? Object.hasOwn(LAUNCH_PACKS, request.selection)
           : request.kind === 'subscription' && request.selection !== 'free'
             && Object.hasOwn(LAUNCH_PLANS, request.selection)), 'invalid_request');
       request = structuredClone(request);
+      // Snapshot once with the durable operation. Retry attribution cannot
+      // overwrite it, reprice the order or cause another Stripe creation.
+      request.campaign = acquisitionCampaign(request.campaign);
       const abort = new AbortController();
       let rejectDeadline;
       const deadline = new Promise((_, reject) => { rejectDeadline = reject; });
@@ -189,7 +197,8 @@ export function createMembershipCheckoutController({
             // The sole creation call receives the saved server order including
             // the stable Stripe idempotency key. Its returned object is NOT
             // trusted: only its reference is used for a canonical re-fetch.
-            const created = await step(() => stripe.createCheckout(structuredClone(order), options));
+            const created = await step(() => stripe.createCheckout(structuredClone(order),
+              { ...options, campaign: r.campaign || 'unknown' }));
             sessionId = ref(created);
             insist(id(sessionId, 'cs'), 'canonical_reference_invalid');
           } else {

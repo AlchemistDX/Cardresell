@@ -208,7 +208,8 @@ await t.section('separate subscription navigation and seven exact pack selection
       t.check(`${plan}/${pack.packId} sends exact selection without client financial authority`,
         h.requests.length === 1 && h.requests[0].request.kind === 'pack' &&
         h.requests[0].request.selection === pack.packId &&
-        Object.keys(h.requests[0].request).sort().join() === 'kind,requestId,selection');
+        Object.keys(h.requests[0].request).sort().join() === 'campaign,kind,requestId,selection'
+        && h.requests[0].request.campaign === 'unknown');
     }
   }
   const c = { ...publicMembershipCatalogue(), purchaseEnabled: true, newSubscriptionAllowed: true };
@@ -611,5 +612,17 @@ await t.section('out-of-credit shop moments suggest a plan above the packs', asy
   t.check('no nudge when purchasing is not enabled for the account', !nudgeOf(off));
   const out = setup({ initial: null, suppliedCatalogue: c }); await out.window.openShop('grade', 'grade_scan_402');
   t.check('signed-out Shop gets no nudge', !nudgeOf(out));
+});
+await t.section('Checkout snapshots acquisition without changing retries', async () => {
+  const h = setup(); h.window.getAcquisitionCampaign = () => 'qa';
+  await h.open(); await h.buttons()[0].onclick();
+  t.check('New checkout carries campaign', h.requests[0].request.campaign === 'qa');
+  h.window.getAcquisitionCampaign = () => 'google_ads';
+  await h.open(); await h.buttons()[0].onclick();
+  t.check('Recovered checkout retains campaign and request identity',
+    JSON.stringify(h.requests[0].request) === JSON.stringify(h.requests[1].request));
+  const broken = setup(); broken.window.getAcquisitionCampaign = () => { throw Error('analytics unavailable'); };
+  await broken.open(); await broken.buttons()[0].onclick();
+  t.check('Unavailable analytics cannot block checkout', broken.requests.length === 1 && broken.navigations.length === 1);
 });
 t.done();

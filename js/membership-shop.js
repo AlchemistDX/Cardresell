@@ -504,6 +504,9 @@
         if (previous?.owner === owner) throw new Error('A purchase is awaiting confirmation. Recover that purchase before starting another.');
         const bytes = crypto.getRandomValues(new Uint8Array(32));
         request = { requestId: Array.from(bytes, x => x.toString(16).padStart(2, '0')).join(''), kind, selection };
+        // Optional marketing context; a broken analytics helper cannot block
+        // checkout. Existing recovery requests retain their original snapshot.
+        try { request.campaign = window.getAcquisitionCampaign?.() || 'unknown'; } catch (_) {}
         unchanged(bound);
         saved[owner] = { owner, request };
         history.replaceState({ ...history.state, membershipPurchases: saved }, '');

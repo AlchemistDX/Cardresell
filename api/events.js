@@ -15,6 +15,8 @@
 //   ev:recent:<name>                     → LPUSH+LTRIM last 100 event JSON blobs
 //   ev:names                              → SADD known event names
 
+import { ACQUISITION_CAMPAIGNS } from './_acquisition.js';
+
 const KV_URL   = process.env.KV_REST_API_URL   || '';
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || '';
 const ADMIN_KEY = process.env.ANALYTICS_ADMIN_KEY || '';
@@ -47,7 +49,7 @@ const ALLOWED = new Set([
 // Only allowlisted prop keys/values get bucketed to prevent unbounded key growth.
 const ALLOWED_PROP_KEYS = new Set(['plan', 'tier', 'trigger', 'game', 'source', 'psa', 'campaign']);
 
-const CAMPAIGNS = ['direct', 'shop_qr', 'youtube', 'discord', 'google_ads', 'meta_ads', 'reddit', 'organic_search', 'referral', 'other_campaign', 'qa'];
+const CAMPAIGNS = ACQUISITION_CAMPAIGNS;
 const FUNNEL = ['page_view', 'membership_shop_open', 'membership_checkout_attempt', 'membership_checkout_redirect', 'membership_return_verified'];
 
 async function kv(cmd, ...args) {
