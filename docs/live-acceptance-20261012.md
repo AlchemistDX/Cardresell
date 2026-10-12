@@ -1,5 +1,49 @@
 # Live acceptance — 2026-10-12 UTC
 
+## Release and live retest completed
+
+The owner approved deployment after reviewing PR #34. That PR merged as
+`a1bff81eb6a1d4ba8912e6aec7235eed9c037f79`; its tree exactly matches the
+650-check hotfix tree (`73b07b11162767c4310a079cc0081a617ea202a3`). A production
+build, `dpl_2FouFFnqpuDEA3gkoLrPRF1NCfqu`, reached READY and was assigned to
+both cardresell.org and www.cardresell.org. Build logs report 32 seconds;
+building-to-ready was approximately 42 seconds. No credentials or environment
+settings were changed.
+
+Live browser retest on the authorized separate account:
+
+- Collection -> Prepare draft succeeded: "1 draft ready."
+- Review showed the shortened title, $44.80 price and an explicit note that
+  rarity was omitted to fit the title limit.
+- Full reload, restored sign-in and reopening Drafts showed 1 / 25 drafts.
+- Preparing the same Collection fixture again showed "Saved draft recovered."
+  Draft count remained one, with 24 slots available.
+- Credit balances remained unchanged. No payment, subscription change or
+  marketplace listing was submitted.
+- One QA Collection fixture and its one QA draft remain for follow-up testing.
+
+Post-deployment public smoke: 18 checks, 17 passed, 1 degraded, 0 failed.
+The remaining degraded result is the eBay sold-comps provider. The runtime
+error-level sample contained six Node `url.parse()` deprecation warnings,
+not six failed requests; no application exception appeared in that sample.
+This is a short observation window, not a claim of zero production errors.
+
+The reported deployment-failure email could not be matched directly without
+reading the email. The newest ERROR deployment found was an older production
+attempt (`dpl_6WWzGQd8ZzLBkxwuJuX98fefJqDu`, commit `616d6ce`), reporting
+`git_info_fail` before build logs. All six latest deployments inspected before
+release were READY. The approved new production deployment succeeded.
+
+Remaining acceptance: completed payment/webhook reconciliation, physical-phone
+camera capture, independent cross-device persistence and concurrent real-store
+testing. Follow up on navigation restoration: a Collection click made during
+post-reload account/card restoration returned to Lookup; clicking Collection
+again after restoration worked. Also review the "Ready to list" label when a
+draft has no seller photos and incomplete price-source/shipping provenance.
+Neither observation was changed by this narrowly scoped server fix.
+
+The remainder records the pre-deployment findings and local fix verification.
+
 Production tested: https://www.cardresell.org, commit
 `dd378d99b30d7e5b99dd6908f7fb537f8af7373e`, deployment
 `dpl_A567eBgFS72UAMPMJKQTJkGKW1AP` (READY).
