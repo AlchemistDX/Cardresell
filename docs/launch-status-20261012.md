@@ -1,5 +1,10 @@
 # Current launch status — October 12, 2026
 
+Latest evidence: [advertising readiness gates](advertising-gates-20261012.md)
+records the live payment reconciliation, isolated restore checks, confirmed
+pricing plan, and remaining backup/permissions/cost gates. It supersedes the
+pending evidence below where explicitly stated.
+
 This dated status supersedes pending phone/payment/public-admission entries in
 older readiness notes. Historical results remain historical; this is not a
 percentage readiness score or a claim that every feature has been accepted.
