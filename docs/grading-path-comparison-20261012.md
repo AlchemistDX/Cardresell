@@ -9,12 +9,20 @@ shipping, optional capital cost, proceeds, and difference versus selling raw.
 The app uses existing prices and the shared eBay fee engine automatically.
 Users no longer enter an outcome and resale estimate separately for each path.
 
-PSA and CGC use dated official US direct-submission base rates. The default
+PSA, CGC, BGS and SGC use dated official US direct-submission base rates. The default
 chooses the lowest listed eligible fee for each scenario's guide value and
-submission size (initially 1 card, visibly stated). Users can choose a specific
-service or actual quote. CGC Bulk needs at least 25 cards. Paused PSA Value
-services are excluded. The loaded tier list is not exhaustive; higher values,
-BGS/SGC fees, discounts, and other services require a confirmed custom quote.
+submission size (initially 1 card, visibly stated). There is no grading-cost
+entry box or manual quote mode. The fee is visible on each collapsed grade row;
+users can optionally choose a different published service. CGC Bulk needs at
+least 25 cards. Paused PSA Value and BGS Base/Standard services are excluded.
+BGS Express with subgrades is $79.95/15 business days on the current official
+temporary submission form (100-card maximum). SGC Standard starts at $50 for
+values through $1,500 and rises to $85 through $3,500; expedited brackets cover
+values through $100,000. Values above that remain unavailable until the variable
+SGC surcharge rounding is confirmed. The list covers standard-size unsigned
+cards; tax, shipping, discounts and optional extras are explicitly excluded.
+PSA high-value tiers include the published Premium 10 incremental surcharge;
+CGC Unlimited includes 1% of value. All supported guide values cap at $1 million.
 The grader determines final declared-value eligibility and any extra charges.
 
 Only unknowable submission details are requested: card count, allocated
@@ -46,7 +54,9 @@ There are no new provider requests, model calls, scan charges or entitlements.
 - Raw proceeds subtract the same sale-shipping assumption.
 - Difference is graded proceeds minus raw proceeds; it is not purchase profit.
 - Calendar estimate is ceiling(working days × 7/5) plus extra transit/sale days.
-  Holidays and actual processing delays are not predicted.
+  Holidays and actual processing delays are not predicted. SGC Standard's 40+
+  working days stay explicitly open-ended; capital cost using this minimum wait
+  is labeled as potentially higher.
 - Capital cost is (max(raw proceeds, 0) + grading fee + submission shipping)
   × annual rate × calendar days / 365. Rate defaults to 0 (off); enabling it
   requires complete cost and time assumptions.
@@ -57,7 +67,7 @@ open while inputs change. State is memory-only, bounded, and scoped by user,
 card/analysis identity and grader. Empty/failed guide requests still leave
 functional grader selection and clearly unavailable values.
 
-Published fee snapshots expire after 14 days and then require a current quote.
+Published fee snapshots expire after 14 days and then withhold fee estimates.
 To refresh, verify the official sources, update checkedAt and tier records in
 js/grading-paths.js, and run node tools/build-grading-paths.mjs. Automated rate
 refresh is not part of this change. Legacy ladder code remains as a fallback
@@ -78,6 +88,9 @@ Official sources checked October 12, 2026:
 - https://www.cgccards.com/submit/services-fees/cgc-grading/
 - https://www.cgccards.com/card-grading/grading-scale/
 - https://www.pricecharting.com/api-documentation
+- https://maintenance.beckett.com/
+- https://beckett.jotform.com/form/beckett-card-grading-submission
+- https://www.gosgc.com/card-grading/services-pricing
 
 This document records implementation, not a production deployment claim.
 Existing advertising backup, commercial-data-rights and cost gates still apply.
@@ -90,3 +103,10 @@ The API field mappings and PSA/CGC fee snapshot were rechecked against their
 official documentation. PriceCharting's public API documentation also requires
 an express commercial agreement for customer-facing data; confirm account rights
 alongside the existing TCG Price Lookup permission gate before paid advertising.
+
+Owner correction, October 12 at 11:30 ET: all four graders must calculate the
+fee without a required cost box. The browser/economics gate now passes 88 checks,
+including automatic BGS/SGC defaults, visible collapsed fees, SGC thresholds,
+PSA variable fees, CGC value-based fees and no manual fee entry. The same tested
+core/API mapping is retained; the comparison module and fingerprint are updated.
+The current user screenshot shows the older production UI, not this PR.
