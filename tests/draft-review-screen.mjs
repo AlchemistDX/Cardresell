@@ -1667,6 +1667,13 @@ try {
     const copiedAll = await page.evaluate(() => navigator.clipboard.readText());
     T.check('Copy everything includes the title and the category',
       copiedAll.includes(expectTitle) && copiedAll.includes(F.packetCurrent.body.packet.category.label));
+    T.check('Copy everything also includes the buyer description',copiedAll.includes('Description:\n')&&copiedAll.includes(F.packetCurrent.body.packet.description.text));
+    T.check('photos and fee review precede the eBay handoff',await page.evaluate(()=>{
+      const card=document.getElementById('review-card-step'),photos=document.getElementById('review-photo-step'),details=document.getElementById('review-ebay-step');
+      return !!card&&!!photos&&!!details&&!!(card.compareDocumentPosition(photos)&Node.DOCUMENT_POSITION_FOLLOWING)&&!!(photos.compareDocumentPosition(details)&Node.DOCUMENT_POSITION_FOLLOWING);
+    }));
+    T.check('listing preparation has three step links',await page.locator('[data-review-steps] a').count()===3);
+
 
     // The quote's age, on the record the reload reads.
     T.check('the retrieval time on the wire is the original 12:00',

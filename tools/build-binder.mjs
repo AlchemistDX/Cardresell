@@ -1,0 +1,10 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+const root = new URL('../', import.meta.url);
+const source = await readFile(new URL('js/binder.js', root));
+const path = `js/binder.${createHash('sha256').update(source).digest('hex').slice(0,8)}.js`;
+let html = await readFile(new URL('index.html', root), 'utf8');
+if ([...html.matchAll(/js\/binder\.[a-f0-9]{8}\.js/g)].length !== 1) throw Error('Expected one binder asset');
+await writeFile(new URL(path, root), source);
+await writeFile(new URL('index.html', root), html.replace(/js\/binder\.[a-f0-9]{8}\.js/g, path));
+console.log(path);
