@@ -328,3 +328,11 @@ a complete delivered-unit margin calculation. Production one-day daily backups
 remain off. The existing OpenAI $100 monthly limit is also not enforced; its
 hard-enforcement option is available but awaiting approval. No ad launch is
 authorized by this update.
+
+### Control execution update
+
+OpenAI's existing $100 organization monthly limit is now enforced after owner
+approval. Enforcement may lag slightly and requests can fail at the ceiling.
+Upstash daily backups remain OFF: the enable dialog newly disclosed $0.25 per
+GB-month, so the operation was cancelled pending approval of that recurring
+rate. One-day retention does not require Prod Pack, but it is not free storage.

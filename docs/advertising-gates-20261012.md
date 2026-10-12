@@ -258,3 +258,27 @@ Still needed: cost-to-delivery reconciliation, Ximilar exhaustion/overage
 behavior, other provider license expenses, recurring-backup approval and
 completion, OpenAI hard-limit decision, and written commercial permissions.
 No advertisements, provider messages, purchases or settings changes occurred.
+
+## Approved control execution — October 12, after 13:57 ET
+
+The owner approved one-day daily backups without a paid upgrade and enforcement
+of the existing $100 OpenAI organization limit.
+
+OpenAI: enabled Enforce a hard limit, retained $100, saved, and verified the
+Limits page now states Limit enforced. The provider warns new requests start
+failing with 429 at the limit and enforcement is not instantaneous, so final
+usage can exceed the threshold slightly. The $80/$100 alert settings were not
+changed. This limits the organization, not just CardResell, and is not a
+guarantee of an exact $100 final bill.
+
+Upstash: the enable confirmation disclosed a recurring backup storage rate of
+$0.25 per GB-month, keeping only the latest daily backup. This price was absent
+from the earlier retention menu. Cancelled the confirmation and verified Daily
+Backup is OFF; no charge or backup setting was accepted. New specific cost
+approval is required. At a 3.03 MB snapshot, the simple storage-rate estimate
+is about $0.00076/month before any minimum, rounding or size growth. This is
+not a billing quote or spending cap. No $200/month Prod Pack upgrade is proposed.
+
+The scheduled-backup gate remains open until the disclosed rate is approved,
+the setting is enabled and a scheduled backup completes. Provider commercial
+permissions and full delivered-unit economics remain open.
