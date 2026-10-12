@@ -193,9 +193,8 @@ check(
   index.includes('window._freeIdLeft = d.idFreeLeft || 0;')
 );
 check(
-  'CR-021 shop copy does not claim the monthly allowance rolls over',
-  index.includes('purchased credits never expire') &&
-    !index.includes('Credits never expire, and unused ones roll over every month')
+  'current shop explains permanent issued credits',
+  fs.readFileSync(path.join(root, 'js/membership-shop.js'), 'utf8').includes('Monthly credits roll over and never expire.')
 );
 
 const originalFetch = globalThis.fetch;

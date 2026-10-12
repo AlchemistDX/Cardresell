@@ -425,37 +425,16 @@ ok('both zoom sliders still declare a vertical orientation',
    SOL-PLAT-010 — the annual claim must match the arithmetic
    ═══════════════════════════════════════════════════════════ */
 {
-  // Recompute from the prices the page actually renders.
-  const annualDiscount = (monthly, annual) => 1 - annual / (monthly * 12);
-  const freeMonths = (monthly, annual) => 12 - annual / monthly;
-
-  near('Pro annual saves ~24.93%', annualDiscount(9.99, 89.99), 0.24933, 0.0001);
-  near('Pro Max annual saves ~24.97%', annualDiscount(19.99, 179.99), 0.24966, 0.0001);
-  // "3 months free" would require 9 monthly payments exactly.
-  near('Pro annual equals ~2.99 months free', freeMonths(9.99, 89.99), 2.9920, 0.001);
-  near('Pro Max annual equals ~3.00 months free', freeMonths(19.99, 179.99), 2.9960, 0.001);
-  ok('Pro annual is short of a true 3 months free', freeMonths(9.99, 89.99) < 3);
-  ok('Pro Max annual is short of a true 3 months free', freeMonths(19.99, 179.99) < 3);
-  // The shortfall is 8 cents at both tiers -- more than a nickel, so the claim
-  // could not stay.
-  near('the Pro shortfall is 8 cents', 89.99 - 9.99 * 9, 0.08, 0.001);
-  near('the Pro Max shortfall is 8 cents', 179.99 - 19.99 * 9, 0.08, 0.001);
-  // Both annual figures round to 25%, so "about 25%" is true at both tiers.
-  ok('both tiers round to 25%',
-     Math.round(annualDiscount(9.99, 89.99) * 100) === 25 &&
-     Math.round(annualDiscount(19.99, 179.99) * 100) === 25);
-
-  ok('the overstated claim is gone everywhere', !/3 months free/i.test(HTML));
-  ok('the annual banner now claims about 25%', /save about 25%<\/strong>/.test(HTML));
-  ok('both annual notes now claim about 25%',
-     (HTML.match(/save about 25%/g) || []).length >= 3);
-  ok('the SAVE 25% badge is unchanged', /SAVE 25%/.test(HTML));
-  // Prices themselves must not have moved.
-  for (const p of ['$9.99', '$89.99', '$19.99', '$179.99', '$7.50/mo', '$15/mo']) {
-    ok(`the rendered price ${p} is unchanged`, HTML.includes(p));
-  }
-  ok('the annual prices were not quietly rewritten',
-     !HTML.includes('$89.91') && !HTML.includes('$179.91'));
+  // Retired annual offers must not remain in crawlable markup. The active
+  // membership shop renders current monthly offers from the server catalog.
+  const markup = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const retired = markup.slice(markup.indexOf('<div class="pricing-overlay"'), markup.indexOf('<div id="csToast"'));
+  ok('legacy pricing bindings remain inert', /id="pricingOverlay" hidden inert/.test(retired));
+  ok('legacy shop bindings remain inert', /id="shopOverlay" hidden inert/.test(retired));
+  ok('retired annual discounts are absent', !/SAVE 25%|save about 25%|3 months free/.test(retired));
+  ok('retired price attributes are absent', !/data-price-|data-cta-/.test(retired));
+  ok('retired offer amounts are absent', !/\$|9\.99|19\.99|89\.99|179\.99/.test(retired));
+  ok('current membership shop remains loaded', /src="\/js\/membership-shop\.[a-f0-9]{8}\.js"/.test(markup));
 }
 
 /* ── protected areas and standing copy rules ── */

@@ -92,4 +92,4 @@ for (const name of ['stripe-checkout', 'stripe-annual-checkout', 'stripe-subscri
     }
   });
 }
-console.log(`${passed} passed, 0 failed`);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);

@@ -105,6 +105,7 @@ export function harness(label) {
       + ` -- no summary was produced (exit=${code}).`
       + ` Totals at the point of failure: ${passed} passed, ${failed} failed.`
       + ' Everything after that point is UNTESTED, not passing.');
+    if (code === 0) process.exitCode = 1;
   });
 
   /**
@@ -121,12 +122,13 @@ export function harness(label) {
   };
 
   const done = () => {
+    if (finished) return;
     finished = true;
     const code = failed ? 1 : 0;
     console.log(`\n${label ? label + ': ' : ''}${passed} passed, ${failed} failed`
       + (skipped ? ` -- INCOMPLETE RUN: ${skipped} section(s) skipped by CR_ONLY=${only}` : '')
       + ` -- SUITE COMPLETE, exit=${code}`);
-    process.exit(code);
+    process.stdout.write('', () => process.exit(code));
   };
   return { check, checkAsync, section, done, skipAll, counts: () => ({ passed, failed, skipped }) };
 }

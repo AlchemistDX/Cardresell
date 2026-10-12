@@ -119,4 +119,4 @@ await test('old deployment credential denial is distinguishable without returnin
   assert.equal(result.body.writerReadiness.datastoreAuthorization, 'rejected');
   assert.equal(result.body.writerReadiness.datastoreReadable, false);
 });
-console.log(`${passed} passed, 0 failed`);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);

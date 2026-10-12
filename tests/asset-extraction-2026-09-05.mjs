@@ -19,6 +19,7 @@ import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('asset-extraction-2026-09-05');
 
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,8 +55,13 @@ const inlineCss = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
 check('CSS stays inline so the first paint needs no extra round-trip',
       inlineCss > 50_000,
       `only ${inlineCss} bytes inline \u2014 do not move the main sheet to an external file`);
-check('no external stylesheet was introduced',
-      !/<link\s+rel="stylesheet"\s+href="\/css\//.test(html));
+const sheets = [...html.matchAll(/<link\s+rel="stylesheet"\s+href="(\/css\/[^"]+)"/g)].map(m => m[1]);
+check('only the small grading feature stylesheet is external', sheets.length === 1 && /^\/css\/grading-paths\.[a-f0-9]{8}\.css$/.test(sheets[0]));
+for (const sheet of sheets) {
+  const bytes = fs.readFileSync(path.join(ROOT, sheet));
+  check('grading stylesheet stays below 8 KB', bytes.length < 8192);
+  check('grading stylesheet filename matches content', sheet.includes(createHash('sha256').update(bytes).digest('hex').slice(0, 8)));
+}
 
 // ── 2. every referenced asset exists and is content-hashed ───────────────
 const HASHED = /^\/js\/[A-Za-z0-9_-]+\.[0-9a-f]{8}\.js$/;

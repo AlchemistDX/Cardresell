@@ -77,5 +77,5 @@ await test('new enrollment only gets baseline month', async () => {
   await seed('new', { freeEligibleFrom: current });
   assert.equal((await issue('new')).allocations, 1);
 });
-console.log(`${passed} passed, 0 failed`);
-process.exit(0);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));

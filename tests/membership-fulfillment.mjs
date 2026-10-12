@@ -79,5 +79,5 @@ const settled = await snapshot();
 await returned(); check(await snapshot() === settled);
 session.payment_intent = 'pi_wrong';
 await rejects(returned); check(await snapshot() === settled);
-console.log(`membership-fulfillment: ${passed} passed, 0 failed`);
-process.exit(0);
+console.log(`membership-fulfillment: ${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));

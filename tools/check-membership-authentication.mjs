@@ -263,4 +263,4 @@ await test('account lookup rejects wrong UID, disabled account, ambiguous provid
     resolveAccountEmail: async () => { throw Error('upstream'); }, onReject() {} });
   await assert.rejects(() => auth(token({ email: undefined, email_verified: false })), { code: 'authentication_required' });
 });
-console.log(`${passed} passed, 0 failed`);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);

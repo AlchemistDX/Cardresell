@@ -59,5 +59,5 @@ await test('expiring fence rejects exact replay', async () => {
   await execute(['EXPIRE', MEMBERSHIP_LEGACY_FENCE, 600]);
   await assert.rejects(() => installPreviewWriterFence({ env, execute }));
 });
-console.log(`${passed} passed, 0 failed`);
-process.exit(0);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));

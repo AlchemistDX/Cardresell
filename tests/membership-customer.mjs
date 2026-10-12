@@ -101,5 +101,5 @@ overrides = { subscription_update: { enabled: true } };
 await reject(() => portalTransport.createPortal(portalInput));
 check(portalPosts === 1);
 await reject(() => portalTransport.createPortal({ ...portalInput, customerId: 'cus_other' }));
-console.log(`membership-customer: ${passed} passed, 0 failed`);
-process.exit(0);
+console.log(`membership-customer: ${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));
