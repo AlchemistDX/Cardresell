@@ -1,0 +1,47 @@
+.grading-paths{margin-top:1rem;padding:.8rem;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-size:.82rem;line-height:1.5}
+.grading-paths summary{cursor:pointer;font-weight:800;font-size:.95rem;min-height:32px}
+.grading-paths p{color:var(--text-muted);font-size:.75rem;margin:.6rem 0}
+.grading-paths a{color:var(--gold)}
+.grading-paths fieldset{min-width:0;margin:.7rem 0;padding:.7rem;border:1px solid var(--border);border-radius:10px}
+.grading-paths legend{font-weight:800;padding:0 .3rem}
+.grading-paths label{display:flex;flex-direction:column;gap:.25rem;margin:.5rem 0;color:var(--text);font-size:.75rem}
+.grading-paths input,.grading-paths select{width:100%;box-sizing:border-box;min-height:44px;padding:.55rem;border:1px solid var(--border);border-radius:7px;background:var(--surface-2);color:var(--text);font-size:16px}
+.grading-paths input[readonly]{opacity:.75}
+.grading-paths :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.grading-paths output{display:block;margin-top:.7rem;padding:.7rem;background:var(--surface-2);border-radius:8px;overflow-wrap:anywhere}
+.grading-paths output strong{font-size:1rem}
+.grading-paths h3{font-size:1rem;margin:0 0 .7rem}
+.gp-graders{display:flex;gap:.4rem;flex-wrap:wrap}
+.gp-graders button{min-height:44px;min-width:56px;padding:.4rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);font-weight:800;cursor:pointer}
+.gp-graders button[aria-pressed=true]{background:var(--gold);color:#111;border-color:var(--gold)}
+.gp-baseline{margin:.7rem 0;padding:.6rem;border-radius:8px;background:var(--surface-2);font-size:.78rem}
+.gp-grade{margin:.55rem 0;padding:.65rem;border:1px solid var(--border);border-radius:9px;background:var(--surface-2)}
+.gp-grade summary{display:flex;justify-content:space-between;gap:.6rem;align-items:center;font-size:.9rem}
+.gp-grade summary:before{content:'▸';font-size:.75rem}
+.gp-grade[open] summary:before{content:'▾'}
+.gp-grade small{display:block;font-size:.67rem;font-weight:400;color:var(--text-muted);line-height:1.35;margin-top:.15rem}
+.gp-result{text-align:right;margin-left:auto;min-width:105px}
+.gp-grade dl{margin:.6rem 0 0;font-size:.76rem}
+.gp-grade dl div{display:flex;justify-content:space-between;gap:1rem;padding:.3rem 0;border-top:1px solid var(--border)}
+.gp-grade dt{color:var(--text-muted)}
+.gp-grade dd{margin:0;text-align:right;white-space:nowrap}
+.grading-paths [data-settings]>summary,.grading-paths [data-lower]>summary{font-size:.78rem;padding:.5rem 0}
+.gp-price-note{font-size:.7rem!important}
+.gp-paths,.gp-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem}
+@media(min-width:760px){.gp-paths,.gp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.gp-comparison{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem;margin:.7rem 0}
+.gp-comparison .gp-baseline{margin:0;overflow-wrap:anywhere}
+.gp-comparison small{display:block;color:var(--text-muted);margin-top:.4rem}
+.gp-grade.gp-highlight{border-color:var(--gold)}
+.gp-grade.gp-negative .gp-difference{font-weight:600}
+.gp-grade .gp-wait{color:var(--text);font-weight:600}
+.grading-paths [data-export]{min-height:44px;padding:.6rem .8rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer}
+@media(min-width:760px){.gp-comparison{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.gp-service-summary,.gp-cost-coverage{padding:.75rem;margin:.7rem 0;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);overflow-wrap:anywhere}
+.gp-service-summary{border-left:3px solid var(--gold)}
+.gp-service-line{display:flex;flex-direction:column;gap:.2rem;margin:.55rem 0}
+.gp-service-line b{font-size:.9rem;color:var(--text)}
+.gp-service-summary small{display:block;color:var(--text-muted);font-size:.75rem}
+.gp-cost-coverage [data-cost-coverage]{color:var(--text)}
+.grading-paths [data-edit-costs]{min-height:44px;padding:.6rem .8rem;background:var(--surface);color:var(--text);border:1px solid var(--gold);border-radius:8px;font-weight:700;cursor:pointer}

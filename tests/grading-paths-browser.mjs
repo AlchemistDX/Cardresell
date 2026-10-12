@@ -115,10 +115,15 @@ try {
   check(cgc.includes('$200.00') && cgc.includes('$20.00') && !cgc.includes('$300.00'), 'CGC uses its own guide and fee');
   check((await panel.innerText()).includes('AI condition estimate: PSA 9'), 'grader selection never relabels AI prediction');
   check((await panel.locator('[data-grade="grade_9"]').innerText()).includes('not specific to CGC'), 'mixed data labeled for selected grader');
-  await panel.locator('[data-settings] > summary').click();
+  check((await panel.locator('[data-service-summary]').innerText()).includes('90 working days · ~4.1 months'), 'prominent summary shows eligible CGC wait');
+  check((await panel.locator('[data-cost-coverage]').innerText()).includes('submission shipping + insurance and sale shipping'), 'missing costs visible while details closed');
+  await panel.locator('[data-edit-costs]').click();
+  check(await panel.locator('[data-settings]').getAttribute('open') !== null, 'add costs opens submission details');
+  check(await panel.locator('[data-field="shipping"]').evaluate(el => el === document.activeElement), 'add costs focuses first missing amount');
   await panel.locator('[data-field="shipping"]').fill('10');
   await panel.locator('[data-field="saleShip"]').fill('5');
   check(await panel.locator('[data-grade="cgc_10"]').getAttribute('open') !== null, 'expanded breakdown stays open during input changes');
+  check((await panel.locator('[data-cost-coverage]').innerText()).includes('Both shipping amounts entered'), 'coverage updates after both shipping amounts entered');
   const expected = await page.evaluate(() => { const p = _crSellerProfile(); return netEbayForPrice(200, { ebayStore: p.ebayStore, ebayPromo: p.ebayPromo, trsEligible: false }) - 20 - 10 - 5; });
   check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('$' + expected.toFixed(2)), 'net uses real shared fee engine and entered shipping');
   check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('Estimated net proceeds'), 'net label only after costs entered');
@@ -131,6 +136,7 @@ try {
   check(csv.includes('Entered costs included; zero optional costs excluded')&&csv.includes('not predictions'), 'CSV keeps cost and probability limitations');
   await panel.locator('[data-field="other"]').fill('0');
   await panel.locator('[data-field="tier"]').selectOption('cgc-bulk');
+  check(!(await panel.locator('[data-service-summary]').innerText()).includes('150 working days'), 'ineligible bulk cannot advertise a usable wait');
   check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('No eligible published tier'), 'bulk unavailable for default one-card submission');
   await panel.locator('[data-field="count"]').fill('25');
   await panel.locator('[data-grade="cgc_10"] summary').click();
@@ -167,6 +173,13 @@ try {
   await render('empty');
   await panel.getByRole('button', { name: 'CGC', exact: true }).click();
   check(await panel.getByRole('button', { name: 'CGC', exact: true }).getAttribute('aria-pressed') === 'true', 'pills still work without any comps');
+  await render('varying', { source: 'pricecharting', prices: { raw: 100, grade_9: 500, psa_10: 1400 } });
+  await panel.getByRole('button', { name: 'PSA', exact: true }).click();
+  const service = await panel.locator('[data-service-summary]').innerText();
+  check(service.includes('Standard') && service.includes('Priority') && service.includes('varies by grade value'), 'automatic summary keeps different value tiers distinct');
+  await page.evaluate(() => { Date.now = () => Date.parse('2026-11-01T00:00:00Z'); });
+  await panel.locator('[data-field="tier"]').selectOption('auto');
+  check((await panel.locator('[data-service-summary]').innerText()).includes('snapshot expired') && !(await panel.locator('[data-service-summary]').innerText()).includes('90–100'), 'expired snapshot withholds prominent estimate');
   check(errors.length === 0, 'no page errors: ' + errors.join('; '));
 } finally { await browser.close(); server.close(); }
 console.log(`grading-paths-browser: ${checks} checks passed`);
