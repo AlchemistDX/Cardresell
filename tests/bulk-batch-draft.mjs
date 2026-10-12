@@ -243,6 +243,7 @@ async function selectAllAndCreate(page) {
     const b = document.getElementById('bulkCreateDraftsBtn');
     return b && !b.disabled;
   }, { timeout: 5000 });
+  if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions summary').click();
   await page.click('#bulkCreateDraftsBtn');
   await page.waitForFunction(() => window._bulkDraftBusy === false, { timeout: 60000 });
   await page.waitForTimeout(200);
@@ -257,6 +258,9 @@ try {
     const sub = 'u-bulk-1';
     const { ctx, page, errors } = await boot({ sub });
     await runScan(page, 2);
+    await page.setViewportSize({width:390,height:730});
+    ok('real completion retains selling comparison', await page.locator('#bulkCompareSellingBtn').isVisible());
+    await page.screenshot({path: `${SHOTS}/bulk-compact-mobile.png`});
     const rows = await rowsOf(page);
 
     eq('two rows scanned', rows.length, 2);
@@ -280,6 +284,7 @@ try {
     const sub = 'u-bulk-2';
     const { ctx, page, errors } = await boot({ sub });
     await runScan(page, 2);
+    await page.locator('#bulkMoreActions summary').click();
     const rows = await rowsOf(page);
 
     eq('nothing is pre-selected', await page.evaluate(() => (window._bulkDraftSel || []).length), 0);
@@ -410,6 +415,16 @@ try {
     const failed = rows.find(r => !r.success);
     const uidBefore = failed.scanUid;
     ok('even a failed row has an identity', /^scan_/.test(uidBefore || ''));
+    eq('failed row has no selectable checkbox', await page.locator('#'+failed.rowId+' [role="checkbox"]').count(), 0);
+    await page.evaluate(id=>window.bulkDraftToggleRow(id), failed.rowId);
+    eq('direct selection cannot select a failed scan', await page.evaluate(()=>window._bulkDraftSel.length), 0);
+    await page.evaluate(uid=>{window._bulkDraftSel=[uid];window._bulkDraftSyncSelectionUI()}, uidBefore);
+    eq('stale selection is removed after a failure', await page.evaluate(()=>window._bulkDraftSel.length), 0);
+    await page.click('#bulkDraftSelectAllBox');
+    eq('select all includes only the successful row', await page.evaluate(()=>window._bulkDraftSel.length), 1);
+    ok('select all never includes failed identity', !await page.evaluate(uid=>window._bulkDraftSel.includes(uid),uidBefore));
+    await page.click('#bulkDraftSelectAllBox');
+
 
     // Retry that row through the real retry path.
     await page.evaluate((rowId) => window.bulkRetryRow(rowId), failed.rowId);
@@ -483,7 +498,8 @@ try {
     ok('the count says three drafts for two rows',
        (await page.innerText('#bulkDraftSelectCount')).includes('3 drafts'),
        await page.innerText('#bulkDraftSelectCount'));
-    await page.click('#bulkCreateDraftsBtn');
+    if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions summary').click();
+  await page.click('#bulkCreateDraftsBtn');
     await page.waitForFunction(() => window._bulkDraftBusy === false, { timeout: 60000 });
     await page.waitForTimeout(200);
 
@@ -583,13 +599,15 @@ try {
     // lives under a per-user key (getUserKey), so a literal key reads an empty
     // list and the assertion would pass on nothing.
     const before = await page.evaluate(() => window.loadPortData().length);
-    // The real seller entry point for "save these without pricing them", so
-    // the entry shape asserted below is the one the product actually writes.
-    await page.evaluate(() => window.bulkSkipPricingAndSave());
+    // Save through the visible completion action, reusing the upfront cost.
+    await page.evaluate(() => { window._bulkStartPackCost = 12; });
+    await page.click('#bulkAddAllBtn');
     await page.waitForTimeout(300);
     const saved = await page.evaluate(() => window.loadPortData());
 
     eq('two entries were added', saved.length - before, 2);
+    eq('upfront pack cost is saved once across both copies', saved.slice(before).reduce((n,r)=>n+r.buyPrice,0), 12);
+    ok('save does not reopen pack-cost entry', !await page.locator('#bulkCostSheet').isVisible());
     const e = saved.find(row => row.card === 'Umbreon VMAX');
 
     // The exact key union the committed _bulkSaveToCollection wrote at
@@ -707,7 +725,8 @@ try {
 
     await page.click('#bulkDraftSelectAllBox');
     await page.waitForTimeout(120);
-    await page.click('#bulkCreateDraftsBtn');
+    if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions summary').click();
+  await page.click('#bulkCreateDraftsBtn');
     await page.waitForFunction(() => window._bulkDraftBusy === false, { timeout: 60000 });
     await page.waitForTimeout(200);
 
