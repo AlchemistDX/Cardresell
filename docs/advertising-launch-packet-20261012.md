@@ -1,8 +1,9 @@
 # CardResell advertising launch packet
 
 Prepared October 12, 2026, America/New_York. Status: materials ready for review;
-public promotion and paid spend remain gated. No ads, outreach, purchases or
-new provider commitments have been made. This is an operating proposal, not a
+public promotion and paid spend remain gated. No ads or outreach have been
+sent. Approved daily backup storage is enabled at $0.25 per GB-month, keeping
+the latest day; the OpenAI $100 organization limit is enforced. This is an operating proposal, not a
 forecast of sales or a claim that commercial permissions have been granted.
 
 ## What we are selling
@@ -43,7 +44,7 @@ More actions. Fees vary with eligibility, value and submission details.
 | Public destinations | Homepage with shop/meta tags, pricing, contact, privacy, terms, robots, sitemap and social image return HTTP 200 | Recheck before publishing a campaign |
 | Tracking | 23 acquisition checks pass; prior QA checkout metadata verified | Reconcile first genuine tagged purchase to fulfillment |
 | Payments | Four current-system owner/testing purchases reconciled in earlier evidence | These are not acquired-customer or profitability evidence |
-| Recovery | Earlier isolated snapshot/restore passed scoped checks | Correct production account, recurring retention and cost approval; first scheduled backup verified |
+| Recovery | Isolated restore passed scoped checks; production daily backup enabled with one-day retention at approved $0.25/GB-month | Verify first completed scheduled backup |
 | Data permissions | TCG Price Lookup paid account previously confirmed; public terms need clarification; PriceCharting commercial agreement unverified | Written permission for actual display, caching and draft/export use |
 | Economics | Provider usage tooling exists; actual dollar coverage incomplete | Reconcile invoices, failed attempts, free usage and overages |
 | Ad spend | Nothing purchased | Owner approves channel, total cap and maximum provider exposure |
@@ -285,12 +286,10 @@ recipient/channel is verified. No account secrets are needed in either draft.
 
 ## Concrete next decisions
 
-1. Production Upstash access is restored through Vercel’s Open in Upstash link. Confirm the exact
-   resource, one- or three-day retention availability and added cost. Recommend
-   the longest included daily retention; do not silently purchase a plan upgrade.
-   The earlier automatic approval rejection requires explicit permission for
-   the actual recurring backup setting. Verify its first completed scheduled
-   backup after enabling; retain the isolated-restore evidence separately.
+1. Verify the first completed scheduled backup on production upstash-kv-bistre-arrow.
+   Daily Backup is enabled with Last 1 day retention at the owner-approved
+   $0.25 per GB-month rate. No Prod Pack upgrade was purchased. Retain the
+   isolated-restore evidence separately; a saved setting is not a completed run.
 2. Approve sending the two permission requests through verified support channels,
    or supply existing written commercial agreements if already held.
 3. Supply or securely expose the provider billing/usage exports listed above.
@@ -325,14 +324,16 @@ See the account-evidence continuation in advertising-gates-20261012.md. Ximilar
 Business 100K is $64/month with paid invoice evidence; OpenAI reports $1.05
 for the active Cardresell key in the October 1–12 dashboard window. Neither is
 a complete delivered-unit margin calculation. Production one-day daily backups
-remain off. The existing OpenAI $100 monthly limit is also not enforced; its
-hard-enforcement option is available but awaiting approval. No ad launch is
-authorized by this update.
+are enabled at the approved $0.25 per GB-month rate, with the first scheduled
+run still unverified. OpenAI's existing $100 organization monthly limit is
+enforced. No ad launch is authorized by this update.
 
 ### Control execution update
 
 OpenAI's existing $100 organization monthly limit is now enforced after owner
 approval. Enforcement may lag slightly and requests can fail at the ceiling.
-Upstash daily backups remain OFF: the enable dialog newly disclosed $0.25 per
-GB-month, so the operation was cancelled pending approval of that recurring
-rate. One-day retention does not require Prod Pack, but it is not free storage.
+Upstash initially disclosed $0.25 per GB-month in the enable dialog, so the
+operation was cancelled pending specific rate approval. The owner subsequently
+approved that rate; Daily Backup is now saved ON with Last 1 day retention.
+The first scheduled backup has not appeared in the table yet. One-day retention
+does not require Prod Pack, but it is not free storage.

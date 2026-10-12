@@ -8,6 +8,19 @@ Public HTML, grading JS/CSS and core JS returned 200 and byte-matched the
 tested version. The initial deployment error/fatal log check found no records;
 this was a short observation window, not a long-term reliability claim.
 
+## Current control status
+
+Production Daily Backup is now ON with Last 1 day retention, after the owner
+approved the disclosed $0.25 per GB-month storage rate. The saved account page
+shows the switch enabled and the retention value. No Prod Pack was purchased.
+The first scheduled backup has not appeared yet; the two existing completed
+manual snapshots remain visible. OpenAI's existing $100 organization monthly
+limit is enforced. Earlier OFF / awaiting-approval entries below are history,
+superseded by these verified settings and the execution notes at the end.
+
+Paid advertising remains on hold for written commercial data permissions,
+delivered-unit cost reconciliation and the first completed scheduled backup.
+
 ## Payment fulfillment: verified for current checkout history
 
 Read-only Stripe inspection paginated the complete-session query: 31 sessions,
@@ -134,7 +147,7 @@ Existing provider log summaries explicitly report unknown dollars as unknown.
 | --- | --- | --- |
 | Phone and core workflow | Owner accepted; PR #44 live | Repeat only when a relevant regression appears |
 | Current-system payments | Four payments reconciled | Continue monitoring new payments and reversals |
-| Recovery | Isolated restore and scoped checks pass | Approved recurring retention policy; timed application recovery exercise |
+| Recovery | Isolated restore passes scoped checks; one-day daily backup enabled at approved $0.25/GB-month | First completed scheduled backup; timed application recovery exercise |
 | Provider permissions | Paid plan confirmed; terms ambiguous | Written confirmation for actual display/cache/export behavior |
 | Unit economics | Incomplete | Actual billed scan/grade/retry costs and bounded overage exposure |
 | Acquisition tracking | QA checkout label confirmed | First real tagged purchase joined to durable fulfillment |
@@ -282,3 +295,18 @@ not a billing quote or spending cap. No $200/month Prod Pack upgrade is proposed
 The scheduled-backup gate remains open until the disclosed rate is approved,
 the setting is enabled and a scheduled backup completes. Provider commercial
 permissions and full delivered-unit economics remain open.
+
+## Backup rate approved and daily protection enabled — October 12
+
+The owner approved the newly disclosed $0.25 per GB-month rate. Confirmed
+Enable Daily Backup on production upstash-kv-bistre-arrow. After saving, the
+Backups page shows switch ON and Daily Backup: Last 1 day. The confirmation
+states only the latest daily backup is retained, overwriting the previous day.
+No plan upgrade, additional retention, restore or production reconnection was
+performed.
+
+The table still contains the two existing completed manual backups and no
+new scheduled entry. Enabling the setting is complete; verification of the
+first scheduled backup remains outstanding. This does not establish full
+application recovery or change the scope of the earlier isolated restore.
+No ads or provider permission messages were sent.
