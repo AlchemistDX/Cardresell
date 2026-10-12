@@ -50,12 +50,13 @@ export function completionGuard(label) {
 
   /** Report completion. Exits 1 if anything failed. */
   const finish = (passed, failed) => {
+    if (finished) return;
     finished = true;
     const p = Number(passed) || 0;
     const f = Number(failed) || 0;
     const code = f > 0 ? 1 : 0;
     console.log(`\n${label}: ${p} passed, ${f} failed -- SUITE COMPLETE, exit=${code}`);
-    process.exit(code);
+    process.stdout.write('', () => process.exit(code));
   };
 
   /**

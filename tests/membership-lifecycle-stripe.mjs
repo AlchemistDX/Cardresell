@@ -86,4 +86,4 @@ await test('an imported owner does not block another paid account scheduling its
  const f=await fixture(legacy);const r=await f.api.executeCommand(f.command);assert.equal(r.status,'confirmed');
  const denied=await fixture(legacy);denied.command.owner='imported';await assert.rejects(()=>denied.api.executeCommand(denied.command),/legacy_command_mismatch/);assert.equal(denied.posts.length,0);
 });
-console.log(`membership-lifecycle-stripe: ${passed} passed, ${failed} failed`);process.exit(failed?1:0);
+console.log(`membership-lifecycle-stripe: ${passed} passed, ${failed} failed -- SUITE COMPLETE, exit=${failed?1:0}`);process.stdout.write('', () => process.exit(failed?1:0));

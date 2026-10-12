@@ -111,4 +111,4 @@ for(const enabled of [true,false]){
  check((await run('GET')).body.management.scheduleChanges===enabled);
  if(!enabled)check((await run('POST',{action:'change',plan:'business',operationId:'e'.repeat(64)})).code===409);
 }
-console.log(`membership-account-routes: ${passed} passed, 0 failed`);
+console.log(`membership-account-routes: ${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);

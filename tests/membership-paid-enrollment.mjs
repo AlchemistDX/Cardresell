@@ -36,5 +36,5 @@ const paidRaw = await execute(['GET', key]);
 await reconcilePaidEnrollment(execute, owner, sub);
 check(await execute(['GET', key]) === paidRaw);
 check(!Object.hasOwn(JSON.parse(await execute(['GET', key])), 'freeThrough'));
-console.log(`membership-paid-enrollment: ${n} passed, 0 failed`);
-process.exit(0);
+console.log(`membership-paid-enrollment: ${n} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));

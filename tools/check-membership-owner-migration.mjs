@@ -292,5 +292,5 @@ await test('owner runtime rejects cross-customer canonical invoices before grant
   await assert.rejects(() => ownerRuntime(x).webhook(e));
   assert.equal(await redis(['GET', membershipIncludedHistoryKey('owner')]), null);
 });
-console.log(`${passed} passed, 0 failed`);
-process.exit(0);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));

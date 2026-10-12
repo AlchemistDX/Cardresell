@@ -1965,7 +1965,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </script>
 <link rel="stylesheet" href="/assets/brand-ui.535d636a.css">
 <style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
-<link rel="stylesheet" href="/css/grading-paths.e1704fea.css">
+<link rel="stylesheet" href="/css/grading-paths.f8996d77.css">
 </head>
 <body data-game-theme="pokemon">
 <div class="theme-bg" aria-hidden="true"></div>
@@ -2878,7 +2878,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div class="intro-state" style="text-align:left;padding:1.5rem 1.25rem">
       <!-- headline -->
       <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold-text)">maximum profit</span></div>
-      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search any Pokémon, Magic, Yu-Gi-Oh, Lorcana or One Piece card — see exact fees &amp; payouts across every platform.</div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search supported Pokémon, Magic, Yu-Gi-Oh, Lorcana and One Piece cards — compare estimated fees and payouts on available marketplaces.</div>
 
       <!-- Feature bullets -->
       <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.25rem">
@@ -2914,7 +2914,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
       <!-- Social proof mini row -->
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <div style="padding:.35rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:99px;font-size:.67rem;color:#4ade80;font-weight:700">✓ 100% free to use</div>
+        <div style="padding:.35rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:99px;font-size:.67rem;color:#4ade80;font-weight:700">✓ Free lookup · paid plans available</div>
         <div id="introTodayBadge" style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold-text);font-weight:700;display:none">🔍 <span id="introTodayCount">0</span> cards searched today</div>
         <div style="padding:.35rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;font-size:.67rem;color:var(--text-muted);font-weight:600">No account needed to search</div>
       </div>
@@ -3534,209 +3534,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <!-- ============================================================
      PRICING / SHOP MODAL
      ============================================================ -->
+<!-- Retired shop DOM bindings; current offers are rendered by membership-shop. -->
 <div class="pricing-overlay" id="pricingOverlay" hidden inert aria-hidden="true" onclick="closePricingModal(event)"
-     role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1">
-  <div class="pricing-box" id="pricingBox">
-    <div class="pricing-header">
-      <div class="pricing-title" id="pricingTitle">&#11088; Choose your plan</div>
-      <div class="pricing-sub">Cancel anytime &middot; All paid tiers include monthly scans + discounted top-ups</div>
-    </div>
-
-    <!-- Monthly / Annual toggle -->
-    <div class="pricing-toggle" role="tablist">
-      <button type="button" class="pricing-toggle-btn active" id="pricingToggleMonthly" onclick="setPricingMode('monthly')">Monthly</button>
-      <button type="button" class="pricing-toggle-btn" id="pricingToggleAnnual" onclick="setPricingMode('annual')">Annual <span class="pricing-toggle-savings">SAVE 25%</span></button>
-    </div>
-
-    <!-- 2026-08-20: Annual-mode value banner — shown only when Annual is active. -->
-    <div id="pricingAnnualBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;color:#fde68a;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600">
-      🎁 <strong style="color:var(--gold-text)">Best value:</strong> pay yearly and <strong>save about 25%</strong> on every tier · same scans, same features, one payment.
-    </div>
-
-    <!-- 2026-08-20: Sign-up bonus banner — shown to unverified free users only. -->
-    <div id="pricingSignupBonusBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(56,189,248,.14),rgba(56,189,248,.05));border:1px solid rgba(56,189,248,.35);border-radius:10px;color:#bae6fd;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600">
-      ✨ <strong style="color:#7dd3fc">Verify your email</strong> and get <strong>10 ID scans + 1 AI Grade</strong> instantly — plus 5 IDs + 1 Grade every month, forever.
-    </div>
-
-    <!-- 2026-08-20: Credits-never-expire trust line — always visible. -->
-    <!-- 2026-09-01: refund policy is now failed-scan-only (auto + "Not my card"); 7-day money-back removed as gameable. -->
-    <div style="margin:.15rem auto .55rem;padding:.35rem .8rem;max-width:520px;color:var(--text-muted);font-size:.68rem;text-align:center;line-height:1.4;font-weight:500">
-      🔒 Cancel anytime · <strong style="color:#4ade80">failed scans refund automatically</strong> · credits never expire · no contract
-    </div>
-
-    <div class="pricing-cards">
-
-      <!-- FREE -->
-      <div class="plan-card">
-        <div class="plan-name">Free</div>
-        <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
-        <div class="plan-value">Try it — no card required</div>
-        <div class="plan-value-sub">Verify email to unlock scans</div>
-        <ul class="plan-features">
-          <li><strong>5 ID scans/mo</strong> &middot; recurring</li>
-          <li><strong>1 AI Grade/mo</strong> &middot; recurring</li>
-          <li><strong>10 flips tracked</strong></li>
-          <li>Card price lookup (all games)</li>
-          <li><strong>2 marketplaces:</strong> eBay + TCGPlayer</li>
-          <li>Flip calc + Deal Score + Max Buy</li>
-          <li class="faded">Top-up discounts</li>
-          <li class="faded">13 more marketplaces (Pro / Pro Max)</li>
-        </ul>
-        <button id="pricingFreeBtn" class="plan-btn free-btn" onclick="_freeTierCTA()">Current Plan</button>
-      </div>
-
-      <!-- PRO -->
-      <div class="plan-card featured" data-tier="pro">
-        <div class="plan-badge">MOST POPULAR</div>
-        <div class="plan-name">Pro</div>
-        <div class="plan-price"><sup>$</sup><span data-price-monthly="9" data-price-annual="89">9</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
-        <div class="plan-annual-note">Just $7.50/mo &middot; save about 25%</div>
-        <div class="plan-value">Everyday reseller</div>
-        <div class="plan-value-sub">Pays for itself in 1–2 flips</div>
-        <ul class="plan-features">
-          <li><strong>15 AI Grades/mo</strong></li>
-          <li><strong>30 ID scans/mo</strong></li>
-          <li><strong>10% off</strong> top-up packs</li>
-          <li><strong>+3 marketplaces:</strong> Poshmark, Whatnot, Mercari</li>
-          <li><strong>+2 MTG marketplaces:</strong> Mana Pool, Cardsphere</li>
-          <li><strong>+2 all-TCG marketplaces:</strong> Cardmarket, CardNexus</li>
-          <li>Payout bar chart + <strong>unlimited</strong> flips</li>
-          <li>Skip one bad PSA sub → saves a year</li>
-        </ul>
-        <button id="pricingProBtn" class="plan-btn pro-btn" onclick="startTierCheckout('pro')">
-          <span data-cta-monthly="Get Pro &mdash; $9.99/mo" data-cta-annual="Get Annual &mdash; $89.99/yr">Get Pro &mdash; $9.99/mo</span>
-        </button>
-      </div>
-
-      <!-- PRO MAX -->
-      <div class="plan-card tier-max" data-tier="pro_max">
-        <div class="plan-badge">BEST VALUE</div>
-        <div class="plan-name">Pro Max</div>
-        <div class="plan-price"><sup>$</sup><span data-price-monthly="19" data-price-annual="179">19</span><span style="font-size:1rem">.99</span><sub data-interval-monthly="/mo" data-interval-annual="/yr">/mo</sub></div>
-        <div class="plan-annual-note">Just $15/mo &middot; save about 25%</div>
-        <div class="plan-value">Serious flipper</div>
-        <div class="plan-value-sub">Serious flipper — 40 grades &amp; 100 IDs / mo</div>
-        <ul class="plan-features">
-          <li><strong>40 AI Grades/mo</strong></li>
-          <li><strong>100 ID scans/mo</strong></li>
-          <li><strong>15% off</strong> top-up packs</li>
-          <li><strong>+2 pro marketplaces:</strong> COMC, Fanatics Collect</li>
-          <li><strong>+4 buylists:</strong> Card Kingdom, CoolStuffInc, Star City Games, TCG Bulk</li>
-          <li><strong>All 15 venues</strong> unlocked</li>
-          <li>Everything in Pro</li>
-          <li>Priority email support</li>
-          <li>Early access to new features</li>
-        </ul>
-        <button id="pricingMaxBtn" class="plan-btn max-btn" onclick="startTierCheckout('pro_max')">
-          <span data-cta-monthly="Get Pro Max &mdash; $19.99/mo" data-cta-annual="Get Annual &mdash; $179.99/yr">Get Pro Max &mdash; $19.99/mo</span>
-        </button>
-      </div>
-
-
-    </div>
-    <div class="pricing-close">
-      <button class="pricing-close-btn" onclick="closePricingModal()">Maybe later</button>
-    </div>
-  </div>
-</div>
-
-<!-- TOAST -->
-<!-- ============ SHOP MODAL (credit packs) ============
-     2026-09-02 (CR-021): single storefront for one-time credit packs. Prices
-     here MUST stay in lockstep with /pricing.html's pack catalog, the gear
-     panel buy buttons, api/stripe-id-checkout.js and api/stripe-grade-checkout.js.
-     Do not edit one without the others. -->
-<div class="shop-overlay" id="shopOverlay" hidden inert aria-hidden="true" onclick="closeShop(event)" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
-  <div class="shop-box" id="shopBox" onclick="event.stopPropagation()">
-    <div class="shop-head">
-      <div>
-        <div class="shop-title" id="shopTitle">&#128722; Shop</div>
-        <!-- 2026-09-02 (CR-021): copy must stay literally true. Purchased packs
-             are a standing KV counter (scans:<sub>:id_paid_left) so they DO
-             persist indefinitely. The plan allowance is keyed to a month stamp
-             (id_free_used_<stamp>) so it RESETS and does not roll over. Do not
-             reword this into a blanket "credits roll over" claim. -->
-        <div class="shop-sub">One-time packs — purchased credits never expire. Your monthly plan allowance resets each month.</div>
-      </div>
-      <button class="shop-x" onclick="closeShop()" aria-label="Close shop">&#10005;</button>
-    </div>
-
-    <div class="shop-bal">
-      <div class="shop-bal-card">
-        <div class="shop-bal-lbl">ID Scanner</div>
-        <div class="shop-bal-num" id="shopIdBal">&mdash;</div>
-        <div class="shop-bal-sub" id="shopIdSub">Sign in to check</div>
-      </div>
-      <div class="shop-bal-card">
-        <div class="shop-bal-lbl">AI Grader</div>
-        <div class="shop-bal-num" id="shopGradeBal">&mdash;</div>
-        <div class="shop-bal-sub" id="shopGradeSub">Sign in to check</div>
-      </div>
-    </div>
-
-    <div id="shopSignInNote" class="shop-signin" style="display:none">
-      You need to be signed in to buy credits so they attach to your account.
-      <a href="/signin" style="color:var(--gold-text);font-weight:800">Sign in</a> &mdash; verifying your email also unlocks 10 free ID scans + 1 AI Grade.
-    </div>
-
-    <div class="shop-tabs" role="tablist">
-      <button type="button" class="shop-tab active" id="shopTabId" role="tab" aria-selected="true" aria-controls="shopPanelId" onclick="shopSetTab('id')">ID Scans</button>
-      <button type="button" class="shop-tab" id="shopTabGrade" role="tab" aria-selected="false" aria-controls="shopPanelGrade" onclick="shopSetTab('grade')">AI Grades</button>
-    </div>
-
-    <div class="shop-panel active" id="shopPanelId" role="tabpanel" aria-labelledby="shopTabId">
-      <div class="shop-sub" style="margin-bottom:.6rem">Identify a card from a photo and pull live comps.</div>
-      <div class="shop-packs">
-        <button type="button" class="shop-pack" onclick="shopBuy('id','10')">
-          <div class="shop-pack-qty">10 scans</div>
-          <div class="shop-pack-price">$1.99</div>
-          <div class="shop-pack-note">$0.20 per scan</div>
-        </button>
-        <button type="button" class="shop-pack feat" onclick="shopBuy('id','50')">
-          <span class="shop-pack-badge">Popular</span>
-          <div class="shop-pack-qty">50 scans</div>
-          <div class="shop-pack-price">$7.99</div>
-          <div class="shop-pack-save">$0.16 each &middot; save 20%</div>
-        </button>
-        <button type="button" class="shop-pack" onclick="shopBuy('id','100')">
-          <span class="shop-pack-badge alt">Best value</span>
-          <div class="shop-pack-qty">100 scans</div>
-          <div class="shop-pack-price">$12.99</div>
-          <div class="shop-pack-save">$0.13 each &middot; save 35%</div>
-        </button>
-      </div>
-    </div>
-
-    <div class="shop-panel" id="shopPanelGrade" role="tabpanel" aria-labelledby="shopTabGrade">
-      <div class="shop-sub" style="margin-bottom:.6rem">AI condition estimate before you pay to submit for grading.</div>
-      <div class="shop-packs">
-        <button type="button" class="shop-pack" onclick="shopBuy('grade','10')">
-          <div class="shop-pack-qty">10 grades</div>
-          <div class="shop-pack-price">$5.99</div>
-          <div class="shop-pack-note">$0.60 per grade</div>
-        </button>
-        <button type="button" class="shop-pack feat" onclick="shopBuy('grade','25')">
-          <span class="shop-pack-badge">Popular</span>
-          <div class="shop-pack-qty">25 grades</div>
-          <div class="shop-pack-price">$12.99</div>
-          <div class="shop-pack-save">$0.52 each &middot; save 13%</div>
-        </button>
-        <button type="button" class="shop-pack" onclick="shopBuy('grade','50')">
-          <span class="shop-pack-badge alt">Best value</span>
-          <div class="shop-pack-qty">50 grades</div>
-          <div class="shop-pack-price">$22.99</div>
-          <div class="shop-pack-save">$0.46 each &middot; save 23%</div>
-        </button>
-      </div>
-    </div>
-
-    <div class="shop-foot">
-      <div class="shop-foot-note" id="shopTierNote">&#128161; Pro includes <strong style="color:var(--text)">15 grader + 30 ID scans every month</strong> and 10% off these packs. Pro Max includes 40 + 100 and 15% off.</div>
-      <button type="button" class="shop-alt-btn" onclick="shopOpenPlans()">&#11088; Compare monthly plans</button>
-      <button type="button" class="shop-alt-btn" id="shopBillingBtn" style="display:none" onclick="openBillingPortal()">&#128179; Manage billing &middot; cancel or update payment</button>
-    </div>
-  </div>
-</div>
+     role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1"><div class="pricing-box" id="pricingBox"><div class="pricing-header"><div class="pricing-title" id="pricingTitle"></div><div class="pricing-sub"></div></div><div class="pricing-toggle" role="tablist"><button type="button" class="pricing-toggle-btn active" id="pricingToggleMonthly" onclick="setPricingMode('monthly')"></button><button type="button" class="pricing-toggle-btn" id="pricingToggleAnnual" onclick="setPricingMode('annual')"><span class="pricing-toggle-savings"></span></button></div><div id="pricingAnnualBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;color:#fde68a;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600"><strong style="color:var(--gold-text)"></strong><strong></strong></div><div id="pricingSignupBonusBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(56,189,248,.14),rgba(56,189,248,.05));border:1px solid rgba(56,189,248,.35);border-radius:10px;color:#bae6fd;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600"><strong style="color:#7dd3fc"></strong><strong></strong></div><div style="margin:.15rem auto .55rem;padding:.35rem .8rem;max-width:520px;color:var(--text-muted);font-size:.68rem;text-align:center;line-height:1.4;font-weight:500"><strong style="color:#4ade80"></strong></div><div class="pricing-cards"><div class="plan-card"><div class="plan-name"></div><div class="plan-price"><sup></sup><sub></sub></div><div class="plan-value"></div><div class="plan-value-sub"></div><ul class="plan-features"><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li></li><li><strong></strong></li><li></li><li class="faded"></li><li class="faded"></li></ul><button id="pricingFreeBtn" class="plan-btn free-btn" onclick="_freeTierCTA()"></button></div><div class="plan-card featured" data-tier="pro"><div class="plan-badge"></div><div class="plan-name"></div><div class="plan-price"><sup></sup><span></span><span style="font-size:1rem"></span><sub></sub></div><div class="plan-annual-note"></div><div class="plan-value"></div><div class="plan-value-sub"></div><ul class="plan-features"><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li></li></ul><button id="pricingProBtn" class="plan-btn pro-btn" onclick="startTierCheckout('pro')"><span></span></button></div><div class="plan-card tier-max" data-tier="pro_max"><div class="plan-badge"></div><div class="plan-name"></div><div class="plan-price"><sup></sup><span></span><span style="font-size:1rem"></span><sub></sub></div><div class="plan-annual-note"></div><div class="plan-value"></div><div class="plan-value-sub"></div><ul class="plan-features"><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li></li><li></li><li></li></ul><button id="pricingMaxBtn" class="plan-btn max-btn" onclick="startTierCheckout('pro_max')"><span></span></button></div></div><div class="pricing-close"><button class="pricing-close-btn" onclick="closePricingModal()"></button></div></div></div><div class="shop-overlay" id="shopOverlay" hidden inert aria-hidden="true" onclick="closeShop(event)" role="dialog" aria-modal="true" aria-labelledby="shopTitle"><div class="shop-box" id="shopBox" onclick="event.stopPropagation()"><div class="shop-head"><div><div class="shop-title" id="shopTitle"></div><div class="shop-sub"></div></div><button class="shop-x" onclick="closeShop()" aria-label="Close shop"></button></div><div class="shop-bal"><div class="shop-bal-card"><div class="shop-bal-lbl"></div><div class="shop-bal-num" id="shopIdBal"></div><div class="shop-bal-sub" id="shopIdSub"></div></div><div class="shop-bal-card"><div class="shop-bal-lbl"></div><div class="shop-bal-num" id="shopGradeBal"></div><div class="shop-bal-sub" id="shopGradeSub"></div></div></div><div id="shopSignInNote" class="shop-signin" style="display:none"><a href="/signin" style="color:var(--gold-text);font-weight:800"></a></div><div class="shop-tabs" role="tablist"><button type="button" class="shop-tab active" id="shopTabId" role="tab" aria-selected="true" aria-controls="shopPanelId" onclick="shopSetTab('id')"></button><button type="button" class="shop-tab" id="shopTabGrade" role="tab" aria-selected="false" aria-controls="shopPanelGrade" onclick="shopSetTab('grade')"></button></div><div class="shop-panel active" id="shopPanelId" role="tabpanel" aria-labelledby="shopTabId"><div class="shop-sub" style="margin-bottom:.6rem"></div><div class="shop-packs"><button type="button" class="shop-pack" onclick="shopBuy('id','10')"><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-note"></div></button><button type="button" class="shop-pack feat" onclick="shopBuy('id','50')"><span class="shop-pack-badge"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button><button type="button" class="shop-pack" onclick="shopBuy('id','100')"><span class="shop-pack-badge alt"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button></div></div><div class="shop-panel" id="shopPanelGrade" role="tabpanel" aria-labelledby="shopTabGrade"><div class="shop-sub" style="margin-bottom:.6rem"></div><div class="shop-packs"><button type="button" class="shop-pack" onclick="shopBuy('grade','10')"><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-note"></div></button><button type="button" class="shop-pack feat" onclick="shopBuy('grade','25')"><span class="shop-pack-badge"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button><button type="button" class="shop-pack" onclick="shopBuy('grade','50')"><span class="shop-pack-badge alt"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button></div></div><div class="shop-foot"><div class="shop-foot-note" id="shopTierNote"><strong style="color:var(--text)"></strong></div><button type="button" class="shop-alt-btn" onclick="shopOpenPlans()"></button><button type="button" class="shop-alt-btn" id="shopBillingBtn" style="display:none" onclick="openBillingPortal()"></button></div></div></div>
 
 <div id="csToast" class="cs-toast"></div>
 
@@ -3916,8 +3716,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
     <div style="text-align:left;font-size:.83rem;line-height:1.65;color:var(--text-muted);margin-bottom:1rem">
       CardResell was built by <strong style="color:var(--text)">Will Jones</strong> in <strong style="color:var(--text)">Bradenton, Florida</strong> to solve a problem every reseller hits — you know your card is worth money but you have no idea which platform actually pays you the most after fees.<br><br>
-      The app pulls recent eBay sold comps (when eBay serves them) and real-time prices from the TCG market, then calculates your exact take-home on every major platform side by side — eBay, TCGplayer, COMC, Poshmark, Whatnot, Mercari, Fanatics Collect, Cardmarket, Card Kingdom &amp; CoolStuffInc buylists, plus Mana Pool &amp; Cardsphere for Magic — so you never leave money on the table.<br><br>
-      The AI Grading Estimate uses GPT-4o vision to analyze centering, corners, edges, and surface — giving you a realistic grade prediction before you spend money on a PSA submission.
+      Compare estimated take-home across available marketplaces using sourced market prices and guide values. Check the source, condition and variant before relying on a value. When eBay sold data is unavailable, use the sold-search link to research comparable sales yourself.<br><br>
+      The AI Grading Estimate assesses visible centering, corners, edges and surface from your photos. It is a condition estimate, not a professional grade or a guarantee of any grading company’s result.
     </div>
 
     <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
@@ -4145,7 +3945,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.f17a14ef.js"></script>
-<script defer src="/js/core.c7759f76.js"></script>
+<script defer src="/js/core.a9bf6645.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }

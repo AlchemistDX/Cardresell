@@ -39,4 +39,4 @@ for (const change of [
   { MEMBERSHIP_STRIPE_LIVE_KEY: 'rk_live_syntheticOnly' },
   { VERCEL_ENV: 'preview' },
 ]) { assert.throws(() => membershipEnvironment({ ...existing, ...change }, 'live')); n++; }
-console.log(`membership-environment: ${n} passed, 0 failed`);
+console.log(`membership-environment: ${n} passed, 0 failed -- SUITE COMPLETE, exit=0`);

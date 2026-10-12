@@ -25,4 +25,4 @@ for (const status of [401, 403, 500]) {
   assert.equal(JSON.stringify(result).includes('remote details'), false);
   passed++;
 }
-console.log(`membership-writer-readiness: ${passed} passed, 0 failed`);
+console.log(`membership-writer-readiness: ${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);

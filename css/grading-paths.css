@@ -1,7 +1,7 @@
 .grading-paths{margin-top:1rem;padding:.8rem;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-size:.82rem;line-height:1.5}
 .grading-paths summary{cursor:pointer;font-weight:800;font-size:.95rem;min-height:32px}
 .grading-paths p{color:var(--text-muted);font-size:.75rem;margin:.6rem 0}
-.grading-paths a{color:var(--gold)}
+.grading-paths a{color:var(--gold-text)}
 .grading-paths fieldset{min-width:0;margin:.7rem 0;padding:.7rem;border:1px solid var(--border);border-radius:10px}
 .grading-paths legend{font-weight:800;padding:0 .3rem}
 .grading-paths label{display:flex;flex-direction:column;gap:.25rem;margin:.5rem 0;color:var(--text);font-size:.75rem}

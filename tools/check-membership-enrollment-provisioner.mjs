@@ -66,5 +66,5 @@ await test('explicit public live provisioning binds a new audit to live mode', a
   assert.equal(await execute(['GET', membershipBootstrapAuditKey('legacyOwner')]), null);
   assert.equal(await execute(['GET', 'pro:legacyOwner']), '{"subscriptionId":"sub_old"}');
 });
-console.log(`${passed} passed, 0 failed`);
-process.exit(0);
+console.log(`${passed} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));

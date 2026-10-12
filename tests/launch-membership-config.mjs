@@ -57,4 +57,4 @@ equal([LAUNCH_CREDIT_POLICY.idCost, LAUNCH_CREDIT_POLICY.gradeCost,
   LAUNCH_CREDIT_POLICY.deepGradeCost], [1, 1, 2]);
 equal(DIRECT_SUPPORT_COPY,
   'Direct support by call or text. Response within 24 hours.');
-console.log(`${checks} passed, 0 failed; configuration only, not activation or live payment proof.`);
+console.log(`${checks} passed, 0 failed; configuration only, not activation or live payment proof. -- SUITE COMPLETE, exit=0`);

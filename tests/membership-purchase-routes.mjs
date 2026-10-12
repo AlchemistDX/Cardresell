@@ -47,4 +47,4 @@ const previous=process.env.VERCEL_ENV;
 process.env.VERCEL_ENV='production';
 await assert.rejects(()=>membershipPurchaseRuntime(),/purchase_disabled/);count++;
 if(previous===undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV=previous;
-console.log(`membership-purchase-routes: ${count} passed, 0 failed`);
+console.log(`membership-purchase-routes: ${count} passed, 0 failed -- SUITE COMPLETE, exit=0`);

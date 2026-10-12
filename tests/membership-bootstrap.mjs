@@ -47,5 +47,5 @@ const race = createMembershipBootstrap({ accountId, execute: async command => {
 } });
 await reject(() => race(owner));
 check(await execute(['GET', key]) === null);
-console.log(`membership-bootstrap: ${n} passed, 0 failed`);
-process.exit(0);
+console.log(`membership-bootstrap: ${n} passed, 0 failed -- SUITE COMPLETE, exit=0`);
+process.stdout.write('', () => process.exit(0));
