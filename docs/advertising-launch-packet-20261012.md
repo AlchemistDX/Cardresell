@@ -285,7 +285,7 @@ recipient/channel is verified. No account secrets are needed in either draft.
 
 ## Concrete next decisions
 
-1. Restore access to the production Upstash workspace. Then confirm the exact
+1. Production Upstash access is restored through Vercel’s Open in Upstash link. Confirm the exact
    resource, one- or three-day retention availability and added cost. Recommend
    the longest included daily retention; do not silently purchase a plan upgrade.
    The earlier automatic approval rejection requires explicit permission for
@@ -318,3 +318,13 @@ contact, privacy, terms, robots, sitemap and PNG preview return 200 with the
 expected content types. Reviewed existing 1200x630 social artwork; no invented
 prices or new provider promises added. HTTP checks do not substitute for a
 real ad-platform approval, human phone acceptance or an acquired purchase.
+
+### Latest operational evidence
+
+See the account-evidence continuation in advertising-gates-20261012.md. Ximilar
+Business 100K is $64/month with paid invoice evidence; OpenAI reports $1.05
+for the active Cardresell key in the October 1–12 dashboard window. Neither is
+a complete delivered-unit margin calculation. Production one-day daily backups
+remain off. The existing OpenAI $100 monthly limit is also not enforced; its
+hard-enforcement option is available but awaiting approval. No ad launch is
+authorized by this update.

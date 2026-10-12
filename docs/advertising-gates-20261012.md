@@ -184,3 +184,77 @@ alongside TCG Price Lookup to the written-permissions gate.
 
 See advertising-launch-packet-20261012.md for copy, channel links, launch
 sequence, cost reconciliation fields and drafted provider requests.
+
+## Account evidence continuation — October 12, approximately 13:46 ET
+
+The account-access blocker is resolved. Use Vercel project Connections → Storage
+→ upstash-kv-bistre-arrow → Open in Upstash. This opens the Vercel-integrated
+Upstash account, distinct from the empty Personal workspace. The resource is
+connected to CardResell Production; aureolin-door is Preview/Development.
+
+Production Backups shows Daily Backup OFF and the completed 3.03 MB
+production-launch-check-20261012 backup, plus the earlier October 2 snapshot.
+The retention menu offers Last 1 day; Last 3 days is marked PROD. Upstash's
+official Prod Pack article says all plans support one-day daily retention and
+three-day retention requires the $200/month add-on. Propose enabling the
+existing plan's one-day daily backup only; no upgrade or restore. No setting
+was changed because the earlier approval rejection requires explicit permission.
+Verify the first completed scheduled backup after enabling before closing this gate.
+Source: https://upstash.com/blog/upstash-prod-pack
+
+Resource cost observations differ: Vercel's resource page displayed $0.30 for
+September 30–October 31; the provider dashboard displayed $0.38 with 188K
+commands. These are dashboard usage estimates with potentially different
+refresh times, not reconciled invoices. Do not combine or present them as
+separate charges.
+
+### Ximilar: authenticated allowance and invoices established
+
+Owner-selected account exposes Business 100K. Current monthly allowance:
+100,000 credits, 4,020 used, 95,980 remaining, renewal October 16. Unused plan
+credits do not roll over according to the account page. The invoice table
+shows August 16 and September 16 monthly invoices of $64 each, both Paid;
+Credit Packs and Manual Invoices each show zero entries.
+
+Statistics for October 1–12 show 3,880 credits, 388 requests and one active
+service: Collectibles Recognition. Its operation filter lists Identify a TCG
+card and Identify a sports card. The calendar-month statistics and current
+subscription allowance cover different periods; 3,880 versus 4,020 is not
+evidence of missing charges. The visible chart did not establish complete
+per-operation success/failure attribution or overage behavior.
+
+At full use, $64 / 100,000 = $0.00064 per included credit; the observed aggregate
+ratio is 10 credits per request, equivalent to $0.0064 at full plan utilization.
+This is capacity arithmetic, not measured marginal cost or cost per successful
+CardResell scan. The full $64 subscription is payable even with unused credits;
+failed attempts, binder processing, refunds and application delivery still need
+reconciliation. Do not extrapolate successful-user economics from these ratios.
+
+### OpenAI: key-scoped usage and missing hard enforcement established
+
+Owner-selected account: Personal organization / Default project. Usage key
+filter lists active Cardresell and a deleted Cardresell key. With active
+Cardresell selected and the dashboard date query October 1–12, it reports
+$1.05, 59 requests and 375,820 tokens. These are provider dashboard observations,
+not a settled invoice or count of delivered grades. UTC/calendar cutoff and
+reporting lag must be reconciled before comparing to application events.
+
+The model usage page reports several models, so the aggregate must not be
+labeled the cost of a single grading model. Requests may include testing and
+retries; the key label alone does not prove every request was a live customer.
+
+Organization Limits explicitly says “Limit not enforced” for the $100 monthly
+limit, with alerts at $80 and $100. The edit dialog exposes an OFF “Enforce a
+hard limit” switch. It was inspected and cancelled without saving. Proposed
+control: enforce the existing $100 organization monthly limit, without raising
+it. Reaching the ceiling may stop all API activity in this organization,
+including CardResell AI grading and other projects; obtain explicit owner
+approval before applying. No secrets or credential changes are needed.
+
+### Remaining gate status
+
+Access and plan evidence advanced; do not mark overall economics complete.
+Still needed: cost-to-delivery reconciliation, Ximilar exhaustion/overage
+behavior, other provider license expenses, recurring-backup approval and
+completion, OpenAI hard-limit decision, and written commercial permissions.
+No advertisements, provider messages, purchases or settings changes occurred.
