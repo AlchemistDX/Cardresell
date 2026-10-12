@@ -1673,11 +1673,17 @@ try {
       F.packetCurrent.body.packet.priceBasis.retrievedAt === '2026-09-08T12:00:00.000Z',
       F.packetCurrent.body.packet.priceBasis.retrievedAt);
 
-    T.check('and the draft reads as ready to list',
+    T.check('and the draft passes its field checks',
       await page.evaluate(() => {
         const v = document.querySelector('[data-review-verdict]');
         return v && v.getAttribute('data-review-verdict');
       }) === 'ready');
+    const reviewCopy = await page.locator('#reviewWrap').innerText();
+    T.check('passing field checks do not promise marketplace readiness',
+      reviewCopy.includes('Draft checks passed') && !reviewCopy.includes('Ready to list'));
+    T.check('seller review remains explicit when the saved details pass',
+      await page.locator('[data-listing-review-reminder]').innerText() ===
+      'Before listing, confirm your seller photos, card condition, asking price and shipping costs. Review the pricing-source notes below. This draft has not been submitted to a marketplace.');
     await ctx.close();
 
     // ── RELOAD: a fresh context, nothing in memory ────────────────────────
