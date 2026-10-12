@@ -186,7 +186,7 @@ try {
     ok('price rendered', (await card.locator('.draft-row-price').innerText()).includes('32.84'));
     eq('readiness rendered', (await card.locator('.draft-row-ready').count()), 1);
     eq('thumbnail slot rendered', (await card.locator('.draft-row-thumb').count()), 1);
-    eq('three actions', await card.locator('.draft-card-actions .draft-act').count(), 3);
+    eq('three actions', await card.locator('.draft-card-actions button.draft-act').count(), 3);
     eq('no page errors', errors.join('|'), '');
     await ctx.close();
   });
@@ -467,7 +467,7 @@ try {
     const box = await card.boundingBox();
     ok('the card fits the viewport', box.width <= 375);
 
-    const acts = card.locator('.draft-card-actions .draft-act');
+    const acts = card.locator('.draft-card-actions button.draft-act');
     for (let i = 0; i < 3; i += 1) {
       const b = await acts.nth(i).boundingBox();
       ok(`action ${i + 1} meets the 44px touch height`, b.height >= 44);
@@ -529,6 +529,78 @@ try {
     await waitDl;
     await settle(page, 500);
     await page.screenshot({ path: `${SHOTS}/draft-card-desktop-download.png` });
+    await ctx.close();
+  });
+
+  await T.section('G9 — selected drafts become one Create-Drafts file', async () => {
+    const sub = 'u-bulk-download';
+    const { ctx, page, errors } = await boot({ sub, viewport: { width: 375, height: 812 } });
+    const a = await apiCreate(sub, 'bulk-a', 'bulk-download-a-00000000', { price: 11.11 });
+    const b = await apiCreate(sub, 'bulk-b', 'bulk-download-b-00000000', { price: 22.22 });
+    const c = await apiCreate(sub, 'bulk-c', 'bulk-download-c-00000000', { price: 33.33 });
+    await openList(page);
+    ok('bulk button starts disabled', !(await page.locator('[data-draft-download-selected]').isEnabled()));
+    await page.click(`[data-draft-select="${a.id}"]`);
+    await page.click(`[data-draft-select="${b.id}"]`);
+    const downloads = [];
+    page.on('download', d => downloads.push(d));
+    const pending = page.waitForEvent('download');
+    await page.click('[data-draft-download-selected]');
+    const dl = await pending;
+    const text = await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8');
+    await page.waitForFunction(() => window._draftsState.bulk?.busy === false);
+    const lines = text.trim().split('\r\n');
+    eq('one download for the selection', downloads.length, 1);
+    eq('one template header', lines.filter(l => l.startsWith('Action(')).length, 1);
+    eq('exactly two Draft rows', lines.filter(l => l.startsWith('Draft,')).length, 2);
+    ok('first selected price included', text.includes(',11.11,'));
+    ok('second selected price included', text.includes(',22.22,'));
+    ok('unselected price excluded', !text.includes(',33.33,'));
+    ok('never an Add action', !lines.some(l => l.startsWith('Add,')));
+    ok('bulk filename', dl.suggestedFilename().startsWith('ebay-selected-drafts-2-'));
+    ok('upload handoff shown', await page.getByRole('link', {name:'Open eBay upload'}).isVisible());
+    const box = await page.locator('.draft-bulk').boundingBox();
+    ok('toolbar fits mobile', box.x >= 0 && box.x + box.width <= 376);
+    await page.screenshot({path: `${SHOTS}/draft-bulk-375.png`, fullPage:false});
+
+    await page.click('[data-draft-select-all]');
+    eq('select all loaded', await page.locator('[data-draft-select]:checked').count(), 3);
+    await page.click('[data-draft-select-all]');
+    eq('clear selection', await page.locator('[data-draft-select]:checked').count(), 0);
+    await page.click(`[data-draft-select="${a.id}"]`);
+    await page.click(`[data-draft-select="${b.id}"]`);
+    // A failure after one prepared row must not emit a partial file.
+    await page.evaluate(() => {
+      window.__savedPhotoExport = ensureExportablePhotos;
+      let calls = 0;
+      ensureExportablePhotos = async () => ++calls === 1
+        ? {ok:false, reason:'NONE', urls:[], localCount:0}
+        : {ok:false, reason:'MISSING_BLOB', urls:[], localCount:1, missingCount:1};
+    });
+    await page.click('[data-draft-download-selected]');
+    await page.waitForFunction(() => window._draftsState.bulk?.busy === false);
+    eq('failed second draft produces no partial download', downloads.length, 1);
+    ok('failure names combined file', (await page.locator('.draft-bulk').innerText()).includes('No combined file was created'));
+    eq('selection survives failure', await page.locator('[data-draft-select]:checked').count(), 2);
+    await page.evaluate(() => {
+      ensureExportablePhotos = async id => ({ok:true, urls:['https://photos.example.test/' + id + '.jpg'], localCount:1, intendedIds:[id], hostedIds:[id], failed:[]});
+    });
+    const retryDownload = page.waitForEvent('download');
+    await page.click('[data-draft-download-selected]');
+    const retryFile = await retryDownload;
+    const retryText = await (await import('node:fs/promises')).readFile(await retryFile.path(), 'utf8');
+    await page.waitForFunction(() => window._draftsState.bulk?.busy === false);
+    ok('first card keeps its hosted photo', retryText.includes('https://photos.example.test/' + a.id + '.jpg'));
+    ok('second card keeps its hosted photo', retryText.includes('https://photos.example.test/' + b.id + '.jpg'));
+    ok('unselected photo excluded', !retryText.includes('https://photos.example.test/' + c.id + '.jpg'));
+    eq('retry produces one combined file', downloads.length, 2);
+    // A changed account while preparation is pending cancels the export.
+    await page.evaluate(() => { ensureExportablePhotos = async () => { window.googleUser = {sub:'different-owner'}; return {ok:false,reason:'NONE',urls:[],localCount:0}; }; });
+    await page.click('[data-draft-download-selected]');
+    await settle(page, 400);
+    eq('account change emits no file', downloads.length, 2);
+    await page.evaluate(() => { ensureExportablePhotos = window.__savedPhotoExport; window.googleUser = null; });
+    eq('no page errors', errors.join('|'), '');
     await ctx.close();
   });
 
