@@ -59,6 +59,45 @@ they can restore this deployment. These operational gates remain open; a green
 local suite does not replace them. No admission, billing, provider, advertising
 or production deployment setting changed in this continuation.
 
+## Deployed checks — October 11, 2026, 23:00–23:07 New York
+
+Retried the previously pending Vercel deployment for commit
+`c14124ddb277d58861d6727a4ca255f8eca672d6`. Deployment
+`dpl_B89DHcqBsSaS4nrzHNNerGuivcWM` is READY; its Vercel GitHub status and
+foundation workflow are successful.
+
+- Production homepage returned 200. Its SHA-256 remains
+  `cfa4a1870e2c20c1f40c6172e635d14f8b76e7649c7b460018edcdf49af5d9dc`.
+  The public membership catalogue returned JSON/200 with
+  `purchaseEnabled: false`. Unauthenticated drafts and user-data GETs returned
+  401. These are availability/authentication checks, not paid-flow acceptance.
+- Initial raw preview requests followed Vercel's login redirect and returned
+  HTML/200. They were **not** counted as application passes. Retried through the
+  connected account's protected-deployment fetch without disabling protection.
+- The actual preview homepage returned 200. Its application HTML exactly
+  matches the committed index, followed only by Vercel's injected feedback
+  script. The served `js/core.d921811b.js` matches the committed blob exactly.
+  The public catalogue returned JSON/200 with purchases disabled.
+- The preview's drafts and user-data GETs returned JSON/503,
+  `{"error":"Storage unavailable"}`. Both handlers emit this response when
+  `KV_REST_API_URL` or `KV_REST_API_TOKEN` is absent, before checking application
+  authentication. This is an unresolved preview configuration blocker, not
+  evidence that those flows work. The foundation branch has no branch-specific
+  environment variables in the configuration metadata returned by Vercel.
+  The configured preview KV credentials are scoped to other branches; none
+  apply to the foundation branch.
+
+Next deployment acceptance step: configure a verified isolated preview store
+for this branch, with preview-scoped credentials and side effects fenced,
+then redeploy and run authenticated draft/Collection persistence and recovery
+checks against it. Do not copy production storage credentials into this branch.
+Keep membership/payment acceptance on its separately controlled path.
+
+No live-store writes, provider-backed smoke requests, payment attempts, emails,
+or production promotion occurred during these checks. The legacy full endpoint
+smoke and live-store suite remain unexecuted; the targeted GET checks above do
+not replace them.
+
 ## Hosted restore drill procedure
 
 1. Record the source database and backup identifiers, timestamp, retention and
