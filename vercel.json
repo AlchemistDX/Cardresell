@@ -21,6 +21,7 @@
     { "src": "public/favicon.ico", "use": "@vercel/static" },
     { "src": "assets/brand/*", "use": "@vercel/static" },
     { "src": "assets/brand-ui.*.css", "use": "@vercel/static" },
+    { "src": "css/grading-paths.*.css", "use": "@vercel/static" },
     { "src": "js/*.js", "use": "@vercel/static" }
   ],
   "routes": [
@@ -49,6 +50,7 @@
     { "src": "/icon-192.png", "dest": "/public/icon-192.png", "headers": { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800, immutable" } },
     { "src": "/icon-512.png", "dest": "/public/icon-512.png", "headers": { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800, immutable" } },
     { "src": "/_vercel/insights/(.*)", "continue": true },
+    { "src": "/css/(grading-paths\\.[0-9a-f]{8}\\.css)", "dest": "/css/$1", "headers": { "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": "text/css; charset=utf-8" } },
     { "src": "/js/([A-Za-z0-9_-]+\\.[0-9a-f]{8}\\.js)", "dest": "/js/$1", "headers": { "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": "application/javascript; charset=utf-8" } },
     { "src": "/js/(.*\\.js)", "dest": "/js/$1", "headers": { "Cache-Control": "public, max-age=0, must-revalidate", "Content-Type": "application/javascript; charset=utf-8" } },
     { "src": "/(.*\\.html)", "dest": "/$1" },

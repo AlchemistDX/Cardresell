@@ -27,129 +27,139 @@
     const n = Number(s);
     return Number.isFinite(n) && n >= 0 && n <= max ? n : null;
   }
-  function calculate(common, path, net, now = Date.now()) {
-    const raw = number(common.raw), rawShip = number(common.rawShip);
-    const rate = number(common.rate, 100);
-    const sale = number(path.sale), fee = number(path.fee), shipping = number(path.shipping);
-    const saleShip = number(path.saleShip), days = number(path.days, 2000), extra = number(path.extra, 2000);
-    const tier = tiers.find(t => t.id === path.tier && t.grader === path.grader);
-    if (!['PSA', 'CGC', 'BGS', 'SGC'].includes(path.grader)) return { error: 'Choose a grading company.' };
-    if (path.tier !== 'custom' && !tier) return { error: 'Choose a service tier or enter your own quote.' };
-    if (tier && !fresh(now)) return { error: 'Published rates need rechecking. Use a current custom quote.' };
-    if (tier) {
-      const declared = number(path.declared), count = number(path.count, 10000);
-      if (declared === null || count === null || !Number.isInteger(count) || count < 1)
-        return { error: 'Enter declared value and submission card count to check this tier.' };
-      if (declared > tier.maxValue || (sale !== null && sale > tier.maxValue))
-        return { error: 'Value exceeds this tier limit. Choose an eligible tier or a confirmed custom quote.' };
-      if (count < tier.minCards) return { error: 'This tier requires at least ' + tier.minCards + ' cards per submission.' };
+  // Shared prices retain their actual coverage. No numeric grade conversion.
+  function gradeRows(prices, grader) {
+    const defs = [
+      ...Array.from({ length: 6 }, (_, i) => ['grade_' + (i + 1), String(i + 1), 'Mixed graders']),
+      ['grade_7', '7 / 7.5', 'Mixed graders'], ['grade_8', '8 / 8.5', 'Mixed graders'],
+      ['grade_9', '9', 'Mixed graders']
+    ];
+    if (grader !== 'PSA') defs.push(['grade_95', '9.5', 'Mixed graders']);
+    defs.push([grader.toLowerCase() + '_10', '10', grader + ' 10']);
+    if (grader === 'CGC') defs.push(['cgc_pristine_10', 'Pristine 10', 'CGC Pristine 10']);
+    if (grader === 'BGS') defs.push(['bgs_black_10', 'Black Label 10', 'BGS Black Label 10']);
+    return defs.map(([key, grade, basis]) => ({ key, grade, basis,
+      price: number(prices?.[key]) > 0 ? number(prices[key]) : null }));
+  }
+  function priceRow(row, prices, grader, settings, net, now = Date.now()) {
+    if (row.price === null) return { ...row, error: 'Price unavailable for this outcome.' };
+    const sellingNet = net(row.price), rawPrice = number(prices?.raw);
+    const rawNet = rawPrice > 0 ? net(rawPrice) : null;
+    if (!Number.isFinite(sellingNet)) return { ...row, error: 'Selling fees unavailable.' };
+    const count = number(settings.count, 10000);
+    if (!count || !Number.isInteger(count)) return { ...row, sellingNet, error: 'Enter a whole submission size of at least 1.' };
+    let tier, fee, days;
+    if (settings.tier === 'custom') {
+      fee = number(settings.fee); days = number(settings.days, 2000);
+      if (fee === null) return { ...row, sellingNet, error: 'Add your grading quote to finish the breakdown.' };
+    } else {
+      if (!fresh(now)) return { ...row, sellingNet, error: 'Published fees need a refresh. Enter a current quote.' };
+      const eligible = tiers.filter(t => t.grader === grader && row.price <= t.maxValue && count >= t.minCards);
+      tier = settings.tier === 'auto' ? eligible.sort((a, b) => a.fee - b.fee)[0] : eligible.find(t => t.id === settings.tier);
+      if (!tier) return { ...row, sellingNet, error: 'No eligible published tier for this value and submission size. Use a confirmed quote.' };
+      fee = tier.fee; days = tier.days;
     }
-    if (!String(path.outcome || '').trim()) return { error: 'Enter the grade outcome this sale estimate assumes.' };
-    if ([raw, rawShip, rate, sale, fee, shipping, saleShip, days, extra].some(n => n === null))
-      return { error: 'Complete the cost, sale and time assumptions. Enter 0 when a cost does not apply.' };
-    // Published base fees/times stay attached to their source. Custom quotes are
-    // explicit; editing an amount cannot silently misrepresent a published tier.
-    if (tier && (fee !== tier.fee || days !== tier.days)) return { error: 'Use a custom quote for a different fee or wait.' };
-    const rawNet = net(raw) - rawShip, gradedNet = net(sale) - saleShip;
-    if (![rawNet, gradedNet].every(Number.isFinite)) return { error: 'Selling fees are unavailable.' };
-    const calendarDays = Math.ceil(days * 7 / 5) + extra;
-    const capital = Math.max(0, rawNet) + fee + shipping;
-    const holdingCost = capital * rate / 100 * calendarDays / 365;
-    const proceeds = gradedNet - fee - shipping;
-    return { rawNet, gradedNet, proceeds, calendarDays, capital, holdingCost,
-      difference: proceeds - rawNet - holdingCost };
+    const shipping = number(settings.shipping), saleShip = number(settings.saleShip);
+    if ((settings.shipping !== '' && shipping === null) || (settings.saleShip !== '' && saleShip === null))
+      return { ...row, sellingNet, error: 'Shipping must be a nonnegative dollar amount.' };
+    const rate = number(settings.rate, 100), extra = number(settings.extra, 2000);
+    if (rate === null || (rate > 0 && (extra === null || days === null || rawNet === null)))
+      return { ...row, sellingNet, error: 'Capital adjustment needs raw value, grading wait and additional calendar days.' };
+    const completeCosts = shipping !== null && saleShip !== null;
+    const proceeds = sellingNet - fee - (shipping ?? 0) - (saleShip ?? 0);
+    const calendarDays = days === null ? null : Math.ceil(days * 7 / 5) + (extra ?? 0);
+    // Missing expenses stay explicitly excluded; no full net claim until entered.
+    if (rate > 0 && !completeCosts) return { ...row, sellingNet, error: 'Enter shipping costs (0 if none) to calculate capital cost.' };
+    const rawProceeds = rawNet === null ? null : rawNet - (saleShip ?? 0);
+    const holding = rate > 0 ? (Math.max(0, rawProceeds) + fee + shipping) * rate / 100 * calendarDays / 365 : 0;
+    return { ...row, sellingNet, sellingFees: row.price - sellingNet, fee, tier, days,
+      shipping, saleShip, completeCosts, proceeds: proceeds - holding, holding, calendarDays,
+      rawProceeds, difference: rawProceeds === null ? null : proceeds - holding - rawProceeds };
   }
   const states = new Map();
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const money = n => (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);
-  const emptyPath = grader => ({ open: false, grader, tier: '', outcome: '', sale: '', fee: '', shipping: '', saleShip: '', days: '', extra: '', declared: '', count: '' });
+  const money = n => Number.isFinite(n) ? (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2) : '—';
   function mount(el, context) {
     if (!el || typeof el.appendChild !== 'function') return;
-    // Deliberately memory-only, scoped to signed-in user and exact card/analysis.
     const owner = root.googleUser?.sub || root.googleUser?.uid || 'guest';
-    const key = owner + '::' + context.scope;
+    const grader = context.grader || 'PSA';
+    const key = owner + '::' + context.scope + '::' + grader;
     if (!states.has(key)) {
-      if (states.size >= 50) states.delete(states.keys().next().value);
-      states.set(key, { common: { raw: context.rawPrice > 0 ? String(context.rawPrice) : '', rawShip: '', rate: '0' },
-        paths: [emptyPath('PSA'), emptyPath('CGC')], open: false });
+      if (states.size >= 100) states.delete(states.keys().next().value);
+      states.set(key, { tier: sources[grader] ? 'auto' : 'custom', count: '1', fee: '', days: '',
+        shipping: '', saleShip: '', rate: '0', extra: '', open: false, lower: false });
     }
-    const state = states.get(key);
-    const panel = document.createElement('details');
-    panel.className = 'grading-paths'; panel.open = state.open;
-    const input = (label, field, value, readonly = false, text = false) =>
-      '<label>' + label + '<input data-field="' + field + '" type="' + (text ? 'text' : 'number') + '" ' +
-      (text ? 'maxlength="60"' : 'min="0" step="any" inputmode="decimal"') +
-      ' value="' + esc(value) + '"' + (readonly ? ' readonly' : '') + '></label>';
+    const state = states.get(key), prices = context.prices || {};
+    const panel = document.createElement('section'); panel.className = 'grading-paths';
+    const input = (label, field, value) => '<label>' + label + '<input data-field="' + field +
+      '" type="number" min="0" step="any" inputmode="decimal" value="' + esc(value) + '"></label>';
+    const rows = gradeRows(prices, grader);
+    function renderRow(row) {
+      const r = priceRow(row, prices, grader, state, context.net);
+      const heading = row.basis.startsWith('Mixed') ? 'Grade ' + row.grade : row.basis;
+      const subtitle = row.basis.startsWith('Mixed') ? 'Mixed-grader guide · not specific to ' + grader : 'Grader-specific guide';
+      const field = (label, value) => '<div><dt>' + label + '</dt><dd>' + value + '</dd></div>';
+      return '<details class="gp-grade" data-grade="' + row.key + '"><summary><span><strong>' + heading + '</strong><small>Guide value: ' + money(row.price) + '</small><small>' + subtitle + '</small></span>' +
+        '<span class="gp-result">' + money(r.proceeds) + '<small>' + (r.error ? esc(r.error) : r.completeCosts ? 'Estimated net proceeds' : 'Before unentered costs') + '</small></span></summary>' +
+        '<dl>' + field('Guide sale value', money(row.price)) + field('eBay selling fees', money(r.sellingFees ?? (row.price !== null && Number.isFinite(r.sellingNet) ? row.price - r.sellingNet : null))) +
+        field('Grading fee' + (r.tier ? ' · ' + r.tier.name : ''), money(r.fee)) +
+        field('Submission shipping + insurance', r.shipping == null ? 'Not entered' : money(r.shipping)) +
+        field('Sale shipping you pay', r.saleShip == null ? 'Not entered' : money(r.saleShip)) +
+        field('Capital cost adjustment', r.holding == null ? '—' : money(r.holding)) +
+        field(r.completeCosts ? 'Net proceeds' : 'Subtotal before unentered costs', money(r.proceeds)) +
+        field('Difference vs selling raw' + (r.completeCosts ? '' : ' · before unentered costs'), money(r.difference)) + '</dl>' +
+        (r.error ? '<p>' + r.error + '</p>' : '<p>' + (r.days == null ? 'Wait not entered.' : 'Estimated grading wait: ' + r.days + ' working days. Approx. ' + r.calendarDays + ' calendar days' + (state.extra === '' ? ' before transit and selling time' : ' including your extra days') + '.') + '</p>') + '</details>';
+    }
+    function drawResults() {
+      const opened = new Set([...panel.querySelectorAll('.gp-grade[open]')].map(e => e.dataset.grade));
+      panel.querySelector('[data-rows]').innerHTML = rows.filter(r => !/^grade_[1-6]$/.test(r.key)).map(renderRow).join('');
+      panel.querySelector('[data-lower-rows]').innerHTML = rows.filter(r => /^grade_[1-6]$/.test(r.key)).map(renderRow).join('');
+      for (const row of panel.querySelectorAll('.gp-grade')) row.open = opened.has(row.dataset.grade);
+      const summary = panel.querySelector('[data-settings] > summary');
+      if (summary) summary.textContent = 'Your submission details · ' + (state.count || '?') + ' card' + (state.count === '1' ? '' : 's');
+    }
     function draw() {
-      panel.innerHTML = '<summary>Compare grading paths</summary><p>Compare conditional outcomes for PSA, CGC, BGS or SGC. Your AI estimate remains PSA-style; no CGC grade or resale premium is inferred.</p>' +
-        '<fieldset data-common><legend>Sell raw baseline · USD per card</legend><div class="gp-grid">' +
-        input('Raw sale estimate ($)', 'raw', state.common.raw) + input('Raw sale shipping you pay ($)', 'rawShip', state.common.rawShip) +
-        input('Annual capital cost (%) · optional, 0 = off', 'rate', state.common.rate) + '</div></fieldset>' +
-        '<p>Any prefilled raw price is a guide value to review. Selling fees use your existing eBay profile. All shipping and insurance inputs are your allocated cost per card.</p>' +
-        '<div class="gp-paths">' + state.paths.map((p, i) => {
-          const tier = tiers.find(t => t.id === p.tier && t.grader === p.grader);
-          return '<fieldset data-path="' + i + '"><legend>' + p.grader + ' · Path ' + (i + 1) + '</legend><details data-assumptions' + (p.open ? ' open' : '') + '><summary>Submission &amp; sale assumptions</summary><label>Grading company<select data-field="grader">' +
-            ['PSA', 'CGC', 'BGS', 'SGC'].map(g => '<option' + (g === p.grader ? ' selected' : '') + '>' + g + '</option>').join('') + '</select></label>' +
-            '<label>Service tier<select data-field="tier"><option value="">Choose a tier</option>' +
-            tiers.filter(t => t.grader === p.grader).map(t => '<option value="' + t.id + '"' + (t.id === p.tier ? ' selected' : '') + (!fresh() ? ' disabled' : '') + '>' +
-              t.name + ' · $' + t.fee.toFixed(2) + ' · ' + (t.minDays === t.days ? t.days : t.minDays + '–' + t.days) + ' working days</option>').join('') +
-            '<option value="custom"' + (p.tier === 'custom' ? ' selected' : '') + '>My current quote</option></select></label>' +
-            (sources[p.grader] ? '<p><a target="_blank" rel="noopener" href="' + sources[p.grader] + '">Official rates</a> · checked ' + checkedAt +
-              '. ' + (!fresh() ? 'Snapshot expired; enter a current quote. ' : '') + (p.grader === 'PSA' ? 'Value services were paused at this check. ' : '') + 'Direct US base rates; discounts and extras vary.</p>' : '<p>Enter a current quote; no published rate loaded for this company.</p>') +
-            (tier ? '<p>Up to $' + tier.maxValue + ' per card; minimum ' + tier.minCards + ' cards. Confirm eligibility with the grader.</p><div class="gp-grid">' +
-              input('Declared value per card ($)', 'declared', p.declared) + input('Cards in this submission', 'count', p.count) + '</div>' : '') +
-            input(p.grader === 'CGC' ? 'Assumed grade · Gem Mint / Pristine are distinct' : 'Assumed grade', 'outcome', p.outcome, false, true) +
-            '<div class="gp-grid">' + input('Sale estimate at that grade ($)', 'sale', p.sale) + input('Grading fee per card ($)', 'fee', p.fee, !!tier) +
-            input('Submission shipping + insurance ($)', 'shipping', p.shipping) + input('Graded sale shipping you pay ($)', 'saleShip', p.saleShip) +
-            input('Grading wait · working days', 'days', p.days, !!tier) + input('Extra calendar days · transit + sale', 'extra', p.extra) +
-            '</div></details><output data-result="' + i + '" aria-live="polite"></output></fieldset>';
-        }).join('') + '</div><p>Outcomes are seller scenarios, not expected profit or grade predictions. Waits are estimates, not guarantees. Calendar time uses working days × 7/5 plus your extra days, excluding holiday delays. Capital cost uses foregone raw net proceeds plus submission costs; it does not predict card-price changes. No automatic winner is selected.</p>';
-      results();
+      panel.innerHTML = '<h3>Grade-by-grade value</h3><div class="gp-graders" role="group" aria-label="Grading company">' +
+        ['PSA','CGC','BGS','SGC'].map(g => '<button type="button" data-grader="' + g + '" aria-pressed="' + (grader === g) + '">' + g + '</button>').join('') + '</div>' +
+        '<p>Prices and fees follow your selected company. AI condition estimate: PSA ' + esc(context.psaEst ?? 'unavailable') + '; other grading standards have not been estimated.</p>' +
+        '<div class="gp-baseline">Sell raw guide: <strong>' + money(number(prices.raw)) + '</strong> · after eBay fees: ' + (number(prices.raw) > 0 ? money(context.net(number(prices.raw))) : '—') + ' before shipping.</div>' +
+        '<label>Grading service<select data-field="tier">' + (sources[grader] ? '<option value="auto"' + (state.tier === 'auto' ? ' selected' : '') + '>Lowest listed fee eligible for each grade value</option>' : '') +
+        tiers.filter(t => t.grader === grader).map(t => '<option value="' + t.id + '"' + (state.tier === t.id ? ' selected' : '') + '>' + t.name + ' · $' + t.fee.toFixed(2) + ' · ' + (t.minDays === t.days ? t.days : t.minDays + '–' + t.days) + ' working days</option>').join('') +
+        '<option value="custom"' + (state.tier === 'custom' ? ' selected' : '') + '>My actual grading quote</option></select></label>' +
+        (sources[grader] ? '<p><a href="' + sources[grader] + '" target="_blank" rel="noopener">Official fees</a> checked ' + checkedAt + '. Direct US base rates, before membership discounts and extras. ' + (grader === 'PSA' ? 'Value services were paused. ' : '') +
+          'Tier eligibility is estimated from each guide value and your submission size; the grader determines final value. ' + (!fresh() ? 'Snapshot expired; use a current quote.' : '') + '</p>' : '<p>Current ' + grader + ' fees are not loaded. Add your quote; available guide prices still appear below.</p>') +
+        (state.tier === 'custom' ? '<div class="gp-grid">' + input('Grading fee per card ($)', 'fee', state.fee) + input('Grading wait · working days', 'days', state.days) + '</div>' : '') +
+        '<details data-settings' + (state.open ? ' open' : '') + '><summary>Your submission details · assumed 1 card unless changed</summary><p>Only details we cannot know. Blank shipping stays excluded; enter 0 if none. Sale shipping below applies to both raw and graded scenarios.</p><div class="gp-grid">' +
+        input('Cards in your submission', 'count', state.count) + input('Submission shipping + insurance per card ($)', 'shipping', state.shipping) + input('Sale shipping per card ($)', 'saleShip', state.saleShip) +
+        input('Annual capital cost (%) · 0 = off', 'rate', state.rate) + input('Extra calendar days · transit + selling', 'extra', state.extra) + '</div></details>' +
+        '<p class="gp-price-note">Guide values, not guaranteed sale prices. Mixed-grader rows remain the same when no company-specific value is available. Tap a grade for its price breakdown.</p><div data-rows></div>' +
+        '<details data-lower' + (state.lower ? ' open' : '') + '><summary>Grades 1–6</summary><div data-lower-rows></div></details>' +
+        '<p>These are conditional outcomes, not grade predictions or probabilities. Waits are estimates, not guarantees. Calendar estimates use working days × 7/5, excluding holiday delays. Capital cost uses foregone raw net proceeds plus submission costs. Future price movements are not modeled.</p>';
+      drawResults();
     }
-    function results() {
-      state.paths.forEach((path, i) => {
-        const r = calculate(state.common, path, context.net);
-        const out = panel.querySelector('[data-result="' + i + '"]');
-        if (r.error) { out.textContent = r.error; return; }
-        out.innerHTML = '<strong>' + money(r.difference) + ' vs selling raw</strong><br>' +
-          'If it grades ' + esc(path.outcome) + ' and sells for ' + money(Number(path.sale)) +
-          '<br>Graded proceeds after fees, submission and shipping: ' + money(r.proceeds) +
-          '<br>Raw proceeds after fees and shipping: ' + money(r.rawNet) +
-          '<br>Capital cost adjustment: ' + money(r.holdingCost) +
-          '<br>Approximate capital tie-up: ' + r.calendarDays + ' calendar days (' + (r.calendarDays / 30.44).toFixed(1) + ' months)';
-      });
-    }
-    panel.addEventListener('toggle', e => {
-      if (e.target === panel) state.open = panel.open;
-      else if (panel.contains(e.target) && e.target.matches('[data-assumptions]')) state.paths[Number(e.target.closest('[data-path]').dataset.path)].open = e.target.open;
-    }, true);
+    panel.addEventListener('click', e => {
+      const g = e.target.closest('[data-grader]');
+      if (g) {
+        root._crSetGradingGrader(g.dataset.grader);
+        el.querySelector('[data-grader="' + g.dataset.grader + '"]')?.focus();
+      }
+    });
     panel.addEventListener('input', e => {
-      const field = e.target.dataset.field;
-      if (!field || e.target.tagName === 'SELECT') return;
-      const row = e.target.closest('[data-path]');
-      (row ? state.paths[Number(row.dataset.path)] : state.common)[field] = e.target.value;
-      results();
+      if (!e.target.dataset.field || e.target.tagName === 'SELECT') return;
+      state[e.target.dataset.field] = e.target.value; drawResults();
     });
     panel.addEventListener('change', e => {
-      const field = e.target.dataset.field;
       if (e.target.tagName !== 'SELECT') return;
-      const index = Number(e.target.closest('[data-path]').dataset.path);
-      const p = state.paths[index];
-      // The native toggle event is queued. Snapshot the current DOM before a
-      // select-triggered redraw so an immediate change cannot close the form.
-      panel.querySelectorAll('[data-assumptions]').forEach(d => {
-        state.paths[Number(d.closest('[data-path]').dataset.path)].open = d.open;
-      });
-      if (field === 'grader') state.paths[index] = { ...emptyPath(e.target.value), open: p.open };
-      if (field === 'tier') {
-        p.tier = e.target.value;
-        const t = tiers.find(t => t.id === p.tier && t.grader === p.grader);
-        p.fee = t ? String(t.fee) : ''; p.days = t ? String(t.days) : '';
-      }
-      draw();
-      panel.querySelector('[data-path="' + index + '"] [data-field="' + field + '"]').focus();
+      state.open = panel.querySelector('[data-settings]').open;
+      state.lower = panel.querySelector('[data-lower]').open;
+      state.tier = e.target.value; draw(); panel.querySelector('select').focus();
     });
-    draw(); el.appendChild(panel);
+    panel.addEventListener('toggle', e => {
+      if (!panel.contains(e.target)) return;
+      if (e.target.matches('[data-settings]')) state.open = e.target.open;
+      if (e.target.matches('[data-lower]')) state.lower = e.target.open;
+    }, true);
+    draw(); el.replaceChildren(panel);
   }
-  root.CardResellGradingPaths = { mount, calculate, tiers, fresh };
+  root.CardResellGradingPaths = { mount, gradeRows, priceRow, tiers, fresh };
 })(typeof window === 'undefined' ? globalThis : window);

@@ -1,85 +1,92 @@
-# Grading path comparison — October 12, 2026
+# Grade-by-grade grader comparison — October 12, 2026
 
 ## User outcome
 
-Grade results now offer a collapsed **Compare grading paths** section. Two
-independent paths can use PSA, CGC, BGS or SGC. Each path's submission and sale
-assumptions fold away to leave a readable results comparison on mobile.
+The grader pills now replace the price ladder with values for the selected
+company. Each outcome shows its guide value immediately and expands into
+selling fees, grading fee/service, submission shipping and insurance, sale
+shipping, optional capital cost, proceeds, and difference versus selling raw.
+The app uses existing prices and the shared eBay fee engine automatically.
+Users no longer enter an outcome and resale estimate separately for each path.
 
-PSA and CGC have explicit service-tier choices from official US direct-submission
-pages checked October 12. BGS/SGC use seller-entered current quotes. Selecting a
-published tier fills only its base fee and upper estimated working-day wait;
-there is no automatic service selection, discount, shipping allowance or resale
-price. Published snapshots stop calculating after 14 days; custom quotes remain
-available. Refresh `checkedAt` and the tier records only after checking sources,
-then run `node tools/build-grading-paths.mjs` to produce immutable assets.
+PSA and CGC use dated official US direct-submission base rates. The default
+chooses the lowest listed eligible fee for each scenario's guide value and
+submission size (initially 1 card, visibly stated). Users can choose a specific
+service or actual quote. CGC Bulk needs at least 25 cards. Paused PSA Value
+services are excluded. The loaded tier list is not exhaustive; higher values,
+BGS/SGC fees, discounts, and other services require a confirmed custom quote.
+The grader determines final declared-value eligibility and any extra charges.
 
-Each scenario requires its own grade outcome and gross sale assumption. CGC Gem
-Mint and Pristine are explicitly distinguished in the input guidance. Switching
-graders clears the previous assumptions. Nothing converts a PSA estimate into
-a CGC grade, applies a resale multiplier, or copies a PSA comp into another
-grader. No model, scan charge, entitlement or provider call changes.
+Only unknowable submission details are requested: card count, allocated
+shipping/insurance, seller-paid sale shipping, and optional capital assumptions.
+Blank shipping produces a subtotal explicitly labeled before unentered costs;
+only entered costs (including explicit zero) allow the net-proceeds label.
+The same sale-shipping input applies to the raw and graded scenarios.
 
-## Arithmetic and eligibility
+## Price provenance and grading limits
 
-- Raw proceeds = shared eBay net calculation minus raw-sale shipping paid.
-- Graded proceeds = shared eBay net calculation minus graded-sale shipping,
-  grading fee, and allocated submission shipping/insurance.
-- Approximate calendar days = ceiling(working days × 7/5) + entered additional
-  transit/selling days. This is not a calendar promise and excludes holiday delays.
-- Optional capital adjustment = (max(raw proceeds, 0) + grading fee + submission
-  shipping/insurance) × annual rate × calendar days / 365.
-- Displayed difference = graded proceeds − raw proceeds − capital adjustment.
+The API retains grade 1–6 prices plus distinct CGC Pristine 10 and BGS Black
+Label 10 fields from PriceCharting. Grades 1–6 fold away. Grade 7/7.5, 8/8.5,
+9 and 9.5 are mixed-grader guide prices, explicitly labeled as such, and can
+remain unchanged when switching companies. PSA has no 9.5 row. Grade 10 uses
+only the selected company's field. Missing prices never fall back to PSA 10.
+Special grade-10 outcomes are separate, not substituted for ordinary 10.
 
-This compares conditional proceeds with selling raw, not profit on purchase
-cost, expected value across grades, or a guarantee about future card prices.
-The annual rate starts explicitly at 0 (off). Other missing costs remain missing;
-users enter 0 when a cost does not apply. Inputs are USD per card. Shipping means
-seller-paid cost; the scenarios assume no separately charged buyer shipping.
+The AI condition estimate remains PSA-based. This does not create or claim a
+CGC/BGS/SGC AI grade, calibrated probabilities, or an expected resale value.
+Guide values are conditional scenarios, not guaranteed future sale prices.
+Existing six-hour price caches may lack newly mapped fields until refreshed.
+There are no new provider requests, model calls, scan charges or entitlements.
 
-Published tiers check declared value, scenario sale value and submission count.
-CGC Bulk requires 25 cards; PSA paused Value tiers are not offered. Missing,
-negative, nonfinite or unreasonable values withhold calculations. The selection
-is only an eligibility aid; the grader may determine a different value or charge
-extras. A current custom quote is available for other tiers or discounts.
+## Calculation and state
 
-State is memory-only and scoped to signed-in user plus existing card/analysis
-identity. The original grade ladder and its seller-entered cost state remain
-separate. Comparison works when guide comps are absent or the guide request
-fails. Manual quotes do not require additional API calls.
+- Sale proceeds start with the existing shared eBay fee calculation.
+- Graded proceeds subtract grading, allocated submission shipping/insurance,
+  sale shipping and optional capital cost.
+- Raw proceeds subtract the same sale-shipping assumption.
+- Difference is graded proceeds minus raw proceeds; it is not purchase profit.
+- Calendar estimate is ceiling(working days × 7/5) plus extra transit/sale days.
+  Holidays and actual processing delays are not predicted.
+- Capital cost is (max(raw proceeds, 0) + grading fee + submission shipping)
+  × annual rate × calendar days / 365. Rate defaults to 0 (off); enabling it
+  requires complete cost and time assumptions.
 
-## Existing functionality and scope correction
+Missing, invalid, negative, nonfinite or ineligible inputs withhold affected
+calculations and show the reason in the collapsed row. Expanded rows remain
+open while inputs change. State is memory-only, bounded, and scoped by user,
+card/analysis identity and grader. Empty/failed guide requests still leave
+functional grader selection and clearly unavailable values.
 
-The site already has grader-specific cost selection and a submission log with
-company, sent date and returned grade. The next log extension should connect
-an immutable prediction to the actual result/return date, with explicit consent
-before using records for aggregate model evaluation. No shared training dataset
-or accuracy claim is introduced here.
+Published fee snapshots expire after 14 days and then require a current quote.
+To refresh, verify the official sources, update checkedAt and tier records in
+js/grading-paths.js, and run node tools/build-grading-paths.mjs. Automated rate
+refresh is not part of this change. Legacy ladder code remains as a fallback
+when the module is unavailable; its historic comments describe that fallback.
 
-`api/grade-opportunity.js` contains legacy hardcoded PSA economics, but the live
-client deliberately withdrew that route. It stays disabled. This change does
-not revive its unsupported raw-price multipliers or PSA-10-only payoff claims.
+## Verification and release
 
-## Verification
-
-Required gate: `CR_CHROMIUM=<binary> node tests/grading-paths-browser.mjs`.
-The synthetic suite covers conditional arithmetic, shipping/capital costs,
-blank-vs-zero inputs, invalid amounts, bulk/value eligibility, stale snapshots,
-grader separation, actual shipped fee integration, mobile overflow, missing
-comps, scope restoration and duplicate-free rerenders. All external requests
-are blocked. Existing grading-fee and identity suites also cover the preserved
-ladder behavior. Asset fingerprints, test registry and build inspection apply.
-
-The first mobile pass with foldable assumptions found the native details toggle
-event could arrive after a service selection. Taking the visible open state
-before redraw fixes the lost-open-state race; the browser gate was rerun.
-
-This is a comparison foundation. Separate CGC AI prediction, dated company-
-specific sales evidence, calibrated grade probabilities and automated fee
-refresh are subsequent work. Existing advertising backup/rights/cost gates
-still apply. This document does not claim deployment or grading accuracy.
+Required gate: CR_CHROMIUM=<binary> node tests/grading-paths-browser.mjs.
+It covers the actual mapped API fields, selected-grader price isolation,
+per-grade fee eligibility and arithmetic, invalid inputs, blank-vs-zero costs,
+expired rates, shared production fee engine, missing comps, mobile overflow,
+PSA-only AI labeling and state separation. All external requests are blocked.
+The grade-result, grading-fee, identity, asset-fingerprint, registry and build
+checks provide focused regression coverage. No paid grade scans are performed.
 
 Official sources checked October 12, 2026:
 - https://www.psacard.com/services/tradingcardgrading
 - https://www.cgccards.com/submit/services-fees/cgc-grading/
 - https://www.cgccards.com/card-grading/grading-scale/
+- https://www.pricecharting.com/api-documentation
+
+This document records implementation, not a production deployment claim.
+Existing advertising backup, commercial-data-rights and cost gates still apply.
+
+Continuation verification: the original 322 focused checks passed again.
+Review then found the legacy Vercel build/route list omitted the new CSS folder;
+added a static build entry and a fingerprinted CSS route before the HTML fallback.
+Three deployment-configuration checks now guard this failure (325 total checks).
+The API field mappings and PSA/CGC fee snapshot were rechecked against their
+official documentation. PriceCharting's public API documentation also requires
+an express commercial agreement for customer-facing data; confirm account rights
+alongside the existing TCG Price Lookup permission gate before paid advertising.

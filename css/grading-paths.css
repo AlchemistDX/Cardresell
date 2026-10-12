@@ -10,5 +10,22 @@
 .grading-paths :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .grading-paths output{display:block;margin-top:.7rem;padding:.7rem;background:var(--surface-2);border-radius:8px;overflow-wrap:anywhere}
 .grading-paths output strong{font-size:1rem}
+.grading-paths h3{font-size:1rem;margin:0 0 .7rem}
+.gp-graders{display:flex;gap:.4rem;flex-wrap:wrap}
+.gp-graders button{min-height:44px;min-width:56px;padding:.4rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);font-weight:800;cursor:pointer}
+.gp-graders button[aria-pressed=true]{background:var(--gold);color:#111;border-color:var(--gold)}
+.gp-baseline{margin:.7rem 0;padding:.6rem;border-radius:8px;background:var(--surface-2);font-size:.78rem}
+.gp-grade{margin:.55rem 0;padding:.65rem;border:1px solid var(--border);border-radius:9px;background:var(--surface-2)}
+.gp-grade summary{display:flex;justify-content:space-between;gap:.6rem;align-items:center;font-size:.9rem}
+.gp-grade summary:before{content:'▸';font-size:.75rem}
+.gp-grade[open] summary:before{content:'▾'}
+.gp-grade small{display:block;font-size:.67rem;font-weight:400;color:var(--text-muted);line-height:1.35;margin-top:.15rem}
+.gp-result{text-align:right;margin-left:auto;min-width:105px}
+.gp-grade dl{margin:.6rem 0 0;font-size:.76rem}
+.gp-grade dl div{display:flex;justify-content:space-between;gap:1rem;padding:.3rem 0;border-top:1px solid var(--border)}
+.gp-grade dt{color:var(--text-muted)}
+.gp-grade dd{margin:0;text-align:right;white-space:nowrap}
+.grading-paths [data-settings]>summary,.grading-paths [data-lower]>summary{font-size:.78rem;padding:.5rem 0}
+.gp-price-note{font-size:.7rem!important}
 .gp-paths,.gp-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem}
 @media(min-width:760px){.gp-paths,.gp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
