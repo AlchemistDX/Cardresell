@@ -48,6 +48,12 @@ function p(cents) {
 function parsePcPrices(pc) {
   return {
     raw:        p(pc['loose-price']),         // Ungraded
+    grade_1:    p(pc['condition-9-price']),
+    grade_2:    p(pc['condition-10-price']),
+    grade_3:    p(pc['condition-13-price']),
+    grade_4:    p(pc['condition-14-price']),
+    grade_5:    p(pc['condition-15-price']),
+    grade_6:    p(pc['condition-16-price']),
     grade_7:    p(pc['cib-price']),           // "7 or 7.5"
     grade_8:    p(pc['new-price']),           // "8 or 8.5"
     grade_9:    p(pc['graded-price']),        // "9"
@@ -56,6 +62,8 @@ function parsePcPrices(pc) {
     bgs_10:     p(pc['bgs-10-price']),
     cgc_10:     p(pc['condition-17-price']),
     sgc_10:     p(pc['condition-18-price']),
+    cgc_pristine_10: p(pc['condition-19-price']),
+    bgs_black_10: p(pc['condition-20-price']),
   };
 }
 

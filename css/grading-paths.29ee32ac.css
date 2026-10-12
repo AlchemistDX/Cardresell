@@ -1,0 +1,14 @@
+.grading-paths{margin-top:1rem;padding:.8rem;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-size:.82rem;line-height:1.5}
+.grading-paths summary{cursor:pointer;font-weight:800;font-size:.95rem;min-height:32px}
+.grading-paths p{color:var(--text-muted);font-size:.75rem;margin:.6rem 0}
+.grading-paths a{color:var(--gold)}
+.grading-paths fieldset{min-width:0;margin:.7rem 0;padding:.7rem;border:1px solid var(--border);border-radius:10px}
+.grading-paths legend{font-weight:800;padding:0 .3rem}
+.grading-paths label{display:flex;flex-direction:column;gap:.25rem;margin:.5rem 0;color:var(--text);font-size:.75rem}
+.grading-paths input,.grading-paths select{width:100%;box-sizing:border-box;min-height:44px;padding:.55rem;border:1px solid var(--border);border-radius:7px;background:var(--surface-2);color:var(--text);font-size:16px}
+.grading-paths input[readonly]{opacity:.75}
+.grading-paths :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.grading-paths output{display:block;margin-top:.7rem;padding:.7rem;background:var(--surface-2);border-radius:8px;overflow-wrap:anywhere}
+.grading-paths output strong{font-size:1rem}
+.gp-paths,.gp-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem}
+@media(min-width:760px){.gp-paths,.gp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
