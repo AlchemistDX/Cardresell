@@ -29,6 +29,8 @@ check(r.fee === 20 && r.proceeds === 160 && !r.completeCosts, 'known costs produ
 check(calc({shipping:'0', saleShip:'0'}).completeCosts, 'explicit zero costs produce net');
 r = calc({shipping:'10', saleShip:'5'});
 check(r.proceeds === 145 && r.difference === 60, 'fees and shipping applied once against comparable raw proceeds');
+check(calc({shipping:'10',saleShip:'5',other:'15'}).proceeds === 130, 'other grading costs deducted once');
+check(calc({other:'-1'}).error, 'negative optional costs rejected');
 r = calc({shipping:'10', saleShip:'5', rate:'12', extra:'6', tier:'cgc-standard'});
 check(r.calendarDays === 20 && Math.abs(r.holding - 150 * .12 * 20 / 365) < 1e-9, 'capital cost and calendar conversion');
 check(calc({rate:'12'}).error, 'incomplete assumptions cannot produce capital adjustment');
@@ -90,7 +92,7 @@ try {
   const render = async (scope, pc = null) => page.evaluate(({ scope, pc }) => {
     let el = document.getElementById('comparison-fixture');
     if (!el) { el = document.createElement('section'); el.id = 'comparison-fixture'; el.style.cssText = 'position:fixed;inset:0;overflow:auto;z-index:999999;background:var(--surface);padding:16px'; document.body.append(el); }
-    renderGradingUpside(el, pc, 9, 9, { analysis_id: scope });
+    renderGradingUpside(el, pc, 9, 9, { analysis_id: scope, card_name: 'Example card', set_name: 'Example set', card_number: '25' });
   }, { scope, pc });
   await render('one', { source: 'pricecharting', prices: { raw: 100, grade_7: 120, grade_8: 140, grade_9: 160, grade_95: 180, psa_10: 300, cgc_10: 200, cgc_pristine_10: 500, bgs_10: 250, bgs_black_10: 600, sgc_10: 190 } });
   const panel = page.locator('.grading-paths');
@@ -98,6 +100,8 @@ try {
   check(await panel.locator('[data-grade="psa_10"]').count() === 1, 'PSA selected initially');
   check(await panel.locator('[data-grade="grade_95"]').count() === 0, 'PSA has no 9.5 outcome');
   check(await panel.locator('[data-field="sale"]').count() === 0, 'no manual resale-price step');
+  check((await panel.locator('[data-grade="psa_10"] summary').innerText()).includes('90–100 working days'), 'turnaround visible without opening row');
+  check((await panel.locator('[data-decision]').innerText()).includes('Conditional on this grade'), 'highest scenario is not a likely-grade recommendation');
   await panel.locator('[data-grade="psa_10"] summary').click();
   const initial = await panel.locator('[data-grade="psa_10"]').innerText();
   check(initial.includes('$300.00') && initial.includes('$59.99'), 'guide price and sourced grading fee filled automatically');
@@ -118,6 +122,14 @@ try {
   const expected = await page.evaluate(() => { const p = _crSellerProfile(); return netEbayForPrice(200, { ebayStore: p.ebayStore, ebayPromo: p.ebayPromo, trsEligible: false }) - 20 - 10 - 5; });
   check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('$' + expected.toFixed(2)), 'net uses real shared fee engine and entered shipping');
   check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('Estimated net proceeds'), 'net label only after costs entered');
+  check((await panel.locator('[data-baseline]').innerText()).includes('entered sale shipping'), 'raw comparison updates with shipping');
+  await panel.locator('[data-field="other"]').fill('15');
+  check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('$'+(expected-15).toFixed(2)), 'visible net includes optional time and tax costs');
+  const downloadWait=page.waitForEvent('download');await panel.locator('[data-export]').click();
+  const download=await downloadWait,csv=readFileSync(await download.path(),'utf8');
+  check(csv.includes('Example card · Example set · 25')&&csv.includes('CGC')&&csv.includes('Other grading costs USD'), 'CSV keeps card identity and full cost breakdown');
+  check(csv.includes('Entered costs included; zero optional costs excluded')&&csv.includes('not predictions'), 'CSV keeps cost and probability limitations');
+  await panel.locator('[data-field="other"]').fill('0');
   await panel.locator('[data-field="tier"]').selectOption('cgc-bulk');
   check((await panel.locator('[data-grade="cgc_10"]').innerText()).includes('No eligible published tier'), 'bulk unavailable for default one-card submission');
   await panel.locator('[data-field="count"]').fill('25');
@@ -142,7 +154,7 @@ try {
   await panel.locator('[data-grade="cgc_10"] summary').click();
   await panel.locator('[data-grade="cgc_10"]').scrollIntoViewIfNeeded();
   check(await panel.evaluate(e => e.scrollWidth <= e.clientWidth + 1), 'mobile has no horizontal overflow');
-  if (process.argv[2]) await page.screenshot({ path: process.argv[2], fullPage: false });
+  if (process.argv[2]) {await panel.locator('h3').scrollIntoViewIfNeeded();await page.screenshot({ path: process.argv[2], fullPage: false });}
   await render('missing', { source: 'pricecharting', prices: { raw: 100, psa_10: 300 } });
   await panel.getByRole('button', { name: 'CGC', exact: true }).click();
   await panel.locator('[data-grade="cgc_10"] summary').click();

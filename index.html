@@ -1965,7 +1965,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   </script>
 <link rel="stylesheet" href="/assets/brand-ui.535d636a.css">
 <style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
-<link rel="stylesheet" href="/css/grading-paths.54d040d7.css">
+<link rel="stylesheet" href="/css/grading-paths.39febf1f.css">
 </head>
 <body data-game-theme="pokemon">
 <div class="theme-bg" aria-hidden="true"></div>
@@ -4144,8 +4144,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.20ebe911.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
-<script defer src="/js/grading-paths.cedd47c0.js"></script>
-<script defer src="/js/core.4b07b7ed.js"></script>
+<script defer src="/js/grading-paths.1e52bc62.js"></script>
+<script defer src="/js/core.bd6fcb6a.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4222,7 +4222,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/selling-plan.e9536c59.js"></script>
 <script defer src="/js/collection-drafts.49ba8e73.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
-  <script defer src="/js/binder.d49de77b.js"></script>
+  <script defer src="/js/binder.1c3ef574.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.d7045eef.js"></script>
 <script>
@@ -4412,6 +4412,17 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         #bulkBinderReview button:disabled {opacity:.5}
         #binderControls {border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:1rem;min-width:0}
         #binderInput {width:100%;max-width:100%}
+        #binderCamera[hidden],#binderAlignment[hidden] {display:none}
+        #binderCameraStage {position:relative;max-width:500px;margin:auto;background:#000;overflow:hidden}
+        #binderCameraVideo {display:block;width:100%;height:auto}
+        #binderCameraGrid {position:absolute;display:grid;pointer-events:none;border:2px solid #f5ad27;box-shadow:0 0 0 500px #0006}
+        #binderCameraGrid span {border:1px solid #f5ad27aa}
+        .binder-actions {display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+        .binder-actions button {min-height:44px}
+        #binderAlignment label {display:block;margin:.5rem 0}
+        #binderZoom {width:100%}
+        #binderPreview {touch-action:none;cursor:grab}
+        #binderPreview:active {cursor:grabbing}
         #binderPockets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
         .binder-pocket {display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;background:#202020;border:1px solid #666;border-radius:10px;padding:.6rem;cursor:pointer}
         .binder-pocket:has(input:checked) {border-color:#4ade80;background:#14291b}
@@ -4426,6 +4437,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <h2 style="margin:0;font-size:1.2rem">Scan a binder page <small style="font-size:.75rem;color:#f5ad27">Guided</small></h2>
       <p style="margin:0;line-height:1.5">Photograph one page straight-on in even light. Match the grid to the pockets. We tick the pockets that hold a card for you to review. This identifies cards; it does not grade them.</p>
       <fieldset id="binderControls">
+        <button id="binderOpenCamera" type="button">Take a guided binder photo</button>
         <label for="binderInput">Binder page photos</label>
         <input id="binderInput" type="file" accept="image/jpeg,image/png,image/webp" multiple>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
@@ -4443,7 +4455,18 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
         </details>
       </fieldset>
-      <canvas id="binderPreview" hidden aria-label="Page with pocket grid" style="width:100%;max-width:500px;align-self:center;height:auto"></canvas>
+      <section id="binderCamera" hidden aria-label="Binder camera">
+        <p>Keep the phone parallel to the page. Fit one whole card inside each box, keep every corner visible, and tilt the light away from sleeve glare.</p>
+        <div id="binderCameraStage"><video id="binderCameraVideo" playsinline autoplay muted></video><div id="binderCameraGrid" aria-hidden="true"></div></div>
+        <div class="binder-actions"><button id="binderCapture" type="button" disabled>Use this photo</button><button id="binderStopCamera" type="button">Cancel camera</button></div>
+      </section>
+      <div id="binderAlignment" hidden>
+        <strong>Fit the photo to the grid</strong>
+        <p>Drag the photo with one finger, then zoom until each box contains one whole card. Use the arrows for small moves. For an angled page, retake it straight-on.</p>
+        <label for="binderZoom">Photo zoom <output id="binderZoomValue">100%</output></label><input id="binderZoom" type="range" min="100" max="250" value="100" step="1">
+        <div class="binder-actions" aria-label="Move photo"><button type="button" data-binder-move="left" aria-label="Move photo left">←</button><button type="button" data-binder-move="right" aria-label="Move photo right">→</button><button type="button" data-binder-move="up" aria-label="Move photo up">↑</button><button type="button" data-binder-move="down" aria-label="Move photo down">↓</button><button id="binderResetFit" type="button">Reset automatic fit</button></div>
+      </div>
+      <canvas id="binderPreview" hidden tabindex="0" aria-label="Move binder photo within the pocket grid. Drag or use arrow keys; zoom to leave room to move." style="width:100%;max-width:500px;align-self:center;height:auto"></canvas>
       <p id="binderStatus" role="status" style="margin:0;line-height:1.5"></p>
       <div id="binderBulkPick" hidden><button id="binderSelectAll" type="button">Select all</button><button id="binderSelectNone" type="button">Clear</button></div>
       <div id="binderPockets"></div>

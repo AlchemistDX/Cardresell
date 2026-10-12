@@ -51,6 +51,11 @@
   const tierFee = (tier, value) => tier.fee + (tier.valueRate || 0) * value +
     (tier.stepSize ? Math.ceil(Math.max(0, value - tier.stepAbove) / tier.stepSize) * tier.stepFee : 0);
   const waitLabel = tier => tier.daysAtLeast ? tier.days + '+' : tier.minDays === tier.days ? String(tier.days) : tier.minDays + '–' + tier.days;
+  const monthLabel = tier => {
+    const months = days => (Math.ceil(days * 7 / 5) / 30.44).toFixed(1);
+    return tier.daysAtLeast ? '~' + months(tier.days) + '+ months' :
+      '~' + months(tier.minDays) + (tier.minDays === tier.days ? '' : '–' + months(tier.days)) + ' months';
+  };
   // Shared prices retain their actual coverage. No numeric grade conversion.
   function gradeRows(prices, grader) {
     const defs = [
@@ -83,15 +88,17 @@
     const rate = number(settings.rate, 100), extra = number(settings.extra, 2000);
     if (rate === null || (rate > 0 && (extra === null || days === null || rawNet === null)))
       return { ...row, sellingNet, error: 'Capital adjustment needs raw value, grading wait and additional calendar days.' };
+    const other = number(settings.other ?? '0');
+    if (other === null) return { ...row, sellingNet, error: 'Other grading costs must be a nonnegative dollar amount (0 if none).' };
     const completeCosts = shipping !== null && saleShip !== null;
-    const proceeds = sellingNet - fee - (shipping ?? 0) - (saleShip ?? 0);
+    const proceeds = sellingNet - fee - (shipping ?? 0) - (saleShip ?? 0) - other;
     const calendarDays = days === null ? null : Math.ceil(days * 7 / 5) + (extra ?? 0);
     // Missing expenses stay explicitly excluded; no full net claim until entered.
     if (rate > 0 && !completeCosts) return { ...row, sellingNet, error: 'Enter shipping costs (0 if none) to calculate capital cost.' };
     const rawProceeds = rawNet === null ? null : rawNet - (saleShip ?? 0);
-    const holding = rate > 0 ? (Math.max(0, rawProceeds) + fee + shipping) * rate / 100 * calendarDays / 365 : 0;
+    const holding = rate > 0 ? (Math.max(0, rawProceeds) + fee + shipping + other) * rate / 100 * calendarDays / 365 : 0;
     return { ...row, sellingNet, sellingFees: row.price - sellingNet, fee, tier, days,
-      shipping, saleShip, completeCosts, proceeds: proceeds - holding, holding, calendarDays,
+      shipping, saleShip, other, completeCosts, proceeds: proceeds - holding, holding, calendarDays,
       rawProceeds, difference: rawProceeds === null ? null : proceeds - holding - rawProceeds };
   }
   const states = new Map();
@@ -105,30 +112,50 @@
     if (!states.has(key)) {
       if (states.size >= 100) states.delete(states.keys().next().value);
       states.set(key, { tier: 'auto', count: '1',
-        shipping: '', saleShip: '', rate: '0', extra: '', open: false, lower: false });
+        shipping: '', saleShip: '', other: '0', rate: '0', extra: '', open: false, lower: false });
     }
     const state = states.get(key), prices = context.prices || {};
     const panel = document.createElement('section'); panel.className = 'grading-paths';
     const input = (label, field, value) => '<label>' + label + '<input data-field="' + field +
       '" type="number" min="0" step="any" inputmode="decimal" value="' + esc(value) + '"></label>';
     const rows = gradeRows(prices, grader);
+    let bestKey = null;
     function renderRow(row) {
       const r = priceRow(row, prices, grader, state, context.net);
       const heading = row.basis.startsWith('Mixed') ? 'Grade ' + row.grade : row.basis;
       const subtitle = row.basis.startsWith('Mixed') ? 'Mixed-grader guide · not specific to ' + grader : 'Grader-specific guide';
       const field = (label, value) => '<div><dt>' + label + '</dt><dd>' + value + '</dd></div>';
-      return '<details class="gp-grade" data-grade="' + row.key + '"><summary><span><strong>' + heading + '</strong><small>Guide value: ' + money(row.price) + '</small><small>Grading fee: ' + money(r.fee) + '</small><small>' + subtitle + '</small></span>' +
-        '<span class="gp-result">' + money(r.proceeds) + '<small>' + (r.error ? esc(r.error) : r.completeCosts ? 'Estimated net proceeds' : 'Before unentered costs') + '</small></span></summary>' +
+      return '<details class="gp-grade' + (row.key === bestKey ? ' gp-highlight' : r.difference < 0 ? ' gp-negative' : '') + '" data-grade="' + row.key + '"><summary><span><strong>' + heading + '</strong><small>Guide value: ' + money(row.price) + '</small><small>Grading fee: ' + money(r.fee) + (r.tier ? ' · ' + esc(r.tier.name) : '') + '</small>' + (r.tier ? '<small class="gp-wait">' + waitLabel(r.tier) + ' working days · ' + monthLabel(r.tier) + '</small>' : '') + '<small>' + subtitle + '</small></span>' +
+        '<span class="gp-result">' + money(r.proceeds) + '<small>' + (r.error ? esc(r.error) : r.completeCosts ? 'Estimated net proceeds' : 'Before unentered costs') + '</small>' + (Number.isFinite(r.difference) ? '<small class="gp-difference">' + (r.difference >= 0 ? '+' : '') + money(r.difference) + ' vs raw</small>' : '') + '</span></summary>' +
         '<dl>' + field('Guide sale value', money(row.price)) + field('eBay selling fees', money(r.sellingFees ?? (row.price !== null && Number.isFinite(r.sellingNet) ? row.price - r.sellingNet : null))) +
         field('Grading fee' + (r.tier ? ' · ' + r.tier.name : ''), money(r.fee)) +
         field('Submission shipping + insurance', r.shipping == null ? 'Not entered' : money(r.shipping)) +
         field('Sale shipping you pay', r.saleShip == null ? 'Not entered' : money(r.saleShip)) +
+        field('Other grading costs · tax, supplies, time', money(r.other)) +
         field('Capital cost adjustment', r.holding == null ? '—' : money(r.holding)) +
         field(r.completeCosts ? 'Net proceeds' : 'Subtotal before unentered costs', money(r.proceeds)) +
         field('Difference vs selling raw' + (r.completeCosts ? '' : ' · before unentered costs'), money(r.difference)) + '</dl>' +
         (r.error ? '<p>' + r.error + '</p>' : '<p>Estimated grading wait: ' + waitLabel(r.tier) + ' working days. ' + (r.tier.daysAtLeast ? 'At least approx. ' : 'Approx. ') + r.calendarDays + ' calendar days' + (state.extra === '' ? ' before transit and selling time' : ' including your extra days') + '.' + (r.tier.daysAtLeast && r.holding > 0 ? ' Capital cost uses this minimum wait and may be higher.' : '') + '</p>') + '</details>';
     }
     function drawResults() {
+      const computed = rows.map(row => priceRow(row, prices, grader, state, context.net));
+      const comparable = computed.filter(r => !r.error && Number.isFinite(r.difference));
+      const best = comparable.sort((a,b) => b.difference-a.difference)[0];
+      bestKey = best && best.difference > 0 ? best.key : null;
+      const rawPrice = number(prices.raw), saleShip = number(state.saleShip);
+      const rawNet = rawPrice > 0 ? context.net(rawPrice) : null;
+      const rawAfterShipping = Number.isFinite(rawNet) && saleShip !== null ? rawNet-saleShip : null;
+      panel.querySelector('[data-baseline]').innerHTML = '<strong>Sell raw today</strong><br>' +
+        (Number.isFinite(rawAfterShipping) ? money(rawAfterShipping) + ' estimated net after eBay fees and entered sale shipping' :
+          Number.isFinite(rawNet) && state.saleShip === '' ? money(rawNet) + ' after eBay fees, before unentered shipping' : 'Raw comparison unavailable: check guide value and sale shipping.');
+      panel.querySelector('[data-decision]').innerHTML = best ?
+        '<strong>' + (best.difference > 0 ? 'Highest available scenario: ' + esc(grader + ' ' + best.grade) : 'No priced ' + esc(grader) + ' outcome beats selling raw') + '</strong><br>' +
+        money(best.proceeds) + (best.completeCosts ? ' estimated net' : ' before unentered costs') +
+        ' · ' + (best.difference >= 0 ? '+' : '') + money(best.difference) + ' vs raw<br>' +
+        esc(best.tier.name) + ' · ' + waitLabel(best.tier) + ' working days · ' + monthLabel(best.tier) +
+        '<small>Conditional on this grade and guide value; not a likely outcome or a submission recommendation. ' +
+        (best.basis.startsWith('Mixed') ? 'This outcome uses a mixed-grader price. ' : '') + 'Missing grade prices are excluded. Grading time excludes transit and selling time.</small>' :
+        '<strong>Compare with selling raw</strong><br>Complete the available value, service and cost details to compare outcomes.';
       const opened = new Set([...panel.querySelectorAll('.gp-grade[open]')].map(e => e.dataset.grade));
       panel.querySelector('[data-rows]').innerHTML = rows.filter(r => !/^grade_[1-6]$/.test(r.key)).map(renderRow).join('');
       panel.querySelector('[data-lower-rows]').innerHTML = rows.filter(r => /^grade_[1-6]$/.test(r.key)).map(renderRow).join('');
@@ -140,20 +167,41 @@
       panel.innerHTML = '<h3>Grade-by-grade value</h3><div class="gp-graders" role="group" aria-label="Grading company">' +
         ['PSA','CGC','BGS','SGC'].map(g => '<button type="button" data-grader="' + g + '" aria-pressed="' + (grader === g) + '">' + g + '</button>').join('') + '</div>' +
         '<p>Prices and fees follow your selected company. AI condition estimate: PSA ' + esc(context.psaEst ?? 'unavailable') + '; other grading standards have not been estimated.</p>' +
-        '<div class="gp-baseline">Sell raw guide: <strong>' + money(number(prices.raw)) + '</strong> · after eBay fees: ' + (number(prices.raw) > 0 ? money(context.net(number(prices.raw))) : '—') + ' before shipping.</div>' +
+        '<div class="gp-comparison"><div class="gp-baseline" data-baseline></div><div class="gp-baseline" data-decision></div></div>' +
         '<label>Grading service<select data-field="tier"><option value="auto"' + (state.tier === 'auto' ? ' selected' : '') + '>Automatic · lowest eligible published fee</option>' +
         tiers.filter(t => t.grader === grader).map(t => '<option value="' + t.id + '"' + (state.tier === t.id ? ' selected' : '') + '>' + t.name + ' · ' + (t.stepSize || t.valueRate ? 'from ' : '') + '$' + t.fee.toFixed(2) + ' · ' + waitLabel(t) + ' working days</option>').join('') + '</select></label>' +
         '<p><a href="' + sources[grader] + '" target="_blank" rel="noopener">Official fees</a> checked ' + checkedAt + '. Standard-size, unsigned cards submitted in the US; before tax, shipping, discounts and optional extras. ' + (grader === 'PSA' ? 'Value services are paused. ' : grader === 'BGS' ? 'Express with subgrades is currently available; Base and Standard are paused. No value-based surcharge is published for this service. ' : '') +
           'Fees are calculated from each guide value and your submission size; the grader confirms final value and charges. ' + (!fresh() ? 'Fee snapshot expired; updated fees are unavailable.' : '') + '</p>' +
         '<details data-settings' + (state.open ? ' open' : '') + '><summary>Your submission details · assumed 1 card unless changed</summary><p>Only details we cannot know. Blank shipping stays excluded; enter 0 if none. Sale shipping below applies to both raw and graded scenarios.</p><div class="gp-grid">' +
         input('Cards in your submission', 'count', state.count) + input('Submission shipping + insurance per card ($)', 'shipping', state.shipping) + input('Sale shipping per card ($)', 'saleShip', state.saleShip) +
+        input('Other grading costs per card · tax, supplies, time ($)', 'other', state.other) +
         input('Annual capital cost (%) · 0 = off', 'rate', state.rate) + input('Extra calendar days · transit + selling', 'extra', state.extra) + '</div></details>' +
-        '<p class="gp-price-note">PriceCharting guide values, not individual sold listings or guaranteed sale prices. Mixed-grader rows remain the same when no company-specific value is available. Tap a grade for its price breakdown.</p><div data-rows></div>' +
+        '<p class="gp-price-note">PriceCharting guide values, not individual sold listings or guaranteed sale prices. Sale dates and sample sizes are unavailable in this guide. Mixed-grader rows remain the same when no company-specific value is available. Tap a grade for its price breakdown.</p><div data-rows></div>' +
         '<details data-lower' + (state.lower ? ' open' : '') + '><summary>Grades 1–6</summary><div data-lower-rows></div></details>' +
-        '<p>These are conditional outcomes, not grade predictions or probabilities. Waits are estimates, not guarantees. Calendar estimates use working days × 7/5, excluding holiday delays. Capital cost uses foregone raw net proceeds plus submission costs. Future price movements are not modeled.</p>';
+        '<button type="button" data-export>Export ' + grader + ' comparison (.csv)</button><p data-export-status role="status"></p>' +
+        '<p>AI percentage weights are not calibrated outcome probabilities, so an expected-profit figure is not available. These are conditional outcomes, not grade predictions or probabilities. Waits are estimates, not guarantees. Calendar estimates use working days × 7/5, excluding holiday delays. Capital cost uses foregone raw net proceeds plus entered submission costs. Optional costs set to 0 are excluded; net proceeds are not profit after your card purchase cost. Future price movements are not modeled.</p>';
       drawResults();
     }
     panel.addEventListener('click', e => {
+      if (e.target.closest('[data-export]')) {
+        const header = ['Grader','Grade','Price basis','Guide USD','Service','Working days','Approx grading months','Grading fee USD','Selling fees USD','Submission shipping USD','Sale shipping USD','Other grading costs USD','Capital cost USD','Proceeds USD','Difference vs raw USD','Cost coverage / issue'];
+        const records = rows.map(row => {
+          const r = priceRow(row, prices, grader, state, context.net);
+          return [grader,row.grade,row.basis,row.price,r.tier?.name,r.tier ? waitLabel(r.tier) : '',r.tier ? monthLabel(r.tier) : '',r.fee,r.sellingFees,r.shipping,r.saleShip,r.other,r.holding,r.proceeds,r.difference,r.error || (r.completeCosts ? 'Entered costs included; zero optional costs excluded' : 'Before unentered costs')];
+        });
+        const cell = value => {
+          let text = value == null ? '' : typeof value === 'number' ? value.toFixed(2) : String(value);
+          if (typeof value !== 'number' && /^[=+@\-\t\r]/.test(text)) text = "'" + text;
+          return '"' + text.replace(/"/g,'""') + '"';
+        };
+        const metadata = [['CardResell conditional grading comparison',new Date().toISOString()],['Card',context.cardLabel || 'Card identity unavailable'],['Fee snapshot',checkedAt],['AI condition estimate (PSA only)',context.psaEst ?? 'unavailable'],['Scope','Guide scenarios, not predictions, sold comps, purchase profit or expected value. Sale dates/sample sizes unavailable.'],['Capital annual rate percent',state.rate],['Additional calendar days',state.extra === '' ? 'not entered' : state.extra]];
+        const csv = [...metadata,[],header,...records].map(row=>row.map(cell).join(',')).join('\r\n');
+        const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+        const link = document.createElement('a'); link.href=url;link.download='cardresell-'+grader.toLowerCase()+'-grading-'+new Date().toISOString().slice(0,10)+'.csv';
+        document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+        panel.querySelector('[data-export-status]').textContent='Comparison exported with the current assumptions and missing-cost labels.';
+        return;
+      }
       const g = e.target.closest('[data-grader]');
       if (g) {
         root._crSetGradingGrader(g.dataset.grader);

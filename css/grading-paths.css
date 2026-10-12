@@ -29,3 +29,11 @@
 .gp-price-note{font-size:.7rem!important}
 .gp-paths,.gp-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem}
 @media(min-width:760px){.gp-paths,.gp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.gp-comparison{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem;margin:.7rem 0}
+.gp-comparison .gp-baseline{margin:0;overflow-wrap:anywhere}
+.gp-comparison small{display:block;color:var(--text-muted);margin-top:.4rem}
+.gp-grade.gp-highlight{border-color:var(--gold)}
+.gp-grade.gp-negative .gp-difference{font-weight:600}
+.gp-grade .gp-wait{color:var(--text);font-weight:600}
+.grading-paths [data-export]{min-height:44px;padding:.6rem .8rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer}
+@media(min-width:760px){.gp-comparison{grid-template-columns:repeat(2,minmax(0,1fr))}}
