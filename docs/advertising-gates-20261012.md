@@ -18,8 +18,21 @@ manual snapshots remain visible. OpenAI's existing $100 organization monthly
 limit is enforced. Earlier OFF / awaiting-approval entries below are history,
 superseded by these verified settings and the execution notes at the end.
 
-Paid advertising remains on hold for written commercial data permissions,
-delivered-unit cost reconciliation and the first completed scheduled backup.
+The owner corrected the carried-forward status at 15:12 Eastern: all three
+providers had already answered with permission in earlier conversations, and
+Ximilar sends low-credit warnings. Treat TCG Price Lookup, PriceCharting and
+Ximilar permission outreach as resolved for the existing CardResell use. Do not
+send the duplicate requests prepared during this continuation.
+
+Earlier conversation retrieval also recovered a TCG Price Lookup dashboard
+commercial-use license confirmation. The original replies and their detailed
+conditions were not recovered in this pass; record the owner's confirmation
+without inventing contract terms or warning thresholds. Low-credit warnings
+are an established operating control, not evidence of an automatic spending cap.
+The historical entries below that call permissions unresolved are superseded.
+
+Remaining preparation: delivered-unit cost reconciliation, first completed
+scheduled backup evidence, and a separately approved advertising budget.
 
 ## Payment fulfillment: verified for current checkout history
 
@@ -148,10 +161,10 @@ Existing provider log summaries explicitly report unknown dollars as unknown.
 | Phone and core workflow | Owner accepted; PR #44 live | Repeat only when a relevant regression appears |
 | Current-system payments | Four payments reconciled | Continue monitoring new payments and reversals |
 | Recovery | Isolated restore passes scoped checks; one-day daily backup enabled at approved $0.25/GB-month | First completed scheduled backup; timed application recovery exercise |
-| Provider permissions | Paid plan confirmed; terms ambiguous | Written confirmation for actual display/cache/export behavior |
+| Provider permissions | Owner confirms prior replies granting permission for existing use | Complete; no duplicate outreach |
 | Unit economics | Incomplete | Actual billed scan/grade/retry costs and bounded overage exposure |
 | Acquisition tracking | QA checkout label confirmed | First real tagged purchase joined to durable fulfillment |
-| Paid advertising | Hold broad spend | Clear provider/cost/backup gates, then owner-approved small capped pilot |
+| Paid advertising | Hold broad spend | Complete cost/backup checks, then owner-approved small capped pilot |
 
 Once those gates clear, begin with one channel and a distinct supported campaign
 label, agree a total spending cap, and review fulfilled purchases, support issues,
@@ -398,3 +411,14 @@ https://tcgpricelookup.com/contact
 The existing permission drafts remain unsent. A Ximilar exhaustion/failed-call
 billing draft is now included in the launch packet. Written answers remain a
 launch dependency; this evidence does not assume permission to contact anyone.
+
+## Owner continuity correction — October 12, 15:12 Eastern
+
+Provider permission answers were already received several conversations ago.
+The earlier request to contact TCG Price Lookup, PriceCharting and Ximilar again
+was based on incomplete carried-forward context. The owner explicitly corrected
+that omission. Permission outreach is complete; the redundant draft messages
+have been removed from the active launch packet. Ximilar low-credit warnings
+are confirmed by the owner and must remain in operating notes. No new outreach
+was sent. This correction does not alter customer prices, provider settings or
+assert unprovided details about hard-stop behavior or exact contract scope.

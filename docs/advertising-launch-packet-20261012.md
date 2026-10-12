@@ -1,10 +1,11 @@
 # CardResell advertising launch packet
 
 Prepared October 12, 2026, America/New_York. Status: materials ready for review;
-public promotion and paid spend remain gated. No ads or outreach have been
-sent. Approved daily backup storage is enabled at $0.25 per GB-month, keeping
+public promotion and paid spend remain gated. No ads or outreach were sent
+during this preparation pass. Approved daily backup storage is enabled at $0.25 per GB-month, keeping
 the latest day; the OpenAI $100 organization limit is enforced. This is an operating proposal, not a
-forecast of sales or a claim that commercial permissions have been granted.
+forecast of sales. The owner confirms provider permissions were already granted
+in earlier replies; Ximilar sends low-credit warnings. Duplicate outreach is closed.
 
 ## What we are selling
 
@@ -45,7 +46,7 @@ More actions. Fees vary with eligibility, value and submission details.
 | Tracking | 23 acquisition checks pass; prior QA checkout metadata verified | Reconcile first genuine tagged purchase to fulfillment |
 | Payments | Four current-system owner/testing purchases reconciled in earlier evidence | These are not acquired-customer or profitability evidence |
 | Recovery | Isolated restore passed scoped checks; production daily backup enabled with one-day retention at approved $0.25/GB-month | Verify first completed scheduled backup |
-| Data permissions | TCG Price Lookup paid account previously confirmed; public terms need clarification; PriceCharting commercial agreement unverified | Written permission for actual display, caching and draft/export use |
+| Data permissions | Owner confirms prior permission replies from all providers for existing CardResell use | Complete; no duplicate outreach |
 | Economics | Provider usage tooling exists; actual dollar coverage incomplete | Reconcile invoices, failed attempts, free usage and overages |
 | Ad spend | Nothing purchased | Owner approves channel, total cap and maximum provider exposure |
 
@@ -148,7 +149,7 @@ owned audio with suitable permissions. The recording itself remains to be made.
 
 ## Launch sequence and spending proposal
 
-1. Clear permissions, recurring backup and economics gates below. Refresh
+1. Complete recurring backup and economics checks below. Refresh
    dated grading fees before their snapshot expires. Confirm the contact page
    reaches a monitored support inbox.
 2. Conduct five private owner-led seller demonstrations. Observe whether each
@@ -227,92 +228,22 @@ failed/retried attempts, allocated fixed costs and free-user activity. If
 operations cannot be allocated reliably, report a range with the unallocated
 pool separately. Do not create a precise CAC target until this is reconciled.
 
-## Provider permission requests — drafts, not sent
+## Provider permissions and warnings — established context
 
-### TCG Price Lookup account support
+The owner confirmed on October 12 at 15:12 Eastern that TCG Price Lookup,
+PriceCharting and Ximilar had already replied with permission in earlier
+conversations. Permission outreach is complete for the existing CardResell use.
+The redundant drafts were removed from this active packet; do not send them.
 
-Subject: Confirm CardResell commercial display and caching permissions
+Ximilar sends low-credit warnings. Include reviewing those notices and the
+account's remaining allowance in launch operations. No new warning setup or
+repeat support question is needed. This does not imply automatic top-ups or
+a hard spending cap; no such behavior is inferred from the warnings.
 
-Hello,
-
-I operate CardResell.org, a paid and free tool for trading-card sellers. We use
-pricing data to show card values, calculate estimated selling proceeds and
-help users prepare listing drafts. We are preparing a small advertising launch
-and would like written confirmation that our account permits these uses.
-
-Our account was shown as Pro at $49.99/month with a 10,000-request daily
-allowance. Please confirm the current entitlement, reset time, overage rules
-and whether the allowance is a hard stop. Your FAQ describes commercial resale
-apps, while the terms restrict competing services and redistribution without
-written authorization. Please confirm how these apply to CardResell.
-
-Please also confirm permitted cache retention, stale-data fallback, derived
-fee calculations, inclusion in user listing drafts/exports and attribution.
-Our application currently has defaults of six hours fresh and up to 24 hours
-stale on one proxy, and 30 minutes on another route; we can align these with
-the agreed requirements. We are not offering raw API resale.
-
-Please provide the applicable commercial terms or agreement for this account.
-
-Thank you,
-Will — CardResell
-
-### PriceCharting account support
-
-Subject: Commercial permission for CardResell pricing comparisons
-
-Hello,
-
-I operate CardResell.org, a trading-card seller tool with free and paid plans.
-We would like to confirm commercial rights before advertising the product.
-
-We use PriceCharting guide values in card results and grading comparisons,
-with links back to relevant PriceCharting product pages. The comparisons
-subtract estimated selling and grading costs; users may prepare listing drafts.
-We label guide values separately from individual sold listings and do not
-offer raw API access for resale.
-
-Your API documentation refers to internal use and a commercial agreement for
-sharing price data. Please confirm whether our account has an agreement that
-covers customer-facing display, derived comparisons, caching and user
-drafts/exports. If not, please provide the appropriate license, pricing,
-attribution and retention requirements for this use.
-
-Thank you,
-Will — CardResell
-
-Send only after the owner approves outreach and the correct account support
-recipient/channel is verified. No account secrets are needed in either draft.
-
-### Ximilar account support — draft, not sent
-
-Verified support destination: tech@ximilar.com, linked by the account Credit
-Packs page and the official Collectibles Recognition documentation.
-
-Subject: Confirm CardResell credit exhaustion and failed-request billing
-
-Hello,
-
-I operate CardResell.org and use Ximilar for card identification and optional
-card grading. Our account shows Business 100K, with no active credit packs.
-We are checking operating costs before a small advertising launch.
-
-Please confirm what happens when the monthly allowance and any prepaid packs
-are exhausted: are further calls blocked, can the balance go negative, and can
-any top-up or overage charge occur automatically? Please confirm whether any
-automatic-purchase or overage arrangement is enabled for this account.
-
-Please also clarify credit charges for no-card/no-match results, rejected or
-malformed images, timeouts, failed asynchronous grading jobs, and repeated
-submissions. Is the 100-credit card-grading price per card assessment including
-front and back, or per image? What usage export lets us reconcile operation
-credits and timestamps, including failures, to our application attempts?
-
-We are requesting clarification only, with no plan change, credit purchase
-or activation of automatic charges.
-
-Thank you,
-Will — CardResell
+The original reply text was not recovered during this continuation. The source
+for this status is the owner's explicit confirmation, supplemented by recovered
+prior TCG Price Lookup commercial-license context. Preserve that distinction
+without turning missing local copies back into a permission blocker.
 
 ## Concrete next decisions
 
@@ -320,11 +251,9 @@ Will — CardResell
    Daily Backup is enabled with Last 1 day retention at the owner-approved
    $0.25 per GB-month rate. No Prod Pack upgrade was purchased. Retain the
    isolated-restore evidence separately; a saved setting is not a completed run.
-2. Approve sending the two permission requests and the Ximilar billing question through verified support channels,
-   or supply existing written commercial agreements if already held.
-3. Supply or securely expose the provider billing/usage exports listed above.
-   Reconcile these before requesting ad-budget sign-off.
-4. Once gates pass, approve the concrete $70 test and bounded provider exposure,
+2. Reconcile the provider billing/usage exports listed above and review existing
+   Ximilar low-credit notices before requesting ad-budget sign-off.
+3. Once checks pass, approve the concrete $70 test and bounded provider exposure,
    or revise the amount. Approval has not been inferred from preparation.
 
 ## Sources and validation
@@ -332,14 +261,13 @@ Will — CardResell
 Official sources reviewed October 12, 2026:
 - https://tcgpricelookup.com/terms
 - https://tcgpricelookup.com/faq
-- https://www.pricecharting.com/api-documentation (indexed documentation;
-  direct refetch returned 403 on this continuation)
+- https://www.pricecharting.com/api-documentation (successfully refreshed October 12)
 - https://upstash.com/docs/redis/features/backup
 
-The TCG FAQ supports some commercial uses but does not resolve the account's
-conflicting plan/terms evidence. Backup documentation describes daily retention
-choices but does not establish this resource's billing. Account-specific unknowns
-remain unknown. This packet is preparation, not a legal interpretation of a license.
+General public provider terms are background; the owner's confirmation of prior
+permission replies controls the existing-use launch checklist. Exact contractual
+conditions are not reconstructed here. The approved backup rate was verified
+in the account. This packet is preparation, not a legal interpretation of a license.
 
 Checked locally: acquisition-tracking 23/23. Checked over public HTTPS: both
 shop_qr and meta_ads landing URLs preserve their query and return 200; pricing,
