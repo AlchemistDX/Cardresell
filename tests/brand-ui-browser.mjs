@@ -139,6 +139,21 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  await page.evaluate(()=>openShop('id','ui_test'));await page.waitForFunction(()=>!!document.querySelector('.membership-shop[open]'));
  check('shop fits viewport',await fit(),true);
  await page.keyboard.press('Escape');
+ await page.evaluate(()=>{
+  localStorage.setItem(getUserKey('portfolio'),JSON.stringify([{id:'layout-one',card:'Pikachu',set:'Base Set',currentValue:4.5,buyPrice:2},{id:'layout-two',card:'Charizard',set:'Obsidian Flames',currentValue:28,buyPrice:20}]));
+  switchView('collection');switchCollectionSection('cards');
+ });
+ if(!(await fit())){console.log(await page.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.right>innerWidth+1}).map(e=>({tag:e.tagName,id:e.id,class:e.className,width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right})).slice(0,20)));if(shots)await page.screenshot({path:shots+'/collection-overflow.png',fullPage:true})}
+ check('populated Collection fits viewport',await fit(),true);
+ check('Collection controls keep touch targets',await page.locator('#collectionDraftTools button').evaluateAll(es=>es.filter(e=>!e.hidden).every(e=>e.getBoundingClientRect().height>=44)),true);
+ check('Collection fields have visible labels',await page.getByText('Find cards',{exact:true}).isVisible(),true);
+ check('grade history remains reachable',await page.getByRole('button',{name:'View saved grades',exact:true}).isVisible(),true);
+ await page.getByRole('button',{name:'Select visible',exact:true}).click();
+ await page.getByRole('searchbox',{name:'Search collection',exact:true}).fill('No matches');
+ check('empty filtered Collection fits viewport',await fit(),true);
+ await page.getByRole('button',{name:'Clear filters',exact:true}).click();
+ check('organized controls preserve selections',await page.locator('.collection-draft-check:checked').count(),2);
+ if(shots)await page.screenshot({path:`${shots}/collection-organized-${theme}-${viewport.width}.png`,fullPage:true});
  check('no uncaught UI errors',errors,[]);await page.close();
 }
 // All standalone pages retain readable navigation and use the same mark.

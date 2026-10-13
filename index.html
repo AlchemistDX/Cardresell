@@ -1976,7 +1976,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       if (!wasFired) setTimeout(function() { window.trackEvent('page_view'); }, 200);
     })();
   </script>
-<link rel="stylesheet" href="/assets/brand-ui.535d636a.css">
+<link rel="stylesheet" href="/assets/brand-ui.fb4b476f.css">
 <style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
 <link rel="stylesheet" href="/css/grading-paths.f8996d77.css">
 <link rel="stylesheet" href="/assets/scan-finish.09c16feb.css">
@@ -3096,16 +3096,16 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <p id="collectionSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
     <button id="collectionSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
-  <div class="section-panel" style="margin-top:1.5rem">
-    <div class="section-title">Saved AI grades</div>
-    <p class="section-sub">Keep your Quick and Deep Grade reports in your account. Included on every plan.</p>
-    <button class="fl-sub-btn" onclick="openAiGradeHistory()">View saved grades</button>
-  </div>
+    <section class="collection-grade-history" aria-labelledby="collectionGradesTitle">
+      <div><h2 id="collectionGradesTitle">Saved AI grades</h2>
+      <p>Quick and Deep Grade reports · Included on every plan</p></div>
+      <button type="button" class="fl-sub-btn" onclick="openAiGradeHistory()">View saved grades</button>
+    </section>
 
 
 
     <!-- Value Stats -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:1rem">
+    <div class="collection-value-stats">
       <div class="pnl-card">
         <div class="pnl-label">Total Cards</div>
         <div class="pnl-value" id="colTotalCards">—</div>
@@ -4047,7 +4047,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/ui.9b855bbd.js"></script>
 <script defer src="/js/selling-plan.e492f1c8.js"></script>
 <script defer src="/js/selling-advice.7b8b622b.js"></script>
-<script defer src="/js/collection-drafts.87afd842.js"></script>
+<script defer src="/js/collection-drafts.bfb6565e.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.1c3ef574.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
