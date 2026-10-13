@@ -35,7 +35,7 @@ The new end-to-end gate uses the shipped app with synthetic scan and catalogue r
 | Listing packet construction | 472 passed |
 | Draft review and provenance | 422 passed |
 | Printed-name recovery | 26 passed |
-| Asset fingerprints | 121 passed |
+| Asset fingerprints and deployment routing | 157 passed |
 | Local release build | Passed |
 | Complete local regression runner | Passed: 116 suites executed, 3 explicitly skipped |
 
@@ -52,3 +52,12 @@ No emails, ads, purchases, production customer records or existing card identiti
 The first live review found a legacy individual-card fallback that labelled a generic carried value as `holofoil`. Deployment `dpl_8GpaCuXW4xCPbAENJzo6ZKiGimGP` was rolled back to the previous release while this was corrected. This was an existing fallback assumption exposed by the new finish picker; it was not acceptable as evidence for an explicit finish choice.
 
 All four scan fallback constructors now preserve actual feed finish keys or label a carried value as finish unknown. Condition keys, including moderately/heavily played and damaged, are excluded from finish options. Old cached scan previews withdraw unverified price choices; saved Collection records are not rewritten. Sixteen additional browser assertions cover these fallbacks and the restored-preview case across both viewports.
+
+
+## Hosted routing follow-up
+
+PR #58 merged as `ebca521e68927899b3f85f844611a15a8a3e6319`. Its production build `dpl_5cJXZqZNauHNngFuGmdEMq3Z1jeL` verified the corrected carried-price and cached-preview paths: the saved value is labelled finish unknown, and neither path offers an inferred Holofoil finish. The live TCG price response preserved its actual Normal variant; unauthenticated draft access returned 401.
+
+Visual review then found that Vercel's explicit static build list omitted the finish stylesheet and the catch-all route served HTML at its URL. Local static-server browser tests could not reveal that hosting difference. The deployment configuration now includes and routes the fingerprinted CSS with the correct MIME type. The asset gate checks every referenced bundle against both static-build inclusion and the first terminating route (157 assertions passed). The release build also passed. Application logic remains at the previously tested 106 finish assertions and 116 executed local suites.
+
+The runtime log sample contained a Node `DEP0169` URL-parser deprecation warning, not an application exception. No paid scan was used. Final hosted CSS and visual verification are required after the routing release.

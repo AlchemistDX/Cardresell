@@ -23,6 +23,9 @@ import { harness } from './_assert.mjs';
 import { referencedHashedAssets, resolveCoreBundle, sha8, ENTRY } from './_assetRefs.mjs';
 
 const { check, done } = harness('asset-fingerprints');
+const deployment = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+const matchesBuild = (pattern, path) => new RegExp('^' + pattern
+  .split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$').test(path);
 
 // ── The reference set itself must be trustworthy ────────────────────────────
 // An empty set is the one result that must never read as success: it means the
@@ -57,6 +60,16 @@ for (const a of assets) {
         `${ENTRY} references ${a.ref} but the file is not there — a ` +
         `referenced-but-missing bundle is a broken deploy, not a warning`);
   if (!exists) continue;
+
+  // Files present locally can still be omitted by Vercel's explicit build
+  // list, or rewritten to the HTML fallback. Verify both deployment stages.
+  check(`${a.rel} is included in the static deployment`,
+        deployment.builds.some(build => build.use === '@vercel/static' && matchesBuild(build.src, a.rel)));
+  const assetUrl = '/' + a.rel;
+  const route = deployment.routes.find(rule => !rule.continue && rule.src &&
+        new RegExp('^(?:' + rule.src + ')$').test(assetUrl));
+  check(`${a.rel} resolves to its own asset instead of the HTML fallback`,
+        !!route && assetUrl.replace(new RegExp('^(?:' + route.src + ')$'), route.dest || '') === assetUrl);
 
   const bytes = readFileSync(a.path);
   const actual = sha8(bytes);
