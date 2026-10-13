@@ -41,6 +41,11 @@
       + (hiddenSelected ? ` · ${hiddenSelected} selected outside this filter` : '');
     bar.querySelector('[data-status]').textContent = message;
     bar.querySelectorAll('button[data-selection]').forEach(b => b.disabled = busy);
+    bar.querySelector('[data-select-visible]').disabled = busy || !count;
+    bar.querySelector('[data-clear-selection]').disabled = busy || !selected.size;
+    const reset = bar.querySelector('[data-clear-filters]');
+    reset.hidden = !query.trim() && valueFilter === 'all'; reset.disabled = busy;
+    bar.querySelector('[data-no-matches]').hidden = count !== 0;
     bar.querySelector('[data-value-filter]').disabled = busy;
     const only = bar.querySelector('[data-only-visible]'); only.hidden = !hiddenSelected; only.disabled = busy;
     const compare=bar.querySelector('[data-compare]'); if(compare) {compare.disabled=busy || (!selected.size && !count);compare.textContent=selected.size?'Compare '+selected.size+' selected card'+(selected.size===1?'':'s'):(valueFilter !== 'all' || query.trim() ? 'Compare '+count+' shown card'+(count===1?'':'s') : 'Compare entire collection');}
@@ -70,14 +75,20 @@
     }
     filter.value = valueFilter; filter.onchange = () => { valueFilter = filter.value; paint(); };
     filterLabel.append(filter); bar.append(filterLabel);
-    const select = button('Select visible', () => { syncOwner(); const available = rowMap(loadPortData()); rows.filter(visible).forEach(p => { if (available.get(key(p))) selected.add(key(p)); }); paint(); }); select.dataset.selection = '';
-    const clear = button('Clear selection', () => { selected.clear(); paint(); }); clear.dataset.selection = '';
+    const reset = button('Clear filters', () => {
+      query = ''; valueFilter = 'all'; search.value = ''; filter.value = 'all'; paint(); search.focus();
+    }); reset.dataset.clearFilters = ''; bar.append(reset);
+    const empty = el('p', 'No cards match these filters. Clear filters to see your collection.');
+    empty.dataset.noMatches = ''; empty.hidden = true; empty.style.cssText = 'width:100%;margin:0;line-height:1.5';
+    bar.append(empty);
+    const select = button('Select visible', () => { syncOwner(); const available = rowMap(loadPortData()); rows.filter(visible).forEach(p => { if (available.get(key(p))) selected.add(key(p)); }); paint(); }); select.dataset.selection = ''; select.dataset.selectVisible = '';
+    const clear = button('Clear selection', () => { selected.clear(); paint(); }); clear.dataset.selection = ''; clear.dataset.clearSelection = '';
     const create = button('Prepare drafts', prepare); create.dataset.create = '';
     const compare=button('Compare selling',()=>{syncOwner();const ids=selected.size?[...selected]:rows.filter(visible).map(key);const cards=currentRows(ids).filter(Boolean);if(cards.length!==ids.length){message='A card changed or has an ambiguous ID. Refresh your collection and select it again.';paint();return;}window.CardResellSellingPlan?.openCollection(cards);});compare.dataset.compare='';
     const only = button('Keep only shown selections', () => { const available = rowMap(loadPortData()); for (const id of selected) { const p = available.get(id); if (!p || !visible(p)) selected.delete(id); } paint(); }); only.dataset.onlyVisible = '';
     bar.append(select, clear, only, compare, create, button('View drafts', () => switchView('drafts')));
     bar.append(el('small', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.'));
-    const count = el('div'); count.dataset.count = ''; const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(count,status);
+    const count = el('div'); count.dataset.count = ''; count.setAttribute('role','status'); const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(count,status);
     document.getElementById('collectionWrap').before(bar);
     const byId = rowMap(rows);
     document.querySelectorAll('#collectionWrap tr.col-row').forEach(tr => {
