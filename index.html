@@ -2292,9 +2292,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
      eBay-friendly kicker — they're a top affiliate partner and often the winning
      venue for a given card, so we never frame them as the enemy. -->
 <div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
-  <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 15 venues · one net-payout number</div>
+  <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 18 selling venues · fees and bulk options</div>
   <h2 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h2>
-  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Same card, side-by-side net-payout ranking across 15 sell venues after 2026 fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
+  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Compare marketplace net payouts and whole-stack buylist offers across 18 selling venues, with fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
 </div>
 
 <!-- SOCIAL PROOF BAR -->
@@ -3712,6 +3712,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       eBay + TCGplayer so an overseas marketplace can&rsquo;t win on a number that
       leaves out postage.
     </div>
+    <p style="padding:0 1rem">Selling a stack of $1 cards? <button type="button" class="plat-sell-badge" onclick="CardResellSellingPlan.openStack()">Compare bulk shipment offers</button></p>
     <div class="vp-body" id="vpBody"></div>
     <div class="vp-foot">
       <button type="button" class="vp-reset" onclick="resetVenuesFromPicker()">Reset to recommended</button>
@@ -3955,10 +3956,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 </div><!-- /wrap -->
 
-<script defer src="/js/config.20ebe911.js"></script>
+<script defer src="/js/config.4e617366.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.f17a14ef.js"></script>
-<script defer src="/js/core.8f4079b6.js"></script>
+<script defer src="/js/core.c891b8d8.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4038,7 +4039,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/membership-shop.6b3f4693.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/ui.b8524916.js"></script>
-<script defer src="/js/selling-plan.e9536c59.js"></script>
+<script defer src="/js/selling-plan.e492f1c8.js"></script>
+<script defer src="/js/selling-advice.7b8b622b.js"></script>
 <script defer src="/js/collection-drafts.49ba8e73.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.1c3ef574.js"></script>
@@ -4635,8 +4637,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       • 40 Grade credits/mo · 250 ID credits/mo<br>
       • 15% off top-up packs<br>
       • <strong style="color:#fff">Bulk Grade tool</strong> (this one)<br>
-      • All 15 marketplaces unlocked<br>
-      • COMC &amp; Fanatics consignment + 4 buylists (Card Kingdom, CoolStuffInc, SCG, TCG Bulk)
+      • All 18 selling venues unlocked<br>
+      • COMC &amp; Fanatics consignment + 7 buylist and bulk routes (Card Kingdom, CoolStuffInc, SCG, TCG Bulk, Full Grip Games, Meta TCG, Card Conduit)
     </div>
     <button id="bulkGradeUpgradeBtn" onclick="closeBulkGrade();openPricingModal('bulk_grade_gate')" style="background:var(--gold);color:#000;border:none;border-radius:10px;padding:.7rem 1.5rem;font-weight:800;font-size:.9rem;cursor:pointer">Compare Pro and Business</button>
     <button onclick="closeBulkGrade()" style="background:transparent;border:none;color:var(--text-muted);font-size:.78rem;cursor:pointer;text-decoration:underline">Maybe later</button>

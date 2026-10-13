@@ -15,8 +15,8 @@ const declarations = ast.body.filter(n => functions.includes(n.id?.name)
 const window = { googleUser: { sub: 'owner-a' }, _isPro: true };
 const actualVenues = new Function('window', declarations.map(n => core.slice(n.start, n.end)).join('\n')
   + '\nreturn () => Array.from(platformsForTier(_venueTier()));')(window);
-const expected = { free: 2, starter: 2, casual: 9, pro: 15, business: 15,
-  legacy_pro: 9, legacy_pro_max: 15, legacy_ultimate: 15 };
+const expected = { free: 2, starter: 2, casual: 9, pro: 18, business: 18,
+  legacy_pro: 9, legacy_pro_max: 18, legacy_ultimate: 18 };
 let checks = 0;
 for (const [plan, count] of Object.entries(expected)) {
   const policy = membershipVenueAccess(plan);
@@ -36,7 +36,7 @@ assert.equal(actualVenues().length, 2, 'stale identity cannot retain paid venue 
 window.googleUser = { sub: 'owner-a' }; window._isPro = false;
 assert.equal(actualVenues().length, 2, 'signed out or expired entitlement returns free venues'); checks++;
 window._isPro = true; window._membershipVenueAccess = null;
-for (const [tier, count] of Object.entries({ pro: 9, pro_max: 15, ultimate: 15, unknown: 2 })) {
+for (const [tier, count] of Object.entries({ pro: 9, pro_max: 18, ultimate: 18, unknown: 2 })) {
   window._userTier = tier;
   assert.equal(actualVenues().length, count, 'legacy ' + tier); checks++;
 }

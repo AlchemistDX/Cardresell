@@ -3,7 +3,7 @@
 const bundles = Object.freeze({
   free: Object.freeze({ tier: 'free', count: 2 }),
   pro: Object.freeze({ tier: 'pro', count: 9 }),
-  pro_max: Object.freeze({ tier: 'pro_max', count: 15 }),
+  pro_max: Object.freeze({ tier: 'pro_max', count: 18 }),
 });
 const planBundles = Object.freeze({
   free: 'free', starter: 'free', casual: 'pro', pro: 'pro_max', business: 'pro_max',
