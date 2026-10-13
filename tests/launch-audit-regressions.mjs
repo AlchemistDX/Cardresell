@@ -978,12 +978,13 @@ try {
         // keep the audit reporting indeterminate. Rotate so every fresh
         // response carries the new field. Keep the old versions asserted-
         // absent as a permanent list.
+        // v13 also carries all finish variants so cached responses cannot omit them.
         // 2026-09-04: v11 -> v12 with the identity guard (a number mismatch is
         // now refused instead of priced). Assert the CURRENT version and that
         // every superseded one is gone, rather than pinning one literal --
         // pinning is why this check failed the bump it exists to require.
-        /`v12\|\$\{game\}/.test(tcgPrice)
-          && !/`v(?:[89]|10|11)\|\$\{game\}/.test(tcgPrice),
+        /`v13\|\$\{game\}/.test(tcgPrice)
+          && !/`v(?:[89]|10|11|12)\|\$\{game\}/.test(tcgPrice),
         'a code change does NOT invalidate KV -- stale entries would keep serving $19,800');
 
   // Identity guard — EXECUTED, not pattern-matched. An earlier version of this
@@ -1977,8 +1978,8 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 
   const disp = index.slice(index.indexOf('async function _fetchPriceForEntry'),
                            index.indexOf('async function refreshCollectionPrices'));
-  check('dispatcher routes slabs to the graded path',
-        /if \(p && p\.grader && p\.grade\) return await _fetchGradedPriceForEntry\(p\);/.test(disp));
+  check('dispatcher prices legacy slabs and withholds unmatched scan finishes',
+        /if \(p && p\.grader && p\.grade\) return p\.finishReviewRequired \? null : await _fetchGradedPriceForEntry\(p\);/.test(disp));
   check('dispatcher routes raw to the eBay path',
         /return await _fetchEbayPriceForEntry\(p\);/.test(disp));
 

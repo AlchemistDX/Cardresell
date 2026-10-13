@@ -70,6 +70,7 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'scan-finish-browser.mjs': 'Required scan-finish release gate: CR_CHROMIUM=<binary> node tests/scan-finish-browser.mjs; full shipped mobile/desktop scan, finish review, Collection and draft metadata; synthetic providers, no paid scans.',
   'customer-journey-browser.mjs': 'Required customer-journey gate: CR_CHROMIUM=<binary> node tests/customer-journey-browser.mjs; shipped full app search/save/return/sign-in paths at mobile and desktop sizes; synthetic provider/auth boundaries, no paid operations.',
   'search-workflow-browser.mjs': 'Required search release gate: CR_CHROMIUM=<binary> node tests/search-workflow-browser.mjs; shipped mobile/desktop search UI with synthetic catalog, no external calls.',
   'draft-selected-delete-browser.mjs': 'Required selected-delete release gate: CR_CHROMIUM=<binary> node tests/draft-selected-delete-browser.mjs; synthetic account only.',

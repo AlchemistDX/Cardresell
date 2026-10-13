@@ -299,7 +299,7 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   ok(!/_tcgFreshVariant/.test(idx),
      'the dead currentPrices injection is gone (it matched printing names against condition keys)');
   const upd = idx.indexOf('function updatePriceFromPrinting()');
-  const updBody = idx.slice(upd, upd + 2200);
+  const updBody = idx.slice(upd, idx.indexOf('function getEffectivePrice()', upd));
   ok(/window\._crBasis && window\._ovAutoFilled && !isGradedVariant\(key\)/.test(updBody),
      'the headline renders from the basis when the system owns the number');
   ok(/priceMain\.textContent = `\$\$\{\(b\.value \* m\)\.toFixed\(2\)\}`/.test(updBody),

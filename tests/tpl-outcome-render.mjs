@@ -682,8 +682,8 @@ try {
 
   /** Click the first result, the way a seller picks a printing. */
   async function pickFirst() {
-    const item = await sp.$('#dropList .drop-item');
-    if (!item) return false;
+    const item = sp.locator('#dropList .drop-item').first();
+    try { await item.waitFor({state:'visible',timeout:10000}); } catch (_) { return false; }
     await item.click();
     await sp.waitForTimeout(900);
     return true;

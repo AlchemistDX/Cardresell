@@ -114,7 +114,8 @@ export default async function handler(req, res) {
   // v12 (2026-09-04): the identity guard changes WHICH product may be priced
   // (a number mismatch is now refused instead of returned), so v11 entries
   // written under the permissive scorer must not be served.
-  const cacheKey = `v12|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
+  // v13: keep every available finish price for explicit seller confirmation.
+  const cacheKey = `v13|${game}|${name}|${set}|${number}|${rarity}`.toLowerCase();
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
 
@@ -319,6 +320,7 @@ export default async function handler(req, res) {
         game,
         categoryId: r.categoryId ?? categoryId,
         variant: r.variant,
+        allVariants: r.allVariants || {},
         productId: r.product?.productId ?? null,
         cardName: r.product?.name ?? name,
         // 2026-09-03: echo the collector number the resolver actually matched.

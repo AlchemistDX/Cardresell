@@ -2533,44 +2533,14 @@ try {
    * work, since the stale part is the revision being resent.
    */
   /* ─────────────────────────────────────────────────────────────────────────
-     CONTROLLED REPRODUCTION of the basis loss, 2026-09-08.
-
-     The intermittent failure in the section above was diagnosed from a
-     retained trace (audit/d7/basis-loss-trace.json): a basis bound for card A
-     was cleared 14ms later by `loadCardUI`, reached from `doHydrate` inside
-     `_restoreLastLoadedCard`, which the bundle schedules on a 400ms startup
-     timer (js/core.73a71fac.js:20252). The card active at the clear was card A
-     itself, so a same-card reload dropped that card's own basis.
-
-     Neutralising the timer above makes that section deterministic, but on its
-     own it would leave the ordering untested and the diagnosis resting on one
-     saved artifact. This section reproduces the ordering DELIBERATELY, off any
-     timer, and states what happens. It is documentation of behaviour, not a
-     defect claim, and it deliberately does not change the behaviour:
-
-       * The clear is NOT removed. A card change must not carry the previous
-         card's provenance forward -- that leak is what the binding work
-         existed to stop, and it is a worse failure than losing a basis.
-       * The last non-null basis is NOT restored. Reinstating a basis whose
-         card is no longer certain would recreate the leak.
-
-     What it does establish is that the clear TREATS BOTH CASES ALIKE: dropping
-     a FOREIGN basis on a card change and dropping the CURRENT card's own basis
-     on a reload of that same card go through the same path to the same
-     outcome. Whether a same-card reload should keep the basis is an open
-     product question, recorded, not decided here -- so this section does not
-     rank the two cases either.
-
-     Production reachability has NOT been demonstrated, and is recorded as
-     undemonstrated rather than ruled out. (An earlier draft argued a seller
-     could not hold a basis inside the first 400ms because binding one needs a
-     priced read. That exceeded the evidence: a priced read establishes no
-     minimum duration.) The consequence if it did happen is disclosed rather
-     than silent --
-     see "no recorded source is stated as absent" and "a comp-derived price
-     with no basis is flagged as owing one" in the provenance-block section.
+     Startup restore must yield to a freshly selected card (2026-10-13).
+     The old reproduction deliberately demonstrated a 400ms restore replacing
+     the current card and clearing its bound basis. Finish review exposed the
+     same race: a dialog could suddenly refer to the abandoned object. Restore
+     now skips an existing selection. A deliberate card load still clears
+     foreign provenance, as the independent binding cases below verify.
   ───────────────────────────────────────────────────────────────────────── */
-  await T.section('a same-card reload drops that card\'s own bound basis', async () => {
+  await T.section('startup restore preserves a fresh selection and its bound basis', async () => {
     const CARD_A = { id: 'cra1', name: 'Card A', game: 'pokemon', set: 'Base Set', number: '4/102' };
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await ctx.newPage();
@@ -2616,22 +2586,20 @@ try {
     const restored = await page.evaluate(() => {
       try { return window._restoreLastLoadedCard(); } catch (e) { return 'threw: ' + e.message; }
     });
-    T.check('setup: the restore path ran and reloaded the same card',
-      restored === true, JSON.stringify(restored));
+    T.check('startup restore yields to the already selected card',
+      restored === false, JSON.stringify(restored));
 
-    T.check('\ud83d\udd34 the reload cleared the basis it had just been given for that same card',
-      await page.evaluate(() => window._crBasis) === null,
+    T.check('the skipped restore preserves the current card’s bound basis',
+      await page.evaluate(() => window._crBasis?.sourceUrl) === 'https://www.tcgplayer.com/CARD-A',
       JSON.stringify(await page.evaluate(() => window._crBasis)));
 
     const ctxAfter = await page.evaluate((A) => {
       try { return JSON.stringify(window._crPricingContext({ card: A }) || {}); }
       catch (e) { return 'threw: ' + e.message; }
     }, CARD_A);
-    T.check('\ud83d\udd34 so the pricing context a create would carry has no basis at all, '
-      + 'asked with the same card that just had one',
-      !/"basisMeta"/.test(ctxAfter), ctxAfter);
-    T.check('and the rest of the declared context survives, so this is a lost basis '
-      + 'and not a lost context',
+    T.check('the same-card pricing context retains the verified source',
+      /"basisMeta"/.test(ctxAfter) && /tcgplayer\.com\/CARD-A/.test(ctxAfter), ctxAfter);
+    T.check('the rest of the declared context also survives',
       /"feeModelRevision"/.test(ctxAfter), ctxAfter);
 
     await ctx.close();
