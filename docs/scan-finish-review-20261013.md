@@ -28,7 +28,7 @@ The new end-to-end gate uses the shipped app with synthetic scan and catalogue r
 
 | Check | Result |
 | --- | --- |
-| Scan finish browser gate | 90 assertions passed |
+| Scan finish browser gate | 106 assertions passed |
 | Binder capture/crop browser gate | 90 passed |
 | Customer search/save/sign-in journey | 90 passed |
 | Real draft API and batch identity gate | 113 passed |
@@ -46,3 +46,9 @@ The draft tests now perform the real finish-choice action before draft creation.
 This verifies safe handling of uncertainty, not improved optical recognition. No live paid scan was submitted and no labelled physical-card accuracy benchmark was performed. Existing binder crop tests establish preparation and handoff, not identification or foil accuracy. Sports retain their separate parallel chooser. Real examples should be checked using the same card photographed in its binder, outside it, and at a gently tilted angle with the actual finish recorded.
 
 No emails, ads, purchases, production customer records or existing card identities were changed by these checks. Deployment status is recorded separately after the release gate.
+
+## Live-review follow-up
+
+The first live review found a legacy individual-card fallback that labelled a generic carried value as `holofoil`. Deployment `dpl_8GpaCuXW4xCPbAENJzo6ZKiGimGP` was rolled back to the previous release while this was corrected. This was an existing fallback assumption exposed by the new finish picker; it was not acceptable as evidence for an explicit finish choice.
+
+All four scan fallback constructors now preserve actual feed finish keys or label a carried value as finish unknown. Condition keys, including moderately/heavily played and damaged, are excluded from finish options. Old cached scan previews withdraw unverified price choices; saved Collection records are not rewritten. Sixteen additional browser assertions cover these fallbacks and the restored-preview case across both viewports.
