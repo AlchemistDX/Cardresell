@@ -28,7 +28,7 @@ The new end-to-end gate uses the shipped app with synthetic scan and catalogue r
 
 | Check | Result |
 | --- | --- |
-| Scan finish browser gate | 106 assertions passed |
+| Scan finish browser gate | 116 assertions passed |
 | Binder capture/crop browser gate | 90 passed |
 | Customer search/save/sign-in journey | 90 passed |
 | Real draft API and batch identity gate | 113 passed |
@@ -61,3 +61,14 @@ PR #58 merged as `ebca521e68927899b3f85f844611a15a8a3e6319`. Its production buil
 Visual review then found that Vercel's explicit static build list omitted the finish stylesheet and the catch-all route served HTML at its URL. Local static-server browser tests could not reveal that hosting difference. The deployment configuration now includes and routes the fingerprinted CSS with the correct MIME type. The asset gate checks every referenced bundle against both static-build inclusion and the first terminating route (157 assertions passed). The release build also passed. Application logic remains at the previously tested 106 finish assertions and 116 executed local suites.
 
 The runtime log sample contained a Node `DEP0169` URL-parser deprecation warning, not an application exception. No paid scan was used. Final hosted CSS and visual verification are required after the routing release.
+
+
+## Live CSS verification and manual-entry identity
+
+PR #59 merged as `49541a7ff63bc96a7fffa507601c26c924bdcc7a`. Production deployment `dpl_GTVbU5PGsjERxaBYQeS8maca3KNH` serves the finish CSS with HTTP 200, `text/css; charset=utf-8`, and bytes exactly matching the local asset. The live dialog was visually confirmed centred over a dimmed page. `scan-finish-live-styled-20261013.jpg` records the result using an anonymous, explicitly labelled browser-only QA card.
+
+That fresh walkthrough also reproduced an older manual-entry defect: editing the prefilled name or set retained the previous lookup's number, rarity, image, product URL and finish metadata. The form now snapshots its source card on open and retains those fields only while the name and set remain unchanged. Changing identity also removes the old grader/cert and any untouched prefilled market value. A seller-entered replacement value remains seller sourced.
+
+Ten additional assertions across the two viewports cover changed names, changed printings, independent seller values and unchanged-card preservation. Final finish gate: 116 passed. Customer journey: 90 passed. Save durability: 129 passed. Flip/pack: 100 passed. Scan hygiene: 182 passed. Asset/deployment gate: 157 passed. Release build passed. A standalone legacy entry-identity runner could not start because it hardcodes an absent `/home/user/node_modules/playwright` dependency; it is not counted as passing. No full-suite rerun was needed for the subsequent targeted identity correction.
+
+No paid scan, email or marketplace submission was used. The fresh QA card was saved only to the anonymous verification browser, not a signed-in customer account.
