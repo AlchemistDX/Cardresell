@@ -13,10 +13,11 @@ const names=new Set(['renderCollectionView','_crCreateDraft','_crResolveEntry','
 const code=parse(core,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.has(n.id.name)).map(n=>core.slice(n.start,n.end)).join('\n');
 const module=readFileSync(join(ROOT,'js/collection-drafts.js'),'utf8');
 const fixture=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+`<script>
-window.googleUser={sub:'owner'};let data=[],calls=[],manifests=[],opened=[],mode='ok',limit=10,deferHead;
+window.googleUser={sub:'owner'};let data=[],calls=[],manifests=[],opened=[],compared=[],mode='ok',limit=10,deferHead,portReads=0;
+window.CardResellSellingPlan={openCollection:cards=>compared=cards};
 const _crCreateAttempt={},_crScanPhotoAttempt={},_crDraftState={},CR_D1_SLOT='ebay:fixed-price';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function loadPortData(){return data}function _updateCollectionSignInWall(){}function _crBumpGen(){}function hydrateCollectionSellButtons(){}
+function loadPortData(){portReads++;return data}function _updateCollectionSignInWall(){}function _crBumpGen(){}function hydrateCollectionSellButtons(){}
 function _crValueProvenance(p){return p.provenance}function _scanPhotoSnapshot(){return null}function _cardWithoutPhotoBytes(p){return p}function _crPricingContext(){return {}}
 async function _crIdToken(){return 'fixture'}function _crCreateIdemKey(a,b,c){return a+'_'+b+'_'+(_crDraftState[c]?.generation||0)}function _crNoteRowState(i,s){_crDraftState[i]=s}function _crNoteRowGone(i,s){_crDraftState[i]=s}function _crGoneCopy(){return {text:'Draft deleted. Select again to create a new draft.'}}
 function showToast(){}function openDraftReview(id){opened.push(id)}function switchView(v){opened.push(v)}
@@ -60,6 +61,22 @@ try{for(const width of [390,1280]){
  const before=await page.evaluate(()=>calls.length);await page.evaluate(()=>{googleUser={sub:'new-owner'};finishHead()});await done();check(await page.evaluate(()=>calls.length)===before,'account change aborts before writes');check(await page.locator('.collection-draft-check:checked').count()===0,'selection scoped to account');
  await page.evaluate(()=>{deferHead=false;seed([{id:4,card:'Duplicate',buyPrice:1},{id:'4',card:'Other',buyPrice:1}])});check(await page.locator('.collection-draft-check:disabled').count()===2,'ambiguous identifiers refused');
  await page.evaluate(()=>seed([{id:'5" onmouseover="window.pwned=1',card:'Quote " card',buyPrice:1}]));check(await page.locator('#collectionWrap [onmouseover]').count()===0,'row ID cannot escape attributes');
+ await page.evaluate(()=>seed([{id:null,card:'Missing identity'},{id:'null',card:'String identity'}]));check(await page.locator('.collection-draft-check:disabled').count()===2,'missing ID cannot be resolved into a different card through a string key');
  const bounds=await page.locator('#collectionDraftTools').boundingBox();check(bounds.x>=0&&bounds.x+bounds.width<=width+1,'toolbar fits viewport');
+ await page.evaluate(()=>seed([{id:10,card:'Cheap',currentValue:4.99},{id:11,card:'Boundary',currentValue:5},{id:12,card:'Zero',currentValue:0},{id:13,card:'Missing',currentValue:null},{id:14,card:'Invalid',currentValue:-1}]));
+ const filter=page.getByRole('combobox',{name:'Filter collection by saved value'});
+ await filter.selectOption('under5');check(await page.locator('#collectionWrap tr.col-row:visible').count()===2,'under $5 includes zero and $4.99, excludes missing and $5');
+ if(process.env.CR_SHOT_DIR)await page.locator('#collectionDraftTools').screenshot({path:process.env.CR_SHOT_DIR+'/value-filter-'+width+'.png'});
+ await page.evaluate(()=>portReads=0);await page.locator('[data-compare]').click();check(await page.evaluate(()=>portReads===1),'comparison reads collection storage once for the whole selection');check(await page.evaluate(()=>compared.length===2&&compared.every(p=>p.currentValue<5)),'filtered comparison passes only shown cards without manual selection');
+ await select();await filter.selectOption('atleast5');check((await page.locator('[data-count]').textContent()).includes('2 selected outside this filter'),'hidden selections are explicitly counted');
+ await page.locator('[data-compare]').click();check(await page.evaluate(()=>compared.length===2&&compared[0].card!=='Boundary'),'explicit selection wins over filters');
+ await page.getByRole('button',{name:'Keep only shown selections'}).click();check(await page.locator('.collection-draft-check:checked').count()===0,'hidden selections can be removed in one action');
+ await page.locator('[data-compare]').click();check(await page.evaluate(()=>compared.length===1&&compared[0].currentValue===5),'$5 boundary belongs in singles-value filter');
+ await filter.selectOption('missing');check(await page.locator('#collectionWrap tr.col-row:visible').count()===2,'missing and invalid values get their own queue');
+ await page.getByRole('searchbox').fill('Missing');check(await page.locator('#collectionWrap tr.col-row:visible').count()===1,'text and value filters compose');
+ await page.getByRole('searchbox').fill('not present');check(await page.locator('[data-compare]').isDisabled(),'empty filtered comparison is disabled');
+ await page.getByRole('searchbox').fill('');await page.evaluate(()=>renderCollectionView());check(await filter.inputValue()==='missing','value filter survives collection rerender');
+ const boundsWithFilter=await page.locator('#collectionDraftTools').boundingBox();check(boundsWithFilter.x>=0&&boundsWithFilter.x+boundsWithFilter.width<=width+1,'value filters fit mobile and desktop toolbars');
+ await page.evaluate(()=>{googleUser={sub:'third-owner'};renderCollectionView()});check(await filter.inputValue()==='all','account switch resets the value filter');
  check(errors.length===0,errors.join('\n'));await page.close();
 }console.log(`Collection drafts browser: ${checks} checks passed. -- SUITE COMPLETE, exit=0`)}finally{await browser.close();await new Promise(r=>server.close(r))}

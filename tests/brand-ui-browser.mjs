@@ -96,7 +96,7 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  await page.evaluate(()=>switchView('drafts'));
  await page.waitForFunction(()=>!_draftsState.loading);
  await page.evaluate(()=>{_draftsState.signedIn=false;_draftsState.error=null;_draftsState.loading=false;_draftsPaint()});
- check('signed-out drafts offer sign in',await page.locator('#draftsWrap a[href="/signin"]').isVisible(),true);
+ check('signed-out drafts offer sign in',await page.locator('#draftsWrap a[href="/signin?next=drafts"]').isVisible(),true);
  await page.evaluate(()=>{_draftsState.signedIn=true;_draftsState.total=0;_draftsState.rows=[];_draftsPaint()});
  await page.locator('#draftsWrap .empty-primary').click();
  check('empty drafts lead to ID scanner menu',await page.locator('#scanMenuTabId').getAttribute('aria-selected'),'true');
