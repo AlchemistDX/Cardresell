@@ -11,8 +11,15 @@ const reasons = new Set([
 ]);
 const stages = new Set(['catalogue_runtime', 'catalogue_context', 'account_runtime', 'account_operation']);
 export function reportMembershipFailure(stage, error, report = console.warn) {
+  // 2026-10-13: an unlisted failure still names its internal code when that
+  // code is a plain lowercase identifier set by our own modules (never a
+  // provider message, identity or value), so a refused setup is diagnosable.
+  const safe = value => typeof value === 'string' && /^[a-z][a-z0-9_]{2,48}$/.test(value) ? value : null;
   const reason = [error?.code, error?.message].find(value => reasons.has(value))
-    || (error?.name === 'SyntaxError' ? 'invalid_serialized_configuration_or_state' : 'unclassified');
+    || (error?.name === 'SyntaxError' ? 'invalid_serialized_configuration_or_state' : null)
+    || [safe(error?.code), safe(error?.message), safe(error?.cause?.code), safe(error?.cause?.message)]
+      .filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 2).map(v => 'code:' + v).join('|')
+    || 'unclassified';
   try { report('MEMBERSHIP_REQUEST_FAILED', stages.has(stage) ? stage : 'unknown', reason); }
   catch { /* Diagnostics must never alter response or admission. */ }
 }
