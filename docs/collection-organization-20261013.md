@@ -14,3 +14,9 @@ Validation:
 - Copy/markup consistency: 224 checks passed.
 
 Screenshots were visually inspected at phone and desktop sizes. Browser tests use synthetic identities, controlled catalogue/service replies and local persistence; no purchases, paid scans or live account changes were made. The newer upstream membership-diagnostics change is preserved exactly.
+
+Live verification:
+- Production deployment `dpl_8CeXCQggKNXZLhg6DanFvnn7a13k` reached READY and the Vercel commit check succeeded for `0b4251ca518dde95a7be0488d7da092736478220`.
+- Reloaded https://www.cardresell.org/ and inspected the updated Collection controls using two pre-existing browser-only QA records. Searching, selecting the visible result, and clearing filters preserved the selected card and restored both rows.
+- Captured and inspected `collection-organized-live-20261013.jpg`.
+- Deployment-scoped error/fatal runtime log query returned no matching records in the ten-minute check window (2026-10-13 22:31–22:41 UTC); this is a limited observation, not a guarantee of no errors.
