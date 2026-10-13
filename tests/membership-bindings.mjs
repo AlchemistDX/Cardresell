@@ -470,7 +470,8 @@ await t.section('Scope and frozen dependencies', async () => {
   t.check('Single write primitive, no expiry/debit/grant commands', (MEMBERSHIP_BINDINGS_SCRIPT.match(/redis\.call\('MSET'/g) || []).length === 1
     && !/redis\.call\('(SET|INCR|DECR|EXPIRE|DEL)'/.test(MEMBERSHIP_BINDINGS_SCRIPT));
   const expected = {
-    '../api/_membershipLedger.js': 'e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb',
+    // Prior: e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb (before 2026-10-13 comp grants).
+    '../api/_membershipLedger.js': '2af07270ddba63a272e21c12c8b119d88b75a05dac95341c95ac4c2bdc755f7b',
     '../api/_membershipPayments.js': 'a3d820ec5b1738aec378a65163df86c5aadae10a0c853080446631d977d43848',
     '../api/_launchMembershipConfig.js': '65f941e6c3ca537fda1bee1c1bcb81079fae34815341df8105c0783ea77a5272',
     '../api/_idBilling.js': '795235399c1ccef5175c172a3c8166622980f12afee37e714bb7e15a22fa77ad',

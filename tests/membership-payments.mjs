@@ -137,10 +137,15 @@ function fixture({ plan = 'casual', packId = 'id_25' } = {}) {
 }
 
 console.log('Approved ledger Lua SHA256:', sha(MEMBERSHIP_LEDGER_SCRIPT));
-t.check('additive late-grant hold ledger hash bridge', sha(MEMBERSHIP_LEDGER_SCRIPT)
+// 2026-10-13 comp grants are additive marked blocks; stripping them must
+// recover the exact reviewed late-grant-hold script.
+const WITHOUT_COMP = MEMBERSHIP_LEDGER_SCRIPT.replace(/-- COMP_GRANT:[\s\S]*?-- END_COMP_GRANT\n/g, '');
+t.check('additive late-grant hold ledger hash bridge', sha(WITHOUT_COMP)
   === 'a5ee5dbb5de02dd1724e8ddefa6b11cbfe3429f4bf8cb8963e109e3029a2164a');
+t.check('comp-grant ledger Lua explicitly pinned', sha(MEMBERSHIP_LEDGER_SCRIPT)
+  === 'b9a23c70ba57ddf83ec663670807e12348e3e0472e9514b324913bf0b8f04b99');
 t.check('prior permanent-credit Lua exact after removing only hold guard',
-  sha(MEMBERSHIP_LEDGER_SCRIPT.replace(/-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, ''))
+  sha(WITHOUT_COMP.replace(/-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, ''))
     === '950ce766d8b45dd90d84a1009ed8f49e00511b7142ca7594646dec056bb1019a');
 
 await t.section('all server-bound pack quotes, never metadata authority', async () => {
@@ -520,7 +525,7 @@ await t.section('dependency failure, price-map guard and dormant scope', async (
     !/\bfetch\s*\(|process\.env|subscriptions\.update|checkout\.sessions\.create/.test(source));
   t.check('adapter never reads metadata as authority', !/\.metadata\b/.test(source));
   t.check('additive hold ledger file explicitly hash-pinned', sha(readFileSync(new URL('../api/_membershipLedger.js', import.meta.url)))
-    === 'e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb');
+    === '2af07270ddba63a272e21c12c8b119d88b75a05dac95341c95ac4c2bdc755f7b');
 });
 
 await t.section('authenticated canonical invoice recovery shares signed-webhook verifier', async () => {

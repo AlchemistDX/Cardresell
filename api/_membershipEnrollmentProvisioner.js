@@ -21,6 +21,13 @@ for i=2,#KEYS do
 end
 redis.call('SET',KEYS[2],p.audit)
 return 1`;
+function manualLegacyRecord(raw) {
+  let record;
+  try { record = JSON.parse(raw); } catch { return false; }
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+  const sub = record.subscriptionId ?? '';
+  return typeof sub === 'string' && !sub.startsWith('sub_');
+}
 export function createMembershipEnrollmentProvisioner({ execute, accountId, environment, allowedOwners, livemode = false, allowNewOwners = false }) {
   if (typeof livemode !== 'boolean' || environment !== (livemode ? 'production' : 'preview') || !/^acct_[A-Za-z0-9]+$/.test(accountId)
     || typeof execute !== 'function' || !Array.isArray(allowedOwners) || typeof allowNewOwners !== 'boolean') fail();
@@ -38,12 +45,17 @@ export function createMembershipEnrollmentProvisioner({ execute, accountId, envi
         // or replace a malformed existing record here.
         return { status: 'existing_audit' };
       }
-      if (expected.slice(1, 5).some(raw => raw !== null)) {
+      // 2026-10-13 (owner-confirmed tester): a legacy pro record that names no
+      // Stripe subscription is a hand-written tester/comp record, not billing.
+      // It is only observed (the CAS below keeps its bytes identical) and never
+      // read, repaired or migrated. Any record naming sub_… still needs review.
+      const legacyBlocks = expected[4] !== null && !manualLegacyRecord(expected[4]);
+      if (expected.slice(1, 4).some(raw => raw !== null) || legacyBlocks) {
         // 2026-10-13 diagnostics: name only which record types already exist
         // (fixed labels, never values, keys or identities). Nothing is repaired.
         try {
           console.warn('MEMBERSHIP_ENROLLMENT_REVIEW', ['enrollment', 'included_history', 'active', 'legacy_pro']
-            .filter((_, i) => expected[i + 1] !== null).join('+'));
+            .filter((_, i) => expected[i + 1] !== null && (i !== 3 || legacyBlocks)).join('+'));
         } catch { /* diagnostics never alter the refusal */ }
         fail();
       }

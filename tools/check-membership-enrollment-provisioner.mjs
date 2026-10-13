@@ -8,7 +8,7 @@ import { createMembershipFreeIssuance } from '../api/_membershipFreeIssuance.js'
 import { membershipEnrollmentKey } from '../api/_membershipConsumption.js';
 const accountId = 'acct_synthetic';
 const provision = createMembershipEnrollmentProvisioner({ execute, accountId, environment: 'preview',
-  allowedOwners: ['newOwner', 'legacyOwner', 'unfenced', 'orphan'] });
+  allowedOwners: ['newOwner', 'legacyOwner', 'unfenced', 'orphan', 'tester', 'testerSub', 'testerBad'] });
 const bootstrap = createMembershipBootstrap({ execute, accountId });
 let passed = 0;
 async function test(name, fn) { await fn(); passed++; console.log('PASS ' + name); }
@@ -25,6 +25,26 @@ await test('legacy subscription requires separate migration', async () => {
   await execute(['SET', 'pro:legacyOwner', '{"subscriptionId":"sub_old"}']);
   await assert.rejects(() => provision('legacyOwner'));
   assert.equal(await execute(['GET', membershipBootstrapAuditKey('legacyOwner')]), null);
+});
+await test('hand-written tester record (no Stripe subscription) enrolls; bytes and credits preserved', async () => {
+  const manual = '{"email":"t@example.test","status":"active","tier":"ultimate","note":"manual tester grant"}';
+  await execute(['SET', 'pro:tester', manual]);
+  await execute(['SET', 'scans:tester:paid_left', '9999']);
+  await execute(['SET', 'scans:tester:id_paid_left', '9999']);
+  assert.equal((await provision('tester')).status, 'audit_created');
+  assert.equal((await bootstrap('tester')).status, 'enrolled');
+  assert.equal(await execute(['GET', 'pro:tester']), manual);
+  assert.equal(await execute(['GET', 'scans:tester:paid_left']), '9999');
+  assert.equal(await execute(['GET', 'scans:tester:id_paid_left']), '9999');
+  assert.equal((await provision('tester')).status, 'existing_audit');
+});
+await test('tester record naming a sub_ id or unreadable still requires review', async () => {
+  await execute(['SET', 'pro:testerSub', '{"subscriptionId":"sub_manual","tier":"ultimate"}']);
+  await assert.rejects(() => provision('testerSub'));
+  await execute(['SET', 'pro:testerBad', 'not json']);
+  await assert.rejects(() => provision('testerBad'));
+  assert.equal(await execute(['GET', membershipBootstrapAuditKey('testerSub')]), null);
+  assert.equal(await execute(['GET', membershipBootstrapAuditKey('testerBad')]), null);
 });
 await test('concurrent provisioning creates one audit and preserves legacy balances', async () => {
   await execute(['SET', 'scans:newOwner:id_paid_left', '89']);

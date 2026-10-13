@@ -372,7 +372,8 @@ await t.section('Frozen approved modules and inactive source scope', async () =>
     // 2026-10-03 exact-JSON bridge; managed null-loss regression in bindings suite.
     // Prior: 3fff2c8200c7127a814c5c8433fddd7301241826e86359b041e1abb3dbf9d8be.
     '../api/_membershipBindings.js': 'db9c48424127842e02e2f97c3af5b29a6516ae88edde1166cb2ac58e165f0201',
-    '../api/_membershipLedger.js': 'e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb',
+    // Prior: e068c0013c06cfeb2084295f50c03a94f768ba2d93705dc6fe3d9df8dbc528cb (before 2026-10-13 comp grants).
+    '../api/_membershipLedger.js': '2af07270ddba63a272e21c12c8b119d88b75a05dac95341c95ac4c2bdc755f7b',
     '../api/_launchMembershipConfig.js': '65f941e6c3ca537fda1bee1c1bcb81079fae34815341df8105c0783ea77a5272',
     '../api/_idBilling.js': '795235399c1ccef5175c172a3c8166622980f12afee37e714bb7e15a22fa77ad',
   };
