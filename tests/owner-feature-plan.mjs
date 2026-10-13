@@ -16,14 +16,15 @@ ok(ownerFeaturePlan('owner-uid', { ...on, MEMBERSHIP_LIVE_OWNERS: '[]' }) === nu
 ok(ownerFeaturePlan('', on) === null && ownerFeaturePlan(undefined, on) === null, 'empty owner -> nothing');
 ok(ownerFeaturePlan('owner-uid', {}) === null, 'default environment -> off');
 const rb = fs.readFileSync(new URL('../api/_membershipRouteBilling.js', import.meta.url), 'utf8');
-ok(/capabilities: ownerFeaturePlan\(owner\)\s*\? \{ bulkGrade: true, venueTier: membershipVenueAccess\('business'\)\.tier, bulkGradeCards: BULK_GRADE_CARD_LIMITS\.business, featurePlan: 'business' \}\s*: \{ bulkGrade: id\.bulk_grade, venueTier: membershipVenueAccess\(tier\)\.tier \}/.test(rb), 'balances: owner capabilities Business, everyone else unchanged');
+ok(/const featurePlan = ownerFeaturePlan\(owner\) \|\| await compFeaturePlan\(owner, membershipRedis\);/.test(rb), 'feature plan: owner, else an env-listed comp grant (2026-10-13)');
+ok(/capabilities: featurePlan === 'business'\s*\? \{ bulkGrade: true, venueTier: membershipVenueAccess\('business'\)\.tier, bulkGradeCards: BULK_GRADE_CARD_LIMITS\.business, featurePlan: 'business' \}\s*: \{ bulkGrade: id\.bulk_grade, venueTier: membershipVenueAccess\(tier\)\.tier \}/.test(rb), 'balances: owner capabilities Business, everyone else unchanged');
 ok(/const tier = id\.period_active \? id\.plan : 'free';/.test(rb), 'plan tier itself is not overridden');
 ok(!/credits:.*ownerFeaturePlan/.test(rb), 'credit fields untouched');
 const dp = fs.readFileSync(new URL('../api/_draftPlanPolicy.js', import.meta.url), 'utf8');
 ok(dp.indexOf('ownerFeaturePlan(owner)') > dp.indexOf('membershipRouteMode()'), 'draft override only in launch mode');
 ok(/Math\.max\(b\.activeLimit, 500\)/.test(dp), 'draft capacity never drops below imported 500');
 const scan = fs.readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
-ok((scan.match(/bulkGrade: isBulkGrade && !ownerFeaturePlan\(key\) \}/g) || []).length === 2, 'ledger feature flag skipped only for owner, debit + Deep->Quick paths');
+ok(/let _featureBusiness = !!ownerFeaturePlan\(key\);/.test(scan) && (scan.match(/bulkGrade: isBulkGrade && !_featureBusiness \}/g) || []).length === 2, 'ledger feature flag skipped only for owner or comp Business, debit + Deep->Quick paths');
 ok(/if \(membershipV2 && isBulkGrade\) \{\s*try \{\s*const balance = await membershipBalances\(key\);/.test(scan), 'server Bulk Grade check still runs for everyone');
 const lua = fs.readFileSync(new URL('../api/_membershipConsumption.js', import.meta.url), 'utf8');
 ok(!lua.includes('ownerFeaturePlan'), 'atomic billing script untouched');

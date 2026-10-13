@@ -3,6 +3,7 @@ import { membershipBalances, membershipRouteMode } from './_membershipRouteBilli
 import { legacyCreditFetch as fetch } from './_membershipLegacyFence.js';
 import { membershipRedis } from './_membershipLegacyFence.js';
 import { readMembershipVerification } from './_membershipVerification.js';
+import { claimCompGrants } from './_membershipComp.js';
 // /api/pro-status — Check Pro status + scan credits for a Google user
 // GET (Authorization: Bearer <google_id_token>)
 // Returns: { isPro, status, freeScansLeft, paidScansLeft, totalScansLeft, email }
@@ -59,7 +60,18 @@ export default async function handler(req, res) {
       if (saved) { emailVerified = true; verifiedEmail = saved.email || ''; }
       // Verification survives an unavailable ledger; do not invent zero balances.
       let b;
-      try { b = await membershipBalances(userSub); }
+      try {
+        b = await membershipBalances(userSub);
+        // 2026-10-13: owner-approved comp grants (MEMBERSHIP_COMP_GRANTS) are
+        // claimed by the verified account they name, once, via the ledger.
+        // A failed claim never blocks the balance read; it retries next load.
+        let compApplied = [];
+        try {
+          compApplied = await claimCompGrants({ uid: userSub, emailVerified,
+            email: saved ? verifiedEmail : userEmail }, membershipRedis);
+        } catch (error) { console.error('[comp] claim unavailable', error?.code || 'error'); }
+        if (compApplied.length) b = await membershipBalances(userSub);
+      }
       catch (error) {
         if (error.code === 'membership_setup_required') return res.status(409).json({
           error: error.code, action: 'complete_account_setup', creditsAvailable: false,

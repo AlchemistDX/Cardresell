@@ -131,6 +131,24 @@ end
 -- END_LATE_GRANT_HOLD
 local now=tonumber(redis.call('TIME')[1])
 local result={ok=true,owner=p.owner,kind=p.kind,version=p.version}
+-- COMP_GRANT: 2026-10-13 owner-approved complimentary grant. Additive and
+-- self-contained: permanent credits plus, for plan business, a per-owner
+-- feature record. Replay and second-owner refusal come from KEYS[1] above;
+-- the shared journal write and single MSET below commit it.
+if p.kind=='comp' then
+  if not integer(p.idGrant) or not integer(p.gradeGrant) or p.idGrant+p.gradeGrant<=0
+    or (p.plan~='business' and p.plan~='none') then error('invalid grant') end
+  local id=counter(KEYS[2])+p.idGrant
+  local grade=counter(KEYS[3])+p.gradeGrant
+  if not integer(id) or not integer(grade) then error('balance overflow') end
+  if p.idGrant>0 then write(KEYS[2],id) end
+  if p.gradeGrant>0 then write(KEYS[3],grade) end
+  if p.plan=='business' then
+    write(KEYS[4],encode({version=p.version,owner=p.owner,plan='business',grant=p.grant}))
+  end
+  result.granted=true; result.id_delta=p.idGrant; result.grade_delta=p.gradeGrant
+else
+-- END_COMP_GRANT
 if p.kind=='pack' or p.kind=='welcome' then
   local claimed=p.kind=='welcome'
     and (redis.call('EXISTS',KEYS[4])==1 or redis.call('EXISTS',KEYS[5])==1)
@@ -253,6 +271,9 @@ elseif p.kind=='period' then
     write(KEYS[6],encode({version=p.version,owner=p.owner,subscription=p.subscription}))
   end
 else return fail('invalid_kind') end
+-- COMP_GRANT: close
+end
+-- END_COMP_GRANT
 local response=encode(result)
 local request=encode(p)
 write(KEYS[1],encode({version=p.version,binding=p.binding,
@@ -310,6 +331,17 @@ export function prepareMembershipGrant(kind, input) {
       idGrant: LAUNCH_WELCOME_CREDITS.idCredits, gradeGrant: LAUNCH_WELCOME_CREDITS.gradeCredits };
     operation = `welcome:${digest(owner)}`;
     extra = [`signup_bonus:${owner}`, `email_bonus_claimed:${email}`, 'unused:6'];
+  } else if (kind === 'comp') {
+    // 2026-10-13: owner-approved complimentary grant (see _membershipComp.js).
+    // The grant ID, not the owner, is the operation: one claim per grant.
+    fields(input, ['owner', 'grantId', 'idGrant', 'gradeGrant', 'plan']);
+    if (typeof input.grantId !== 'string' || !/^comp-[a-z0-9-]{3,60}$/.test(input.grantId)
+        || !safeInt(input.idGrant) || !safeInt(input.gradeGrant) || input.idGrant > 1000 || input.gradeGrant > 1000
+        || input.idGrant + input.gradeGrant <= 0 || !['business', 'none'].includes(input.plan)) reject();
+    normalized = { version: MEMBERSHIP_VERSION, kind, owner, grant: input.grantId, plan: input.plan,
+      idGrant: input.idGrant, gradeGrant: input.gradeGrant };
+    operation = `comp:${digest(input.grantId)}`;
+    extra = [`${prefix}comp_feature:${digest(owner)}`, 'unused:5', 'unused:6'];
   } else reject('invalid_kind');
   const p = { ...normalized, binding: digest(JSON.stringify(normalized)) };
   const balanceKeys = kind === 'welcome' ? membershipWelcomeKeys(owner)
@@ -317,7 +349,7 @@ export function prepareMembershipGrant(kind, input) {
   return { command: ['EVAL', MEMBERSHIP_LEDGER_SCRIPT, 9,
     `${prefix}${operation}`, balanceKeys.id, balanceKeys.grade,
     ...extra, membershipIncludedHistoryKey(owner), `${prefix}consumer:${digest(owner)}`,
-    kind === 'welcome' ? 'unused:9' : membershipGrantHoldKey(kind, kind === 'pack' ? input.paymentId : input.invoiceId),
+    kind === 'welcome' || kind === 'comp' ? 'unused:9' : membershipGrantHoldKey(kind, kind === 'pack' ? input.paymentId : input.invoiceId),
     JSON.stringify(p)], binding: p.binding, kind, owner };
 }
 

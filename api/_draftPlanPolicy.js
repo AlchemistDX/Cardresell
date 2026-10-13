@@ -10,8 +10,8 @@ export function draftPlanPolicy(plan) {
 export async function resolveDraftPlan(owner) {
   if (!await membershipRouteMode()) return { plan: 'legacy', activeLimit: 500, bulkLimit: 500 };
   const balance = await membershipBalances(owner);
-  // Owner test account: Business draft capacity, never below its imported 500/500.
-  if (ownerFeaturePlan(owner)) { const b = draftPlanPolicy('business'); return { ...b, activeLimit: Math.max(b.activeLimit, 500), bulkLimit: Math.max(b.bulkLimit, 500) }; }
+  // Owner test account and comp Business accounts: Business draft capacity, never below its imported 500/500.
+  if (ownerFeaturePlan(owner) || balance.capabilities?.featurePlan === 'business') { const b = draftPlanPolicy('business'); return { ...b, activeLimit: Math.max(b.activeLimit, 500), bulkLimit: Math.max(b.bulkLimit, 500) }; }
   const legacy = { legacy_pro: 'casual', legacy_pro_max: 'pro', legacy_ultimate: 'business' };
   // Existing imported subscriptions retain at least their previously available capacity.
   if (Object.hasOwn(legacy, balance.tier)) return { ...draftPlanPolicy(legacy[balance.tier]), activeLimit: 500, bulkLimit: 500 };
