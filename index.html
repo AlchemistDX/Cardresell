@@ -1098,8 +1098,8 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
 .pnl-prov-note{color:var(--gold-text);font-weight:600;line-height:1.35}
 
 /* ─── ADD FLIP MODAL ─── */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
-.modal-overlay.open{opacity:1;pointer-events:auto}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.modal-overlay.open{display:flex;opacity:1;pointer-events:auto}
 .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.5rem;width:100%;max-width:480px;box-shadow:var(--shadow-lg);transform:translateY(8px);transition:transform .25s cubic-bezier(.16,1,.3,1)}
 .modal-overlay.open .modal-box{transform:translateY(0)}
 .modal-title{font-size:1rem;font-weight:700;letter-spacing:-.015em;color:var(--text);margin-bottom:1.25rem}
@@ -2745,6 +2745,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <button class="add-collection-btn" id="addCollectionBtn" onclick="addCurrentCardToCollection()" title="Save this card to your Collection tab">
           📦 Add to My Collection
         </button>
+        <div id="collectionSaveNotice" hidden style="margin-top:.6rem;padding:.75rem;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)">
+          <div id="collectionSaveLabel" role="status" style="font-size:.8rem;line-height:1.5"></div>
+          <button type="button" class="add-collection-btn" onclick="_crOpenSavedCollection()" style="margin-top:.4rem;min-height:44px">View Collection →</button>
+        </div>
 
         <div class="sep"></div>
 
@@ -3089,7 +3093,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div id="collectionContent">
     <h1 class="workspace-title">Your collection</h1>
     <p id="collectionSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
-    <button class="fl-sub-btn" onclick="_pushUserData()">Retry cloud sync</button>
+    <button id="collectionSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
   <div class="section-panel" style="margin-top:1.5rem">
     <div class="section-title">Saved AI grades</div>
@@ -3551,9 +3555,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <div class="pricing-overlay" id="pricingOverlay" hidden inert aria-hidden="true" onclick="closePricingModal(event)"
      role="dialog" aria-modal="true" aria-labelledby="pricingTitle" tabindex="-1"><div class="pricing-box" id="pricingBox"><div class="pricing-header"><div class="pricing-title" id="pricingTitle"></div><div class="pricing-sub"></div></div><div class="pricing-toggle" role="tablist"><button type="button" class="pricing-toggle-btn active" id="pricingToggleMonthly" onclick="setPricingMode('monthly')"></button><button type="button" class="pricing-toggle-btn" id="pricingToggleAnnual" onclick="setPricingMode('annual')"><span class="pricing-toggle-savings"></span></button></div><div id="pricingAnnualBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(196,122,0,.16),rgba(196,122,0,.06));border:1px solid rgba(196,122,0,.4);border-radius:10px;color:#fde68a;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600"><strong style="color:var(--gold-text)"></strong><strong></strong></div><div id="pricingSignupBonusBanner" style="display:none;margin:.15rem auto .55rem;padding:.55rem .9rem;max-width:520px;background:linear-gradient(135deg,rgba(56,189,248,.14),rgba(56,189,248,.05));border:1px solid rgba(56,189,248,.35);border-radius:10px;color:#bae6fd;font-size:.72rem;text-align:center;line-height:1.4;font-weight:600"><strong style="color:#7dd3fc"></strong><strong></strong></div><div style="margin:.15rem auto .55rem;padding:.35rem .8rem;max-width:520px;color:var(--text-muted);font-size:.68rem;text-align:center;line-height:1.4;font-weight:500"><strong style="color:#4ade80"></strong></div><div class="pricing-cards"><div class="plan-card"><div class="plan-name"></div><div class="plan-price"><sup></sup><sub></sub></div><div class="plan-value"></div><div class="plan-value-sub"></div><ul class="plan-features"><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li></li><li><strong></strong></li><li></li><li class="faded"></li><li class="faded"></li></ul><button id="pricingFreeBtn" class="plan-btn free-btn" onclick="_freeTierCTA()"></button></div><div class="plan-card featured" data-tier="pro"><div class="plan-badge"></div><div class="plan-name"></div><div class="plan-price"><sup></sup><span></span><span style="font-size:1rem"></span><sub></sub></div><div class="plan-annual-note"></div><div class="plan-value"></div><div class="plan-value-sub"></div><ul class="plan-features"><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li></li></ul><button id="pricingProBtn" class="plan-btn pro-btn" onclick="startTierCheckout('pro')"><span></span></button></div><div class="plan-card tier-max" data-tier="pro_max"><div class="plan-badge"></div><div class="plan-name"></div><div class="plan-price"><sup></sup><span></span><span style="font-size:1rem"></span><sub></sub></div><div class="plan-annual-note"></div><div class="plan-value"></div><div class="plan-value-sub"></div><ul class="plan-features"><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li><strong></strong></li><li></li><li></li><li></li></ul><button id="pricingMaxBtn" class="plan-btn max-btn" onclick="startTierCheckout('pro_max')"><span></span></button></div></div><div class="pricing-close"><button class="pricing-close-btn" onclick="closePricingModal()"></button></div></div></div><div class="shop-overlay" id="shopOverlay" hidden inert aria-hidden="true" onclick="closeShop(event)" role="dialog" aria-modal="true" aria-labelledby="shopTitle"><div class="shop-box" id="shopBox" onclick="event.stopPropagation()"><div class="shop-head"><div><div class="shop-title" id="shopTitle"></div><div class="shop-sub"></div></div><button class="shop-x" onclick="closeShop()" aria-label="Close shop"></button></div><div class="shop-bal"><div class="shop-bal-card"><div class="shop-bal-lbl"></div><div class="shop-bal-num" id="shopIdBal"></div><div class="shop-bal-sub" id="shopIdSub"></div></div><div class="shop-bal-card"><div class="shop-bal-lbl"></div><div class="shop-bal-num" id="shopGradeBal"></div><div class="shop-bal-sub" id="shopGradeSub"></div></div></div><div id="shopSignInNote" class="shop-signin" style="display:none"><a href="/signin" style="color:var(--gold-text);font-weight:800"></a></div><div class="shop-tabs" role="tablist"><button type="button" class="shop-tab active" id="shopTabId" role="tab" aria-selected="true" aria-controls="shopPanelId" onclick="shopSetTab('id')"></button><button type="button" class="shop-tab" id="shopTabGrade" role="tab" aria-selected="false" aria-controls="shopPanelGrade" onclick="shopSetTab('grade')"></button></div><div class="shop-panel active" id="shopPanelId" role="tabpanel" aria-labelledby="shopTabId"><div class="shop-sub" style="margin-bottom:.6rem"></div><div class="shop-packs"><button type="button" class="shop-pack" onclick="shopBuy('id','10')"><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-note"></div></button><button type="button" class="shop-pack feat" onclick="shopBuy('id','50')"><span class="shop-pack-badge"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button><button type="button" class="shop-pack" onclick="shopBuy('id','100')"><span class="shop-pack-badge alt"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button></div></div><div class="shop-panel" id="shopPanelGrade" role="tabpanel" aria-labelledby="shopTabGrade"><div class="shop-sub" style="margin-bottom:.6rem"></div><div class="shop-packs"><button type="button" class="shop-pack" onclick="shopBuy('grade','10')"><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-note"></div></button><button type="button" class="shop-pack feat" onclick="shopBuy('grade','25')"><span class="shop-pack-badge"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button><button type="button" class="shop-pack" onclick="shopBuy('grade','50')"><span class="shop-pack-badge alt"></span><div class="shop-pack-qty"></div><div class="shop-pack-price"></div><div class="shop-pack-save"></div></button></div></div><div class="shop-foot"><div class="shop-foot-note" id="shopTierNote"><strong style="color:var(--text)"></strong></div><button type="button" class="shop-alt-btn" onclick="shopOpenPlans()"></button><button type="button" class="shop-alt-btn" id="shopBillingBtn" style="display:none" onclick="openBillingPortal()"></button></div></div></div>
 
-<div id="csToast" class="cs-toast"></div>
+<div id="csToast" class="cs-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-<div class="modal-overlay" id="flipModal" onclick="closeFlipModal(event)">
+<div class="modal-overlay" id="flipModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1" onclick="closeFlipModal(event)">
   <div class="modal-box">
     <div class="modal-title" id="modalTitle">Log a Flip</div>
     <!--
@@ -3579,23 +3583,23 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div class="modal-grid">
       <div class="modal-field modal-full">
-        <label>Card Name</label>
+        <label for="mCardName">Card Name</label>
         <input type="text" id="mCardName" placeholder="e.g. Lacey SIR 172/142" autocomplete="off" />
       </div>
       <div class="modal-field modal-full">
-        <label>Set / Notes</label>
+        <label for="mSetName">Set / Notes</label>
         <input type="text" id="mSetName" placeholder="e.g. Stellar Crown · PSA 9" autocomplete="off" />
       </div>
       <div class="modal-field">
-        <label>Buy Price ($)</label>
+        <label for="mBuyPrice">Buy Price ($)</label>
         <input type="number" id="mBuyPrice" placeholder="0.00" step="0.01" min="0" />
       </div>
       <div class="modal-field" id="mSellPriceField">
-        <label>Sell Price ($)</label>
+        <label for="mSellPrice">Sell Price ($)</label>
         <input type="number" id="mSellPrice" placeholder="0.00" step="0.01" min="0" />
       </div>
       <div class="modal-field" id="mPlatformField">
-        <label>Platform Sold On</label>
+        <label for="mPlatform">Platform Sold On</label>
         <select id="mPlatform">
           <option value="eBay">eBay</option>
           <option value="Poshmark">Poshmark</option>
@@ -3614,11 +3618,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </div>
       </div>
       <div class="modal-field">
-        <label>Date</label>
+        <label for="mDate">Date</label>
         <input type="date" id="mDate" />
       </div>
       <div class="modal-field modal-full">
-        <label>Current Market Value ($) <span style="font-weight:400;opacity:.6">— for portfolio tracking</span></label>
+        <label for="mCurrentValue">Current Market Value ($) <span style="font-weight:400;opacity:.6">— for portfolio tracking</span></label>
         <input type="number" id="mCurrentValue" placeholder="0.00 (optional)" step="0.01" min="0" />
       </div>
     </div>
@@ -3956,10 +3960,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 </div><!-- /wrap -->
 
-<script defer src="/js/config.4e617366.js"></script>
+<script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.f17a14ef.js"></script>
-<script defer src="/js/core.40915df9.js"></script>
+<script defer src="/js/core.23c1000a.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4038,14 +4042,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </style>
 <script defer src="/js/membership-shop.6b3f4693.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/ui.b8524916.js"></script>
+<script defer src="/js/ui.5a01faf1.js"></script>
 <script defer src="/js/selling-plan.e492f1c8.js"></script>
 <script defer src="/js/selling-advice.7b8b622b.js"></script>
-<script defer src="/js/collection-drafts.49ba8e73.js"></script>
+<script defer src="/js/collection-drafts.405fac55.js"></script>
 <script defer src="/js/grade-history.412c898b.js"></script>
   <script defer src="/js/binder.1c3ef574.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
-<script type="module" src="/js/auth.1aca8ff5.js"></script>
+<script type="module" src="/js/auth.922d48e9.js"></script>
 <script>
   // Keep both legacy and Firebase-signup claim buttons client-side fail-closed.
   // Their implementations live in deferred scripts, so wrap them once those

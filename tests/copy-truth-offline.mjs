@@ -482,8 +482,8 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
   const upTiers = idx.match(/\['pro','pro_max'(?:,'ultimate')?\]\.includes\(upgradeParam\)/);
   ok(upTiers && /ultimate/.test(upTiers[0]) &&
      /upgradeParam === 'ultimate' \? 'pro_max' : upgradeParam/.test(idx) &&
-     /Ultimate was retired\. Pro Max now includes all 15 venues\./.test(idx),
-     'the ?upgrade=ultimate router safely remaps to Pro Max with disclosure');
+     /This plan was retired\. Compare the current plans in Subscriptions\./.test(idx),
+     'the legacy upgrade router opens plan comparison with a retirement disclosure');
 
   // Issue 5 - cancel copy points at the Stripe portal, not email
   ok(!/emailing <a href="mailto:will@cardresell\.org">will@cardresell\.org<\/a>/.test(pr2) ||

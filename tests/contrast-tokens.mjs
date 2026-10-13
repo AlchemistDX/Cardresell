@@ -239,6 +239,11 @@ try {
        token edit makes the sweep match nothing and pass over an empty set.
        Demonstrated 2026-09-07: mutations M-J/M-K/M-L each tripped only the value
        assertion and left the sweep green across 0 measured nodes. */
+    // Closed dialogs now leave the layout/focus tree. Explicitly exercise
+    // their visible CSS state, preserving contrast coverage and its floor
+    // instead of measuring invisible controls or lowering the assertion.
+    await page.evaluate(() => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('open')));
+    T.check(`${theme}: save dialog is included in the contrast fixture`, await page.locator('#mCardName').isVisible());
     const nodes = await sweepPage(page, Object.values(resolved).filter(Boolean));
 
     /* SELF-CHECK BEFORE RATIOS. A sweep matching zero nodes passes vacuously

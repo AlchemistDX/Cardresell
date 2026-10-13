@@ -81,9 +81,9 @@ check(
     index.includes('target="_blank"') && index.includes('rel="noopener"')
 );
 check(
-  'retired Ultimate deep links map to Pro Max with an honest message',
+  'retired upgrade links disclose retirement and open current plan comparison',
   index.includes("['pro','pro_max','ultimate'].includes(upgradeParam)") &&
-    index.includes("Ultimate was retired. Pro Max now includes all 15 venues.")
+    index.includes("This plan was retired. Compare the current plans in Subscriptions.")
 );
 check(
   'non-applicable venues do not receive buyer-paid shipping',
@@ -778,9 +778,11 @@ try {
         !bulkEnable,
         'paying for a plan unlocks venues; it must never switch them on');
 
-  check('the only writer of venue state is the picker toggle',
-        (code.match(/setVenueEnabled\(/g) || []).length === 2,
-        'one definition + one caller; a third caller means something else flips venues');
+  check('venue state changes only from explicit picker or bulk planner actions',
+        (code.match(/setVenueEnabled\(/g) || []).length === 3 &&
+        /function onVenueToggle\(pid, on\)\s*\{\s*setVenueEnabled\(pid, on\)/.test(code) &&
+        /enable\.onclick=\(\)=>\{setVenueEnabled\(pid,true\)/.test(code),
+        'one definition plus the picker toggle and the bulk planner Enable button');
 
   check('the recommended button RESETS rather than adds',
         /function proWelcomeUseRecommended[\s\S]{0,200}?resetVenuesToRecommended\(\)/.test(code),

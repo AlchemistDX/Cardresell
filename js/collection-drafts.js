@@ -2,7 +2,7 @@
    Server capacity, eligibility, generations and bulk manifests remain authoritative. */
 (() => {
   'use strict';
-  let owner, rows = [], busy = false, query = '', message = '';
+  let owner, rows = [], busy = false, query = '', valueFilter = 'all', message = '';
   const selected = new Set(), results = new Map(), pending = new Map();
   const account = () => window.googleUser?.uid || window.googleUser?.sub || null;
   const key = p => String(p.id);
@@ -10,11 +10,17 @@
   function button(text, action) { const b = el('button', text); b.type = 'button'; b.onclick = action; return b; }
   function syncOwner() {
     if (owner === account()) return;
-    owner = account(); selected.clear(); results.clear(); pending.clear(); query = ''; message = '';
+    owner = account(); selected.clear(); results.clear(); pending.clear(); query = ''; valueFilter = 'all'; message = '';
   }
   function current(id) { const found = _crResolveEntry(loadPortData(), id); return found.ambiguous ? null : found.row; }
-  function rowMap(list) { const map = new Map(); for (const p of list) { const id = key(p); map.set(id, map.has(id) ? null : p); } return map; }
-  function visible(p) { return [p.card,p.set,p.number,p.game,p.grader,p.grade].join(' ').toLowerCase().includes(query.toLowerCase().trim()); }
+  function rowMap(list) { const map = new Map(); for (const p of list) { if (!p) continue; const id = key(p); map.set(id, p.id == null || map.has(id) ? null : p); } return map; }
+  function currentRows(ids) { const available = rowMap(loadPortData()); return ids.map(id => available.get(id) || null); }
+  function visible(p) {
+    const known = typeof p.currentValue === 'number' && Number.isFinite(p.currentValue) && p.currentValue >= 0;
+    const matchesValue = valueFilter === 'all' || (valueFilter === 'under5' && known && p.currentValue < 5)
+      || (valueFilter === 'atleast5' && known && p.currentValue >= 5) || (valueFilter === 'missing' && !known);
+    return matchesValue && [p.card,p.set,p.number,p.game,p.grader,p.grade].join(' ').toLowerCase().includes(query.toLowerCase().trim());
+  }
   function paint() {
     syncOwner();
     const bar = document.getElementById('collectionDraftTools'); if (!bar) return;
@@ -30,16 +36,21 @@
         if (result) { status.append(el('span', result.message)); if (result.draftId) status.append(button('Open draft', () => openDraftReview(result.draftId))); }
       }
     });
-    bar.querySelector('[data-count]').textContent = `${selected.size} selected · ${count} of ${rows.length} shown`;
+    const hiddenSelected = [...selected].filter(id => !byId.get(id) || !visible(byId.get(id))).length;
+    bar.querySelector('[data-count]').textContent = `${selected.size} selected · ${count} of ${rows.length} shown`
+      + (hiddenSelected ? ` · ${hiddenSelected} selected outside this filter` : '');
     bar.querySelector('[data-status]').textContent = message;
     bar.querySelectorAll('button[data-selection]').forEach(b => b.disabled = busy);
-    const compare=bar.querySelector('[data-compare]'); if(compare) {compare.disabled=busy;compare.textContent=selected.size?'Compare '+selected.size+' selected card'+(selected.size===1?'':'s'):'Compare entire collection';}
+    bar.querySelector('[data-value-filter]').disabled = busy;
+    const only = bar.querySelector('[data-only-visible]'); only.hidden = !hiddenSelected; only.disabled = busy;
+    const compare=bar.querySelector('[data-compare]'); if(compare) {compare.disabled=busy || (!selected.size && !count);compare.textContent=selected.size?'Compare '+selected.size+' selected card'+(selected.size===1?'':'s'):(valueFilter !== 'all' || query.trim() ? 'Compare '+count+' shown card'+(count===1?'':'s') : 'Compare entire collection');}
     const create = bar.querySelector('[data-create]'); create.disabled = busy || !selected.size;
-    create.textContent = busy ? 'Preparing drafts…' : `Prepare ${selected.size || ''} draft${selected.size === 1 ? '' : 's'}`;
+    create.textContent = busy ? 'Preparing drafts…' : !owner ? 'Sign in to prepare drafts' : `Prepare ${selected.size || ''} draft${selected.size === 1 ? '' : 's'}`;
   }
   function mount(next) {
     syncOwner(); rows = next;
-    for (const id of selected) if (!rows.some(p => key(p) === id)) selected.delete(id);
+    const present = new Set(rows.map(key));
+    for (const id of selected) if (!present.has(id)) selected.delete(id);
     document.getElementById('collectionDraftTools')?.remove();
     if (!rows.length) return;
     if (!document.getElementById('collectionDraftStyles')) {
@@ -51,11 +62,21 @@
     bar.append(el('strong', 'Plan your sale'));
     const search = el('input'); search.type = 'search'; search.placeholder = 'Find cards by name, set, or number'; search.setAttribute('aria-label','Search collection'); search.value = query;
     search.oninput = () => { query = search.value; paint(); }; bar.append(search);
+    const filterLabel = el('label', 'Saved card value '), filter = el('select');
+    filter.dataset.valueFilter = ''; filter.setAttribute('aria-label', 'Filter collection by saved value');
+    filter.style.cssText = 'font:inherit;min-height:44px;max-width:100%;padding:.55rem;border:1px solid var(--border);border-radius:8px;color:var(--text);background:var(--surface)';
+    for (const [value, text] of [['all','All values'],['under5','Under $5'],['atleast5','$5 and above'],['missing','Missing value']]) {
+      const option = el('option',text); option.value=value; filter.append(option);
+    }
+    filter.value = valueFilter; filter.onchange = () => { valueFilter = filter.value; paint(); };
+    filterLabel.append(filter); bar.append(filterLabel);
     const select = button('Select visible', () => { syncOwner(); const available = rowMap(loadPortData()); rows.filter(visible).forEach(p => { if (available.get(key(p))) selected.add(key(p)); }); paint(); }); select.dataset.selection = '';
     const clear = button('Clear selection', () => { selected.clear(); paint(); }); clear.dataset.selection = '';
     const create = button('Prepare drafts', prepare); create.dataset.create = '';
-    const compare=button('Compare selling',()=>{syncOwner();const cards=selected.size?[...selected].map(current).filter(Boolean):loadPortData();if(selected.size && cards.length!==selected.size){message='A selected card changed. Refresh your collection and select it again.';paint();return;}window.CardResellSellingPlan?.openCollection(cards);});compare.dataset.compare='';
-    bar.append(select, clear, compare, create, button('View drafts', () => switchView('drafts')));
+    const compare=button('Compare selling',()=>{syncOwner();const ids=selected.size?[...selected]:rows.filter(visible).map(key);const cards=currentRows(ids).filter(Boolean);if(cards.length!==ids.length){message='A card changed or has an ambiguous ID. Refresh your collection and select it again.';paint();return;}window.CardResellSellingPlan?.openCollection(cards);});compare.dataset.compare='';
+    const only = button('Keep only shown selections', () => { const available = rowMap(loadPortData()); for (const id of selected) { const p = available.get(id); if (!p || !visible(p)) selected.delete(id); } paint(); }); only.dataset.onlyVisible = '';
+    bar.append(select, clear, only, compare, create, button('View drafts', () => switchView('drafts')));
+    bar.append(el('small', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.'));
     const count = el('div'); count.dataset.count = ''; const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(count,status);
     document.getElementById('collectionWrap').before(bar);
     const byId = rowMap(rows);
@@ -69,7 +90,7 @@
   }
   async function prepare() {
     if (busy) return; syncOwner();
-    if (!owner) { message = 'Sign in to prepare listing drafts.'; paint(); return; }
+    if (!owner) { triggerGoogleSignIn('collection'); return; }
     const ids = [...selected], batchOwner = owner; if (!ids.length) return;
     const assertOwner = () => { if (account() !== batchOwner) throw Error('Account changed. Select cards from your current collection.'); };
     busy = true; message = 'Checking draft capacity…'; paint();
@@ -78,7 +99,7 @@
       const head = await _bulkDraftHeadroom(); assertOwner();
       if (!head.known) throw Error('Could not confirm draft capacity. Your selection is preserved; please retry.');
       if (ids.length > head.bulkLimit) throw Error(head.bulkLimit <= 1 ? 'Select one card, or choose Starter or above for bulk draft preparation.' : `Your plan supports ${head.bulkLimit} cards per action. Select fewer cards or view Subscriptions.`);
-      const cards = ids.map(current); if (cards.some(p => !p)) throw Error('A selected card changed or has an ambiguous ID. Refresh your collection and select it again.');
+      const cards = currentRows(ids); if (cards.some(p => !p)) throw Error('A selected card changed or has an ambiguous ID. Refresh your collection and select it again.');
       const eligibility = await fetchSellStamps(cards); assertOwner();
       if (!eligibility.ok) throw Error('Could not check card details. Your selection is preserved; please retry.');
       const units = cards.map((card,i) => {
