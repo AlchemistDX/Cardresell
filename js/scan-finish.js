@@ -13,8 +13,14 @@ function _scanFinishOptions(info) {
   if (!entries.length && info?.variant) entries.push({key:info.variant,market:valid(info.marketPrice)?info.marketPrice:null});
   // A source or condition label is not a finish. Never let “TCGplayer Live”
   // or “Near Mint” stand in for a printing the catalogue did not distinguish.
-  return entries.filter(o => o.key && !/^(manual|market|raw|tcgplayer(?:[ _]live)?|ebay|cardmarket|nm|lp|mp|hp|dmg|near[ _]mint(?:\s*\(nm\))?|lightly[ _]played)$/i.test(o.key))
+  return entries.filter(o => o.key && !/^(manual|market|raw|tcgplayer(?:[ _]live)?|ebay|cardmarket|nm|lp|mp|hp|dmg|near[ _]mint(?:\s*\(nm\))?|lightly[ _]played|moderately[ _]played|heavily[ _]played|damaged)$/i.test(o.key))
     .map(o=>({...o,label:_scanFinishLabel(o.key)}));
+}
+// Generic saved values and condition prices are not finish evidence. Only
+// preserve a finish explicitly named by the price response.
+function _scanPriceVariantsFromFeed(feed) {
+  return _scanFinishOptions({prices:feed?.allVariants||{},variant:feed?.variant,marketPrice:feed?.market})
+    .map(o=>({key:o.key,label:o.label,market:o.market,low:null,mid:null,high:null}));
 }
 function _scanFinishFields(row) {
   if (!row?.finishReviewRequired) return {};
@@ -110,7 +116,7 @@ function reviewCollectionFinish(id) {
 function _scanMarkCard(card, pending) {
   if (!card || card.game==='sports') return card;
   const info={prices:Object.fromEntries((card.priceVariants||[]).filter(v=>!isGradedVariant(v.key)).map(v=>[v.key,v.market]))};
-  Object.assign(card,{finishReviewRequired:true,finishConfirmed:false,finish:'',finishKey:''},_scanFinishFields(pending));
+  Object.assign(card,{_finishPricesVerified:true,finishReviewRequired:true,finishConfirmed:false,finish:'',finishKey:''},_scanFinishFields(pending));
   const options=_scanFinishOptions(info);
   card.finishOptions=options.length?options:(card.finishOptions||[]);
   card.finishPriceDate=new Date().toISOString();
@@ -120,6 +126,16 @@ function _scanPrepareLookup(card) {
   document.getElementById('scanFinishNotice')?.remove();
   printSelect.querySelectorAll('[data-scan-finish-placeholder]').forEach(el=>el.remove());
   if (!card?.finishReviewRequired || card.game==='sports') return;
+  // A restored pre-fix preview may still carry a generic price labelled as
+  // holofoil. Retain a seller's written finish, but withdraw the unverified
+  // price and choices. Collection records are not rewritten.
+  if (!card._finishPricesVerified) {
+    card.priceVariants=[];card.finishOptions=[];currentPrices={};printSelect.innerHTML='';
+    card.finishKey=card.finishConfirmed?'__other':'';
+    card._finishPricesVerified=true;
+    window._crBasis=null;window._ovAutoFilled=false;priceOverride.value='';
+    try{_persistLastLoadedCard(card);}catch(_){}
+  }
   const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Check finish / printing';
   placeholder.dataset.scanFinishPlaceholder='1';
   printSelect.prepend(placeholder);

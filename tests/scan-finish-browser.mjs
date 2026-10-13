@@ -115,6 +115,24 @@ for (const width of [390,1280]) {
  check(width+' catalogue/source labels never become finish choices',await page.evaluate(()=>_scanFinishOptions({prices:{'TCGplayer Live':3,'Near Mint':4,nm:5,normal:0}}).map(o=>[o.key,o.market])),[['normal',0]]);
  check(width+' unconfirmed copies are not merged',await page.evaluate(()=>{const a={cardName:'Bulbasaur',finishReviewRequired:true,scanUid:'a'},b={...a,scanUid:'b'};return _bulkDupKey(a)!==_bulkDupKey(b)}),true);
  check(width+' confirmed different finishes are not merged',await page.evaluate(()=>{const a={success:true,cardName:'Bulbasaur',setName:'Fixture',cardNumber:'1',finishReviewRequired:true,finishConfirmed:true,finish:'Normal'},b={...a,finish:'Reverse Holofoil'};return _bulkDupKey(a)!==_bulkDupKey(b)}),true);
+ // Regression from live review: old saved values and generic feed prices
+ // were hardcoded as holofoil by the individual-card fallback.
+ await page.route('https://api.pokemontcg.io/**',r=>r.fulfill({json:{data:[]}}));
+ await page.evaluate(async()=>{priceOverride.value='';await _loadScannedCardExact({name:'Legacy carried',number:'999',setName:'Fixture missing',marketPrice:7})});
+ check(width+' carried legacy value does not invent a holo finish',await page.evaluate(()=>selectedCard.finishOptions),[]);
+ check(width+' carried legacy value stays unpriced until verified',await page.evaluate(()=>getEffectivePrice()),0);
+ check(width+' fallback selector contains no invented holo',await page.locator('#printingSelect').textContent().then(t=>/holo/i.test(t)),false);
+ await page.route('**/api/tcg-price*',r=>r.fulfill({json:{market:3,variant:'Normal',allVariants:{Normal:{market:3},'Reverse Holofoil':{market:9}}}}));
+ await page.evaluate(()=>_loadScannedCardExact({name:'Feed fallback',number:'999',setName:'Fixture missing'}));
+ check(width+' synthetic fallback retains actual feed finish keys',await page.evaluate(()=>selectedCard.finishOptions.map(o=>[o.key,o.market])),[['Normal',3],['Reverse Holofoil',9]]);
+ check(width+' generic condition feeds are not finish evidence',await page.evaluate(()=>_scanFinishOptions({prices:{near_mint:3,lightly_played:2,moderately_played:1,heavily_played:0.5,damaged:0.2}})),[]);
+ await page.locator('#printingSelect').selectOption('Normal');
+ check(width+' actual fallback normal price is reachable',await page.evaluate(()=>getEffectivePrice()),3);
+ await page.route('https://api.pokemontcg.io/**',r=>r.fulfill({json:{data:[{name:'Bulbasaur',number:'001',set:{name:'Fixture set'},tcgplayer:{prices:{}}}]}}));
+ await page.evaluate(()=>_loadScannedCardExact({name:'Bulbasaur',number:'001',setName:'Fixture set'}));
+ check(width+' catalogue-without-prices fallback also retains actual keys',await page.evaluate(()=>selectedCard.finishOptions.map(o=>o.key)),['Normal','Reverse Holofoil']);
+ await page.evaluate(()=>{const stale={...selectedCard,_finishPricesVerified:false,_synthetic:true,finishConfirmed:false,priceVariants:[{key:'holofoil',label:'Holofoil',market:7}]};setSelectedCard(stale);loadCardUI(stale)});
+ check(width+' pre-fix restored previews cannot revive an invented finish',await page.evaluate(()=>[selectedCard.finishOptions.length,getEffectivePrice()]),[0,0]);
  check(width+' no uncaught app errors',errors,[]);
  await page.close();
 }
