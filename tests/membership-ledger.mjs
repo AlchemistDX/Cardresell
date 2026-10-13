@@ -340,7 +340,7 @@ await t.section('NONEXPIRING-1 prior Free issuance cannot be erased by first pai
   const context = { owner: UID, receipt: 'a'.repeat(64), scan: 'history_control' };
   const enrollmentKey = membershipEnrollmentKey(UID);
   const historyKey = membershipIncludedHistoryKey(UID);
-  const oldLua = MEMBERSHIP_LEDGER_SCRIPT.replace(
+  const oldLua = MEMBERSHIP_LEDGER_SCRIPT.replace(/-- COMP_GRANT:[\s\S]*?-- END_COMP_GRANT\n/g, '').replace(
     /-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, '').replace(
     /    -- NONEXPIRING-1:[\s\S]*?    -- End NONEXPIRING-1 authority check\.\n/, '');
   t.check('negative control exactly matches reviewed failing nonexpiring Lua',
@@ -586,7 +586,7 @@ await t.section('late-grant holds block only new exact payment or invoice issuan
   if (outcome.status === 'fulfilled') await invoke('pack', payload);
   else await rejected('hold-first cannot later grant', () => invoke('pack', payload), 'grant_held');
   t.check('race retry leaves exact bytes unchanged', captured === await snapshot());
-  const stripped = MEMBERSHIP_LEDGER_SCRIPT.replace(/-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, '');
+  const stripped = MEMBERSHIP_LEDGER_SCRIPT.replace(/-- COMP_GRANT:[\s\S]*?-- END_COMP_GRANT\n/g, '').replace(/-- LATE_GRANT_HOLD:[\s\S]*?-- END_LATE_GRANT_HOLD\n/, '');
   t.check('removing only additive hold guard recovers exact approved permanent-credit Lua',
     sha(stripped) === '950ce766d8b45dd90d84a1009ed8f49e00511b7142ca7594646dec056bb1019a');
 });

@@ -8,6 +8,7 @@ import { grantMembership } from './_membershipLedger.js';
 import { withWelcomeDailyCap, clearWelcomeDeferral } from './_welcomeDailyCap.js';
 import { createMembershipFreeIssuance } from './_membershipFreeIssuance.js';
 import { ownerFeaturePlan, BULK_GRADE_CARD_LIMITS } from './_membershipFeaturePolicy.js';
+import { compFeaturePlan } from './_membershipComp.js';
 export { newIdReceipt, candidateHash, idBillingFailure } from './_idBilling.js';
 export { membershipRouteMode } from './_membershipLegacyFence.js';
 
@@ -86,11 +87,12 @@ export async function membershipBalances(owner) {
     || id.period_active !== grade.period_active || id.plan !== grade.plan
     || id.bulk_grade !== grade.bulk_grade) throw new MembershipConsumptionError();
   const tier = id.period_active ? id.plan : 'free';
+  const featurePlan = ownerFeaturePlan(owner) || await compFeaturePlan(owner, membershipRedis);
   return { credits: grade.remaining, idCredits: id.remaining, paidCredits: grade.purchased,
     idPaidCredits: id.purchased, freeCredits: grade.monthly + grade.welcome,
     idFreeCredits: id.monthly + id.welcome, included: { id: id.monthly, grade: grade.monthly },
     welcome: { id: id.welcome, grade: grade.welcome }, purchased: { id: id.purchased, grade: grade.purchased },
-    capabilities: ownerFeaturePlan(owner)
+    capabilities: featurePlan === 'business'
       ? { bulkGrade: true, venueTier: membershipVenueAccess('business').tier, bulkGradeCards: BULK_GRADE_CARD_LIMITS.business, featurePlan: 'business' }
       : { bulkGrade: id.bulk_grade, venueTier: membershipVenueAccess(tier).tier },
     periodEnd: id.period_end, tier, isPro: tier !== 'free', entitlementStatus: id.period_active ? 'active' : 'expired',

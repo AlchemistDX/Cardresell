@@ -21,6 +21,7 @@ import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingF
 import { legacyCreditFetch as fetch, membershipRedis } from './_membershipLegacyFence.js';
 import { createMembershipScanIntents, scanIntentDigest } from './_membershipScanIntent.js';
 import { ownerFeaturePlan } from './_membershipFeaturePolicy.js';
+import { compFeaturePlan } from './_membershipComp.js';
 
 // ── YGOProDeck grounding (extracted helper) ──
 // Mutates cardInfo in place. Returns nothing.
@@ -898,8 +899,14 @@ export default async function handler(req, res) {
   // is never claimable if the credit was already refunded on the server side.
   const scanId = scanIntent?.scan || _shortId();
   const idContext = { receipt: scanIntent?.receipt || newIdReceipt(), owner: key, scan: scanId };
+  // Business-feature accounts (owner test account, comp Business grants) batch
+  // grade without a Business subscription; every card is still debited.
+  let _featureBusiness = !!ownerFeaturePlan(key);
+  if (!_featureBusiness && isBulkGrade && membershipV2) {
+    try { _featureBusiness = (await compFeaturePlan(key, membershipRedis)) === 'business'; } catch { _featureBusiness = false; }
+  }
   const billingContext = { ...idContext, mode: isIdentifyMode ? 'identify' : 'grade', cost: isIdentifyMode ? 1 : gradeCost,
-    bulkGrade: isBulkGrade && !ownerFeaturePlan(key) };
+    bulkGrade: isBulkGrade && !_featureBusiness };
   // The ledger operation that currently holds this request's grade charge.
   // A Deep Grade whose CV step does not complete is re-settled as a 1-credit
   // Quick Grade operation (settleDeepGradeWithoutCv), after which refunds must
@@ -1126,7 +1133,7 @@ export default async function handler(req, res) {
       if (!refund.ok) throw new Error('billing_reconciliation_required');
       consumedFrom = null; consumedAmount = 0; out.charged = 0; out.refunded = 2;
       const quick = { receipt: newIdReceipt(), owner: key, scan: scanId, mode: 'grade', cost: 1,
-        bulkGrade: isBulkGrade && !ownerFeaturePlan(key) };
+        bulkGrade: isBulkGrade && !_featureBusiness };
       try {
         const debit = await membershipBilling('debit', quick);
         if (debit.ok) {
