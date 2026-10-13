@@ -580,6 +580,18 @@ await t.section('upgrade ladder recommends the next plan with catalogue-only gai
   t.check('signed-out view gets no ladder panel', !panelOf(out));
   t.check('every plan card still discloses the saved-report limit', ['Free','Starter','Casual','Pro','Business'].every(n => /500 private AI grade reports/.test(card(h, n).textContent)));
 });
+await t.section('compact plans retain allowances and billing disclosure', async()=>{
+ const c={...publicMembershipCatalogue(),purchaseEnabled:true,newSubscriptionAllowed:true};
+ const h=setup({initial:null,suppliedCatalogue:c});await h.window.openSubscriptions();
+ for(const plan of c.plans){
+  const card=h.elements().find(e=>e.tag==='article' && e.children.some(k=>k.tag==='h3' && k.textContent===plan.name));
+  const details=card.children.find(e=>e.tag==='details'), button=card.children.find(e=>e.tag==='button'),dl=card.children.find(e=>e.tag==='dl');
+  t.check(plan.name+' shows compact allowances before action and closed details',card.children.indexOf(dl)<card.children.indexOf(button)&&card.children.indexOf(button)<card.children.indexOf(details)&&!details.open);
+  t.check(plan.name+' allowances come from the catalogue',JSON.stringify(dl.children.map(r=>r.children[1].textContent))===JSON.stringify([plan.idCredits,plan.gradeCredits,plan.drafts.activeLimit,plan.drafts.bulkLimit].map(v=>v.toLocaleString())));
+  t.check(plan.name+' details retain comparison and saved report information',details.textContent.includes('estimated payouts')&&details.textContent.includes('500 private AI grade reports'));
+ }
+ t.check('renewal and grade usage visible outside collapsed details',h.elements().some(e=>e.tag==='p'&&e.textContent.startsWith('Paid plans renew monthly until canceled.')&&e.textContent.includes('Deep Grade uses 2')));
+});
 await t.section('out-of-credit shop moments suggest a plan above the packs', async () => {
   const c = { ...publicMembershipCatalogue(), purchaseEnabled: true, newSubscriptionAllowed: true };
   const acct = plan => async () => ({ ok: true, json: async () => ({

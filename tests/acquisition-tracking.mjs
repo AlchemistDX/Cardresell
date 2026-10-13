@@ -40,6 +40,18 @@ await test('storage-disabled browsers still emit an entry event',async()=>{
 await test('page entry deduplication is per tab/channel',async()=>{const session=memory();assert.equal(browser({query:'?cr_campaign=shop_qr',session}).timers.length,1);assert.equal(browser({query:'?cr_campaign=shop_qr',session}).timers.length,0);assert.equal(browser({query:'?cr_campaign=discord',session}).timers.length,1);});
 await test('beacon refusal falls back to fetch',async()=>{const b=browser({beacon:false});await event(b);assert.equal(b.fallback.length,1);assert.equal(JSON.parse(b.fallback[0].body).props.campaign,'direct');});
 await test('accepted beacon does not duplicate fetch',async()=>{const b=browser();await event(b);assert.equal(b.fallback.length,0);});
+await test('authenticated visits are once per tab and channel, not accounts', async()=>{
+ const session=memory(); const b=browser({query:'?cr_campaign=discord',session});
+ b.window.trackAuthenticatedVisit(); b.window.trackAuthenticatedVisit();
+ assert.equal(b.sent.length,1); const e=JSON.parse(await b.sent[0].blob.text());
+ assert.equal(e.name,'authenticated_visit'); assert.deepEqual(e.props,{campaign:'discord'});
+ const reload=browser({query:'?cr_campaign=discord',session}); reload.window.trackAuthenticatedVisit(); assert.equal(reload.sent.length,0);
+ const next=browser({query:'?cr_campaign=youtube',session}); next.window.trackAuthenticatedVisit(); assert.equal(next.sent.length,1);
+});
+await test('authenticated visit deduplicates even with blocked storage',async()=>{
+ const blocked={getItem(){throw Error();},setItem(){throw Error();}}; const b=browser({session:blocked});
+ b.window.trackAuthenticatedVisit();b.window.trackAuthenticatedVisit();assert.equal(b.sent.length,1);
+});
 process.env.KV_REST_API_URL='https://event-store.invalid';process.env.KV_REST_API_TOKEN='test-only';process.env.ANALYTICS_ADMIN_KEY='test-admin';
 const {default:handler}=await import('../api/events.js');
 const counts=new Map(),names=new Set();let down=false,commands=[];
@@ -57,6 +69,23 @@ await test('server persists allowlisted campaign and reports recorded',async()=>
 await test('arbitrary campaign text creates only fixed fallback bucket',async()=>{await request('POST',{name:'page_view',props:{campaign:'private@example.com'}});assert.ok([...counts.keys()].some(k=>k.endsWith(':campaign=other_campaign')));assert.ok(!JSON.stringify(commands).includes('private@example'));});
 await test('campaign report is admin protected',async()=>{const before=commands.length;assert.equal((await request('GET',null,{breakdown:'campaign'})).code,403);assert.equal(commands.length,before);});
 await test('admin campaign counts reconcile with stored events',async()=>{const r=await request('GET',null,{admin:'test-admin',window:'1',breakdown:'campaign'});assert.equal(r.body.campaigns.shop_qr.membership_checkout_attempt,1);assert.equal(r.body.campaigns.other_campaign.page_view,1);assert.equal(r.body.campaigns.qa.membership_checkout_attempt,0);assert.match(r.body.measurement,/not_unique_customers_or_revenue/);});
+await test('listing and auth stages retain names and bounded campaign reporting',async()=>{
+ for(const name of ['authenticated_visit','listing_draft_created','listing_export_download_started','listing_export_failed']){
+  const r=await request('POST',{name,props:{campaign:'discord'}});assert.equal(r.body.recorded,true);
+ }
+ const r=await request('GET',null,{admin:'test-admin',window:'1',breakdown:'campaign'});
+ for(const name of ['authenticated_visit','listing_draft_created','listing_export_download_started','listing_export_failed']) assert.equal(r.body.campaigns.discord[name],1);
+});
+await test('listing telemetry strips card, owner, file and free-form dimensions',async()=>{
+ commands=[];
+ await request('POST',{name:'listing_export_failed',props:{campaign:'qa',export_mode:'selected',batch_size:'2_10',source:'secret-card',game:'secret-owner',plan:'secret-file',url:'secret-url'}});
+ assert.ok(!JSON.stringify(commands).includes('secret-'));
+ assert.ok(JSON.stringify(commands).includes('export_mode=selected'));
+ assert.ok(JSON.stringify(commands).includes('batch_size=2_10'));
+ commands=[];
+ await request('POST',{name:'listing_export_failed',props:{export_mode:'secret-mode',batch_size:'secret-count'}});
+ assert.ok(!JSON.stringify(commands).includes('secret-'));assert.ok(JSON.stringify(commands).includes('batch_size=unknown'));
+});
 await test('storage failure never claims recording or interrupts client',async()=>{down=true;const r=await request('POST',{name:'telemetry_check',props:{campaign:'qa'}});assert.equal(r.code,200);assert.equal(r.body.recorded,false);down=false;});
 console.log(`${passed} passed, 0 failed`);
 

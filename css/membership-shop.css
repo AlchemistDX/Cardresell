@@ -18,11 +18,11 @@
 .membership-shop .membership-plan-price { margin:0 0 18px; }
 .membership-plan-price strong { display:block; font-size:1.8rem; font-variant-numeric:tabular-nums; letter-spacing:-.04em; }
 .membership-plan-price span { color:var(--text-muted,#aaa); font-size:.8rem; }
-.membership-plan dl { margin:0 0 22px; }
+.membership-plan dl { margin:0 0 10px; }
 .membership-plan dl div { padding:10px 0; border-top:1px solid var(--border,#444); }
 .membership-plan dt { font-size:.8rem; color:var(--text-muted,#aaa); line-height:1.45; }
 .membership-plan dd { margin:4px 0 0; font-size:1.125rem; font-weight:700; }
-.membership-plan button { margin-top:auto; width:100%; padding:10px 8px; line-height:1.4; }
+.membership-plan button { margin-top:8px; width:100%; padding:10px 8px; line-height:1.4; }
 .membership-plan-badge { min-height:20px; font-size:.75rem; color:var(--gold-text,#e8bd61); font-weight:700; }
 .membership-plan-current { border-color:var(--gold,#d4af37); }
 .membership-pack-section { margin:26px 0; }
@@ -66,3 +66,9 @@
 
 /* Retired purchase screens must stay unavailable even through a stale caller. */
 #pricingOverlay, #shopOverlay { display:none !important; }
+
+.membership-plan-details { margin-top:12px; }
+.membership-plan-details summary,.membership-shared-details summary { min-height:44px; padding:12px 0; cursor:pointer; font-weight:600; font-size:.875rem; }
+.membership-plan-details ul { margin:8px 0; padding-left:18px; font-size:.85rem; line-height:1.5; }
+.membership-plan-details li { margin:8px 0; }
+.membership-shared-details { margin:16px 0; border-top:1px solid var(--border,#444); }
