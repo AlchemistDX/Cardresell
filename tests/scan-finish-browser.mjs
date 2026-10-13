@@ -115,6 +115,23 @@ for (const width of [390,1280]) {
  check(width+' catalogue/source labels never become finish choices',await page.evaluate(()=>_scanFinishOptions({prices:{'TCGplayer Live':3,'Near Mint':4,nm:5,normal:0}}).map(o=>[o.key,o.market])),[['normal',0]]);
  check(width+' unconfirmed copies are not merged',await page.evaluate(()=>{const a={cardName:'Bulbasaur',finishReviewRequired:true,scanUid:'a'},b={...a,scanUid:'b'};return _bulkDupKey(a)!==_bulkDupKey(b)}),true);
  check(width+' confirmed different finishes are not merged',await page.evaluate(()=>{const a={success:true,cardName:'Bulbasaur',setName:'Fixture',cardNumber:'1',finishReviewRequired:true,finishConfirmed:true,finish:'Normal'},b={...a,finish:'Reverse Holofoil'};return _bulkDupKey(a)!==_bulkDupKey(b)}),true);
+ // Manual entry must not retain a previous lookup's identity or finish.
+ await page.evaluate(()=>{priceOverride.value='';window._ovAutoFilled=false});
+ await page.locator('#printingSelect').selectOption('holofoil');
+ await page.locator('#addCollectionBtn').click();
+ await page.locator('#mCardName').fill('Different manual card');
+ await page.locator('#mSetName').fill('Different set');
+ await page.locator('#mCurrentValue').fill('25');
+ await page.locator('#flipModal button').filter({hasText:/^Save$/}).click();
+ const renamed=await page.evaluate(()=>loadPortData().at(-1));
+ check(width+' manual rename detaches catalogue identity',[renamed.number,renamed.groundedId,renamed.rarity,renamed.tcgplayerUrl,renamed.img],['','','','','']);
+ check(width+' manual rename removes prior finish and grading',[renamed.finish,renamed.finishConfirmed,renamed.grader,renamed.grade,renamed.cert],[undefined,undefined,null,null,null]);
+ check(width+' manually entered value remains seller sourced',[renamed.currentValue,renamed.valueSource],[25,'seller']);
+ await page.locator('#addCollectionBtn').click();await page.locator('#mSetName').fill('Different printing');
+ await page.locator('#flipModal button').filter({hasText:/^Save$/}).click();
+ check(width+' changed printing cannot keep a prefilled catalogue value',await page.evaluate(()=>loadPortData().at(-1).currentValue),null);
+ await page.locator('#addCollectionBtn').click();await page.locator('#flipModal button').filter({hasText:/^Save$/}).click();
+ check(width+' unchanged card keeps its confirmed finish and exact value',await page.evaluate(()=>{const c=loadPortData().at(-1);return [c.number,c.finish,c.currentValue,c.valueSource]}),['001','Holofoil',12,'comp']);
  // Regression from live review: old saved values and generic feed prices
  // were hardcoded as holofoil by the individual-card fallback.
  await page.route('https://api.pokemontcg.io/**',r=>r.fulfill({json:{data:[]}}));
