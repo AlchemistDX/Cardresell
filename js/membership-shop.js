@@ -555,6 +555,7 @@
     planControls = [];
     if (view === 'subscriptions') {
       node('p', 'Choose the plan that fits how you collect and sell. Monthly credits roll over and never expire.', content);
+      node('p', 'Paid plans renew monthly until canceled. Cancel at period end. Quick Grade uses 1 Grade credit; Deep Grade uses 2.', content);
       const grid = node('div', undefined, content); grid.className = 'membership-plans';
       for (const plan of catalogue.plans) {
         const card = node('article', undefined, grid); card.className = 'membership-plan';
@@ -570,7 +571,21 @@
           business: 'Keep up with incoming inventory. Our largest monthly allowances and biggest savings on extra credit packs.'
         };
         node('p', uses[plan.id] || 'Compare the included benefits below.', card);
-        const benefits = node('ul', undefined, card);
+        const allowances = node('dl', undefined, card);
+        for (const [label, value] of [['ID credits / month', plan.idCredits.toLocaleString()],
+          ['Grade credits / month', plan.gradeCredits.toLocaleString()],
+          ['Saved listing drafts', plan.drafts.activeLimit.toLocaleString()],
+          ['Drafts per batch', plan.drafts.bulkLimit.toLocaleString()]]) {
+          const row = node('div', undefined, allowances); node('dt', label, row); node('dd', value, row);
+        }
+        const b = node('button', !bound.owner ? 'Sign in to ' + (plan.id === 'free' ? 'get started' : 'choose ' + plan.name)
+          : plan.id === 'free' ? 'Included with your account' : 'Choose ' + plan.name, card);
+        b.type = 'button';
+        b.disabled = !!bound.owner && (plan.id === 'free' || !enabled || catalogue.newSubscriptionAllowed !== true);
+        b.onclick = () => !bound.owner ? signIn() : purchase('subscription', plan.id, b, bound);
+        const details = node('details', undefined, card); details.className = 'membership-plan-details';
+        node('summary', 'Plan details', details);
+        const benefits = node('ul', undefined, details);
         const count = plan.marketplaceCount;
         node('li', count > 2 ? 'Compare estimated payouts after fees across up to ' + count + ' supported venues.' : 'Compare estimated payouts after fees on eBay and TCGplayer.', benefits);
         if (plan.packDiscountPercent) node('li', 'Save ' + plan.packDiscountPercent + '% every time you buy additional ID or Grade credit packs.', benefits);
@@ -586,27 +601,17 @@
         if (plan.features?.bulkGrade) node('li', 'Batch-grade uploaded photo sets for up to ' + (plan.features.bulkGradeCards || 10) + ' cards. Quick uses 1 Grade credit per card; Deep uses 2, subject to the fallback policy.', benefits);
         if (plan.id !== 'free') node('li', 'Track more than 10 flips and export your Grading Log.', benefits);
         if (plan.id === 'pro' || plan.id === 'business') node('li', 'Include supported buylist and consignment options in your payout comparisons.', benefits);
-        if (plan.id === 'business') node('p', 'Already using Pro? Business keeps Pro’s comparison tools and adds bigger batches, with more monthly credits for regular inventory intake.', card);
-        const allowances = node('dl', undefined, card);
-        for (const [label, value] of [['ID credits / month', plan.idCredits.toLocaleString()],
-          ['Grade credits / month', plan.gradeCredits.toLocaleString()],
-          ['Credit-pack discount', plan.packDiscountPercent ? plan.packDiscountPercent + '%' : 'None'],
-          ['Marketplace comparisons', plan.marketplaceCount === 2 ? 'eBay + TCGplayer' : 'Up to ' + plan.marketplaceCount]]) {
-          const row = node('div', undefined, allowances); node('dt', label, row); node('dd', value, row);
-        }
-        const b = node('button', !bound.owner ? 'Sign in to ' + (plan.id === 'free' ? 'get started' : 'choose ' + plan.name)
-          : plan.id === 'free' ? 'Included with your account' : 'Choose ' + plan.name, card);
-        b.type = 'button';
-        b.disabled = !!bound.owner && (plan.id === 'free' || !enabled || catalogue.newSubscriptionAllowed !== true);
-        b.onclick = () => !bound.owner ? signIn() : purchase('subscription', plan.id, b, bound);
+        if (plan.id === 'business') node('p', 'Already using Pro? Business keeps Pro’s comparison tools and adds bigger batches, with more monthly credits for regular inventory intake.', details);
         planControls.push({ id: plan.id, card, badge, button: b });
       }
-      node('h3', 'Included across plans', content);
-      node('p', 'Identify a card, estimate its grade, and create a listing draft from your scan. Use your camera or upload photos. These tools are available across plans; drafting remains subject to account limits. Upgrading adds allowances, selling venues and eligible pack savings. Scanner and grader accuracy is the same across tiers.', content);
-      node('p', 'Marketplace availability varies by card game. Compare estimated payouts, not guaranteed sale prices. Casual adds venues such as Mercari, Whatnot, Cardmarket and Cardsphere; Pro and Business also include supported buylist and consignment comparisons. Choose your selling venues before comparing payouts.', content);
-      node('p', 'Save grade reports explicitly after a result, then reopen them from Collection → Saved AI grades. Draft capacity varies by plan. Delete a draft to free a slot; there is no monthly draft-creation allowance or extra scan charge. Existing drafts remain accessible if you move to a lower plan. Drafts include prefilled card details for review, copy and supported marketplace exports. Grade reports save results and notes without photo storage.', content);
-      node('p', 'One ID scan uses 1 ID credit. Quick Grade uses 1 Grade credit; Deep Grade uses 2. Mix Quick and Deep to fit your collection. Verified Free accounts also receive 10 ID + 1 Grade once, separately from the monthly allowance.', content);
-      node('p', 'Paid plans renew monthly in USD until canceled. Cancel at period end in Billing; paid-through benefits and all issued credits remain yours. Eligible monthly subscriptions can change plans at renewal. New limits begin after the new period is paid; existing imported memberships use their current billing-management path.', content);
+      const shared = node('details', undefined, content); shared.className = 'membership-shared-details';
+      node('summary', 'How credits, drafts and billing work', shared);
+      node('h3', 'Included across plans', shared);
+      node('p', 'Identify a card, estimate its grade, and create a listing draft from your scan. Use your camera or upload photos. These tools are available across plans; drafting remains subject to account limits. Upgrading adds allowances, selling venues and eligible pack savings. Scanner and grader accuracy is the same across tiers.', shared);
+      node('p', 'Marketplace availability varies by card game. Compare estimated payouts, not guaranteed sale prices. Casual adds venues such as Mercari, Whatnot, Cardmarket and Cardsphere; Pro and Business also include supported buylist and consignment comparisons. Choose your selling venues before comparing payouts.', shared);
+      node('p', 'Save grade reports explicitly after a result, then reopen them from Collection → Saved AI grades. Draft capacity varies by plan. Delete a draft to free a slot; there is no monthly draft-creation allowance or extra scan charge. Existing drafts remain accessible if you move to a lower plan. Drafts include prefilled card details for review, copy and supported marketplace exports. Grade reports save results and notes without photo storage.', shared);
+      node('p', 'One ID scan uses 1 ID credit. Quick Grade uses 1 Grade credit; Deep Grade uses 2. Mix Quick and Deep to fit your collection. Verified Free accounts also receive 10 ID + 1 Grade once, separately from the monthly allowance.', shared);
+      node('p', 'Paid plans renew monthly in USD until canceled. Cancel at period end in Billing; paid-through benefits and all issued credits remain yours. Eligible monthly subscriptions can change plans at renewal. New limits begin after the new period is paid; existing imported memberships use their current billing-management path.', shared);
     } else {
       node('p', 'One-time credit packs. Credits never expire.', content);
       node('p', enabled ? 'Your eligible membership discount is included in these prices.'

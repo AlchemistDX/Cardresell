@@ -41,16 +41,19 @@ const ALLOWED = new Set([
   'membership_shop_open', 'membership_checkout_attempt', 'membership_checkout_redirect',
   'membership_checkout_pending', 'membership_checkout_failed', 'membership_return_verified',
   // Auth
-  'signup_bonus', 'sign_in', 'sign_out',
+  'signup_bonus', 'sign_in', 'sign_out', 'authenticated_visit',
   // Collection & flips
   'collection_add', 'flip_saved',
+  'listing_draft_created', 'listing_export_download_started', 'listing_export_failed',
 ]);
 
 // Only allowlisted prop keys/values get bucketed to prevent unbounded key growth.
-const ALLOWED_PROP_KEYS = new Set(['plan', 'tier', 'trigger', 'game', 'source', 'psa', 'campaign']);
+const ALLOWED_PROP_KEYS = new Set(['plan', 'tier', 'trigger', 'game', 'source', 'psa', 'campaign', 'export_mode', 'batch_size']);
 
 const CAMPAIGNS = ACQUISITION_CAMPAIGNS;
-const FUNNEL = ['page_view', 'membership_shop_open', 'membership_checkout_attempt', 'membership_checkout_redirect', 'membership_return_verified'];
+const FUNNEL = ['page_view', 'authenticated_visit', 'id_scan_completed', 'grade_completed',
+  'listing_draft_created', 'listing_export_download_started', 'listing_export_failed',
+  'membership_shop_open', 'membership_checkout_attempt', 'membership_checkout_redirect', 'membership_return_verified'];
 
 async function kv(cmd, ...args) {
   const path = [cmd, ...args].map(a => encodeURIComponent(String(a))).join('/');
@@ -73,12 +76,16 @@ function sanitizeName(raw) {
   return ALLOWED.has(n) ? n : 'other';
 }
 
-function sanitizeProps(props) {
+function sanitizeProps(props, name) {
   if (!props || typeof props !== 'object') return {};
   const out = {};
   for (const k of Object.keys(props)) {
     if (!ALLOWED_PROP_KEYS.has(k)) continue;
+    // Listing telemetry carries only fixed dimensions, never card/owner/file data.
+    if (name.startsWith('listing_') && !['campaign', 'export_mode', 'batch_size'].includes(k)) continue;
     const v = props[k];
+    if (k === 'export_mode') { out[k] = ['single', 'selected'].includes(v) ? v : 'unknown'; continue; }
+    if (k === 'batch_size') { out[k] = ['1', '2_10', '11_25', '26_100', '101_plus'].includes(v) ? v : 'unknown'; continue; }
     if (k === 'campaign') { out[k] = CAMPAIGNS.includes(v) ? v : 'other_campaign'; continue; }
     if (v === null || v === undefined) continue;
     // Coerce to short string. Bucket numbers into rough tiers.
@@ -155,7 +162,7 @@ export default async function handler(req, res) {
 
     const name = sanitizeName(body.name);
     if (!name) return res.status(200).json({ ok: true }); // silently drop
-    const props = sanitizeProps(body.props);
+    const props = sanitizeProps(body.props, name);
     const day = today();
 
     // Fire-and-forget INCRs. TTL 45 days on each counter (auto-cleanup).

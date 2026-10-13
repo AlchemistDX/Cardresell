@@ -567,6 +567,7 @@ try {
     eq('return preserves selection', await page.locator('[data-draft-select]:checked').count(), 2);
     eq('return preserves all loaded cards', await page.locator('.draft-card').count(), 3);
     ok('download remains enabled after review', await page.locator('[data-draft-download-selected]').isEnabled());
+    await page.evaluate(() => { window.__exportEvents=[]; window.trackEvent=(name,props)=>{ if(name.startsWith('listing_export_')) window.__exportEvents.push({name,props}); }; });
     const downloads = [];
     page.on('download', d => downloads.push(d));
     const pending = page.waitForEvent('download');
@@ -576,6 +577,7 @@ try {
     await page.waitForFunction(() => window._draftsState.bulk?.busy === false);
     const lines = text.trim().split('\r\n');
     eq('one download for the selection', downloads.length, 1);
+    eq('one bounded export event per selected file',JSON.stringify(await page.evaluate(()=>window.__exportEvents)),JSON.stringify([{name:'listing_export_download_started',props:{export_mode:'selected',batch_size:'2_10'}}]));
     eq('one template header', lines.filter(l => l.startsWith('Action(')).length, 1);
     eq('exactly two Draft rows', lines.filter(l => l.startsWith('Draft,')).length, 2);
     ok('first selected price included', text.includes(',11.11,'));
@@ -609,6 +611,7 @@ try {
     await page.click('[data-draft-download-selected]');
     await page.waitForFunction(() => window._draftsState.bulk?.busy === false);
     eq('missing second category emits no partial file', downloads.length, 1);
+    eq('failed selected export emits one failure event',JSON.stringify(await page.evaluate(()=>window.__exportEvents.slice(1))),JSON.stringify([{name:'listing_export_failed',props:{export_mode:'selected',batch_size:'2_10'}}]));
     ok('missing category explains the repair', (await page.locator('.draft-bulk').innerText()).includes('refresh its listing details'));
     eq('missing category preserves both selected drafts', await page.locator('[data-draft-select]:checked').count(), 2);
     eq('invalid row does not start photo hosting', await page.evaluate(() => window.__categoryPhotoCalls), 1);
@@ -652,6 +655,8 @@ try {
     ok('second card keeps its hosted photo', retryText.includes('https://photos.example.test/' + b.id + '.jpg'));
     ok('unselected photo excluded', !retryText.includes('https://photos.example.test/' + c.id + '.jpg'));
     eq('retry produces one combined file', downloads.length, 2);
+    eq('retry adds one success, not one per row',await page.evaluate(()=>window.__exportEvents.filter(e=>e.name==='listing_export_download_started').length),2);
+    const beforeCancelEvents=await page.evaluate(()=>window.__exportEvents.length);
     await page.evaluate(() => { ensureExportablePhotos = () => new Promise(resolve => { window.__finishBulkPhoto = resolve; }); });
     await page.click('[data-draft-download-selected]');
     await page.waitForFunction(() => typeof window.__finishBulkPhoto === 'function');
@@ -660,6 +665,7 @@ try {
     await page.evaluate(() => window.__finishBulkPhoto({ok:false,reason:'NONE',urls:[],localCount:0}));
     await settle(page, 200);
     eq('reload cancels without a download', downloads.length, 2);
+    eq('cancel does not invent success or failure',await page.evaluate(()=>window.__exportEvents.length),beforeCancelEvents);
     ok('reload clears the per-card preparation state', await page.evaluate(() => window._draftsState.dl === null));
     ok('download is usable after cancellation', await page.locator('[data-draft-download-selected]').isEnabled());
     await page.evaluate(([a, b]) => {
