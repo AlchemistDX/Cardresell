@@ -38,7 +38,15 @@ export function createMembershipEnrollmentProvisioner({ execute, accountId, envi
         // or replace a malformed existing record here.
         return { status: 'existing_audit' };
       }
-      if (expected.slice(1, 5).some(raw => raw !== null)) fail();
+      if (expected.slice(1, 5).some(raw => raw !== null)) {
+        // 2026-10-13 diagnostics: name only which record types already exist
+        // (fixed labels, never values, keys or identities). Nothing is repaired.
+        try {
+          console.warn('MEMBERSHIP_ENROLLMENT_REVIEW', ['enrollment', 'included_history', 'active', 'legacy_pro']
+            .filter((_, i) => expected[i + 1] !== null).join('+'));
+        } catch { /* diagnostics never alter the refusal */ }
+        fail();
+      }
       const clock = await execute(['TIME']);
       const now = Number(clock?.[0]);
       if (!Number.isSafeInteger(now) || now <= 0) fail();
