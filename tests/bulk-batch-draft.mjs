@@ -190,9 +190,10 @@ async function boot({ sub, scanPlan = null, photos = 2 } = {}) {
     // behaviour for an unauthenticated browser but would drop the seller out
     // of the session mid-batch. The signed-in session is a PRECONDITION of
     // this suite, not something it is testing.
+    const fixtureUser = { uid: 'dev', email: 'will@example.test' };
     Object.defineProperty(window, 'googleUser', {
       configurable: true,
-      get: () => ({ uid: 'dev', email: 'will@example.test' }),
+      get: () => fixtureUser,
       set: () => {},
     });
     window._idScanCredits = credits;
@@ -218,6 +219,19 @@ async function runScan(page, n) {
     () => window._bulkProcessing === false && Array.isArray(window._bulkResults) && window._bulkResults.length > 0,
     { timeout: 60000 });
   await page.waitForTimeout(300);
+  await confirmScanFinishes(page);
+}
+
+// These draft/identity cases begin after the seller checks each printing.
+// The separate scan-finish suite covers the unconfirmed gate.
+async function confirmScanFinishes(page) {
+  const ids=await page.evaluate(()=>(window._bulkResults||[]).filter(r=>r.success&&r.finishReviewRequired&&!r.finishConfirmed).map(r=>r.rowId));
+  for(const id of ids) {
+    await page.locator('#'+id+' .scan-finish-review').click();
+    await page.locator('#scanFinishChoice').selectOption('holofoil');
+    await page.locator('[data-finish-save]').click();
+    await page.waitForSelector('#scanFinishPicker',{state:'detached'});
+  }
 }
 
 const rowsOf = (page) => page.evaluate(() =>
@@ -234,6 +248,7 @@ const bodyOf = (rec) => { try { return JSON.parse(rec.body || '{}'); } catch (_)
 const posts = (wire) => wire.filter(r => r.method === 'POST' && !new URL(r.url).searchParams.has('action'));
 
 async function selectAllAndCreate(page) {
+  await confirmScanFinishes(page);
   // Select-all is a TOGGLE and selection deliberately survives a completed
   // batch, so a second pass must not blindly click it -- that would clear the
   // selection instead of re-selecting it.
@@ -243,7 +258,7 @@ async function selectAllAndCreate(page) {
     const b = document.getElementById('bulkCreateDraftsBtn');
     return b && !b.disabled;
   }, { timeout: 5000 });
-  if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions summary').click();
+  if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions > summary').click();
   await page.click('#bulkCreateDraftsBtn');
   await page.waitForFunction(() => window._bulkDraftBusy === false, { timeout: 60000 });
   await page.waitForTimeout(200);
@@ -261,7 +276,7 @@ try {
     await page.setViewportSize({width:390,height:730});
     ok('listing drafts are a primary action', await page.locator('#bulkCreateDraftsBtn').isVisible());
     ok('comparison starts under More actions', !await page.locator('#bulkCompareSellingBtn').isVisible());
-    await page.locator('#bulkMoreActions summary').click();
+    await page.locator('#bulkMoreActions > summary').click();
     ok('More actions reveals selling comparison', await page.locator('#bulkCompareSellingBtn').isVisible());
     await page.screenshot({path: `${SHOTS}/bulk-compact-mobile.png`});
     const rows = await rowsOf(page);
@@ -287,7 +302,7 @@ try {
     const sub = 'u-bulk-2';
     const { ctx, page, errors } = await boot({ sub });
     await runScan(page, 2);
-    await page.locator('#bulkMoreActions summary').click();
+    await page.locator('#bulkMoreActions > summary').click();
     const rows = await rowsOf(page);
 
     eq('nothing is pre-selected', await page.evaluate(() => (window._bulkDraftSel || []).length), 0);
@@ -338,6 +353,7 @@ try {
        JSON.stringify({ keys, uids: rows.map(r => r.scanUid) }));
 
     const bodies = posts(wire).map(bodyOf);
+    ok('seller-confirmed finish reaches the real draft API', bodies.every(b=>b.card?.finish==='Holofoil'));
     ok('each body carries the per-copy instanceId',
        rows.every(r => bodies.some(b => b.instanceId === 'inst_scan_' + r.scanUid)),
        JSON.stringify(bodies.map(b => b.instanceId)));
@@ -501,7 +517,7 @@ try {
     ok('the count says three drafts for two rows',
        (await page.innerText('#bulkDraftSelectCount')).includes('3 drafts'),
        await page.innerText('#bulkDraftSelectCount'));
-    if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions summary').click();
+    if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions > summary').click();
   await page.click('#bulkCreateDraftsBtn');
     await page.waitForFunction(() => window._bulkDraftBusy === false, { timeout: 60000 });
     await page.waitForTimeout(200);
@@ -634,7 +650,7 @@ try {
       // This entry is an ADDITION to the frozen union, not a relaxation of it.
       // The assertion still demands an exact match, so the next unplanned
       // field will fail here the same way this one did.
-      'catalogImageUrl'];
+      'catalogImageUrl', 'finish', 'finishConfirmed', 'finishKey', 'finishOptions', 'finishPriceDate', 'finishReviewRequired'];
     const got = Object.keys(e).sort();
     eq('the saved entry carries exactly the committed key union',
        got.join(','), EXPECTED_KEYS.slice().sort().join(','));
@@ -728,7 +744,7 @@ try {
 
     await page.click('#bulkDraftSelectAllBox');
     await page.waitForTimeout(120);
-    if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions summary').click();
+    if (!await page.locator('#bulkMoreActions').evaluate(el => el.open)) await page.locator('#bulkMoreActions > summary').click();
   await page.click('#bulkCreateDraftsBtn');
     await page.waitForFunction(() => window._bulkDraftBusy === false, { timeout: 60000 });
     await page.waitForTimeout(200);

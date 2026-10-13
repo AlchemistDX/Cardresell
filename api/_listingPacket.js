@@ -774,6 +774,7 @@ function buildOptionalAspects(row, ident, categoryId) {
   put('Card Number', row?.number ?? row?.card_number);
   put('Set',         ident.displaySetName);
   put(variantAspectName(categoryId), row?.rarity);
+  if (categoryId === CARD_CATEGORIES.CCG.id) put('Finish', row?.finish);
   put('Language',    ident.language === 'ja' ? 'Japanese' : 'English');
   return a;
 }

@@ -159,7 +159,7 @@ export const IDENTITY_WIRE_FIELDS = Object.freeze([
   // slab
   'grader', 'grade', 'cert', 'certNumber', 'cert_number',
   // descriptive
-  'condition', 'rarity',
+  'condition', 'rarity', 'finish',
 ]);
 
 /** Project a row to the wire contract. Returns a new object; never mutates. */

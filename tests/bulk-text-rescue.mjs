@@ -33,6 +33,7 @@ function harness({ texts, scry, results }) {
     _bulkDetectDuplicates() {}, _bulkDraftSyncSelectionUI() {}, showToast: (m) => log.toasts.push(m),
   };
   vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(new URL('../js/scan-finish.js', import.meta.url), 'utf8'), ctx);
   vm.runInContext(block, ctx);
   return { ctx, log, api: win._bulkTextRescueForTest };
 }
@@ -69,7 +70,7 @@ const scry = (fuzzy, set) => {
   ok(results[1].success && results[1].cardName === 'Rubble Rouser' && results[1].cardNumber === '128' && results[1].setCode === 'sos', 'Rubble Rouser #128');
   ok(results[2].success && results[2].cardName === 'Sneering Shadewriter' && results[2].cardNumber === '101', 'Sneering Shadewriter #101');
   ok(results[1].textRescue === true && results[1].definiteMiss === false && results[1].error === '', 'rescued row labelled, not a miss');
-  ok(results[1].marketPrice === 0.12 && results[1].priceSource === 'comp', 'rescued row priced');
+  ok(results[1].marketPrice === null && results[1].finishConfirmed === false && results[1].finishOptions[0].market === 0.12, 'printed-name rescue does not assume a foil finish');
   ok(!results[3].success && results[3].definiteMiss, 'loose one-word match stays a miss');
   ok(!results[4].success, 'garbled read stays a miss');
   ok(log.fetches.length > 0 && log.fetches.every(u => u.startsWith('https://api.scryfall.com/cards/named?fuzzy=') && u.endsWith('&set=sos')), 'every lookup limited to the batch set');
@@ -93,6 +94,6 @@ const scry = (fuzzy, set) => {
 // Wiring.
 ok(/_bulkDraftSyncSelectionUI\(\);\n  \/\/ 2026-10-11: printed-name rescue[^\n]*\n  try \{ _bulkTextRescueMisses\(\)\.catch/.test(src), 'runs after the batch finishes');
 ok(src.includes("result.textRescue ? '<div") && src.includes('Matched from the printed name. Please check it.'), 'row shows the check note');
-ok(/result\.cardName = trimmed;\n  result\.textRescue = false;/.test(src), 'seller rename clears the note');
+ok(/result\.cardName = trimmed;[\s\S]{0,200}result\.textRescue = false;/.test(src), 'seller rename clears the note');
 console.log(`bulk-text-rescue: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);

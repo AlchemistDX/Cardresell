@@ -111,7 +111,7 @@ check('TPL fallback calls searchWithTPL(cleanName) on the scan path',
 check('TPL match sets selectedCard + loadCardUI',            /tplCardToNormalized\(tplMatch/.test(INDEX));
 check('Synthetic card fallback exists',                      INDEX.includes('SYNTHETIC CARD FALLBACK'));
 check('Synthetic card sets _synthetic flag',                 /_synthetic:\s*true/.test(INDEX));
-check('Synthetic card populates main view before scan-miss', /source:\s*synthPriceVariants\.length\s*\?[\s\S]*?'Scan \(unmatched\)'/.test(INDEX) && INDEX.includes('loadCardUI(synthCard)'));
+check('Synthetic card populates main view before scan-miss', /source:\s*synthPriceVariants\.length\s*\?[\s\S]*?'Scan \(unmatched\)'/.test(INDEX) && INDEX.includes("_scanMarkCard(synthCard,pending) : synthCard)"));
 
 console.log('\n[Graded UI fixes 2026-08-13]');
 check('Raw regex excludes all 6 graders (sgc|ace|tag added)', INDEX.includes('!/^(psa|bgs|cgc|sgc|ace|tag)_/.test(o.value)'));
@@ -237,7 +237,7 @@ check('_ccmViewFullCard function exists',                       INDEX.includes("
 check('_ccmViewFullCard applies saved grader+grade',            INDEX.includes("const graderKey = p.grader ? String(p.grader).toLowerCase() : null"));
 check('Collection modal has grade chip element',                INDEX.includes("id=\"ccmGradeChip\""));
 check('Grade chip populated when p.grader + p.grade present',   INDEX.includes("if (p.grader && p.grade != null && p.grade !== '')"));
-check('No-price entries show placeholder not $0.00',            INDEX.includes("valEl.textContent = 'Price not fetched'"));
+check('No-price entries show placeholder not $0.00',            INDEX.includes("valEl.textContent = p.finishReviewRequired ? 'Price unknown' : 'Price not fetched'"));
 
 console.log('\n[Collection row grade indicator 2026-08-13]');
 check('Collection row detects saved grade',                    INDEX.includes("const _hasGrade = p.grader && p.grade != null && p.grade !== ''"));

@@ -48,12 +48,13 @@ const PRIORITY = {
   setName:   4,
   language:  5,
   year:      6,
+  finish:    5,
   rarity:    7,
 };
 
 // Display order, independent of drop priority. This is the order a card
 // person reads a title in, not the order we would sacrifice pieces.
-const DISPLAY_ORDER = ['year', 'name', 'setName', 'number', 'rarity', 'language', 'gradeTag'];
+const DISPLAY_ORDER = ['year', 'name', 'setName', 'number', 'finish', 'rarity', 'language', 'gradeTag'];
 
 /** Collapse whitespace and strip characters that break venue title validation. */
 function clean(v) {
@@ -156,6 +157,7 @@ export function titleSegments(row = {}, opts = {}) {
       ? `#${displayCollectorNumber(numberRaw, row?.printedTotal ?? row?.setPrintedTotal)}`
       : '',
     rarity:   clean(row?.rarity),
+    ...(row?.finish ? { finish: clean(row.finish) } : {}),
     language: canonicalLanguage(row) === 'ja' ? 'Japanese' : '',
     gradeTag: graded ? clean(`${canonicalGrader(row)} ${canonicalGrade(row)}`) : '',
   };

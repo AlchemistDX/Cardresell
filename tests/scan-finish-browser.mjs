@@ -1,0 +1,122 @@
+// Full shipped UI with synthetic scan/catalogue responses. No real scan credits.
+import {chromium} from 'playwright';
+import {createServer} from 'node:http';
+import {readFileSync,existsSync,mkdirSync} from 'node:fs';
+import {extname,join,resolve} from 'node:path';
+import assert from 'node:assert/strict';
+import {publicMembershipCatalogue} from '../api/_membershipPurchaseRoutes.js';
+import {buildListingTitle} from '../api/_listingTitle.js';
+import {buildListingPacket} from '../api/_listingPacket.js';
+import {skuFor,projectIdentityForWire} from '../api/_cardIdentity.js';
+const root=resolve(new URL('../',import.meta.url).pathname),shots=process.env.CR_SHOT_DIR;
+if(shots)mkdirSync(shots,{recursive:true});
+const server=createServer((req,res)=>{const pathname=decodeURIComponent(new URL(req.url,'http://local').pathname);let path=join(root,pathname==='/'?'index.html':pathname);if(!existsSync(path)&&existsSync(path+'.html'))path+='.html';if(!existsSync(path))path=join(root,'public',pathname);if(!existsSync(path)){res.writeHead(404);res.end();return}res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.webp':'image/webp'})[extname(path)]||'application/octet-stream');res.end(readFileSync(path))});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.0.1:${server.address().port}`;
+const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM||undefined,args:['--no-sandbox']});let checks=0;
+const check=(label,a,b)=>{assert.deepEqual(a,b,label);checks++;console.log('✓ '+label)};
+const catalogue={id:'fixture-1',name:'Bulbasaur',number:'001',set:{id:'fixture',name:'Fixture set'},rarity:'Common',tcgplayer:{prices:{normal:{market:3},holofoil:{market:12},reverseHolofoil:{market:9},stamped:{market:null}}}};
+try {
+const base={card:'Bulbasaur',set:'Fixture set',setCode:'fixture',number:'001',game:'pokemon',condition:'NM'};
+const finished={...base,finish:'Reverse Holofoil'};
+check('finish stays descriptive and preserves existing SKU',skuFor(finished),skuFor(base));
+check('server wire preserves finish',projectIdentityForWire(finished).finish,'Reverse Holofoil');
+check('draft title identifies confirmed finish',buildListingTitle(finished).title.includes('Reverse Holofoil'),true);
+const packet=buildListingPacket(finished,{now:Date.now(),price:9,priceSource:'seller'});
+check('draft item specifics identify finish',packet.aspects?.optional?.Finish,['Reverse Holofoil']);
+for (const width of [390,1280]) {
+ const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'}),errors=[];let scans=0,priceCalls=0,drafts=0;
+ page.on('pageerror',e=>{errors.push(e.message);console.log('APP ERROR',e.message)});
+ await page.route('**/*',r=>{
+   const u=r.request().url();
+   if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});
+   if(u.includes('/api/scan')){scans++;return r.fulfill({json:{card_name:'Bulbasaur',set_name:'Fixture set',set_code:'fixture',card_number:'001',card_type:'pokemon',grounded_id:'fixture-1',foil_hint:'foil'}})}
+   if(u.includes('api.pokemontcg.io/v2/cards/fixture-1')){priceCalls++;return r.fulfill({json:{data:catalogue}})}
+   if(u.includes('api.scryfall.com/cards/search'))return r.fulfill({json:{data:[{name:'Lightning Bolt',set_name:'Fixture',collector_number:'1',finishes:['nonfoil','foil','etched'],prices:{usd:null,usd_foil:'4.50',usd_etched:'7.00'}}]}});
+   if(u.includes('/api/drafts'))drafts++;
+   if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();
+   return r.fulfill({status:503,json:{error:'offline_fixture'}});
+ });
+ await page.goto(origin);await page.evaluate(w=>{document.documentElement.dataset.theme=w===1280?'dark':'light'},width);await page.waitForFunction(()=>typeof _scanApplyFinishReview==='function' && typeof _bulkScanOne==='function');
+ await page.evaluate(async()=>{
+   // Only substitute image QC/compression (covered by binder camera suite).
+   // Keep actual scan HTTP, catalogue fetch, mapping and persistence functions.
+   _bulkCheckPhoto=async()=>null;compressImage=async()=>'c3ludGhldGlj';window.cardResellScanRequest=fetch;
+   const item={file:new File(['synthetic'],'card.jpg',{type:'image/jpeg'}),scanUid:'finish-fixture'};
+   window._bulkQueue=[item];
+   window._bulkResults=[await _bulkScanOne(item,'bulk-row-0',false)];
+   document.getElementById('bulkScanOverlay').style.display='flex';
+   _bulkShowSection('processing');
+   document.getElementById('bulkResultsList').innerHTML='<div id="bulk-row-0"></div>';
+   _bulkUpdateRow('bulk-row-0',window._bulkResults[0]);
+ });
+ const initial=await page.evaluate(()=>window._bulkResults[0]);
+ check(width+' identifies card',initial.success,true);
+ check(width+' generic foil hint does not choose a finish',initial.finishConfirmed,false);
+ check(width+' scan does not silently price a printing',initial.marketPrice,null);
+ check(width+' keeps all finish choices including missing price',initial.finishOptions.map(o=>[o.key,o.market]),[['normal',3],['holofoil',12],['reverseHolofoil',9],['stamped',null]]);
+ check(width+' scan billed once',scans,1);
+ await page.locator('#bulk-row-0 .scan-finish-review').click();
+ check(width+' picker focuses finish choice',await page.evaluate(()=>document.activeElement.id),'scanFinishChoice');
+ await page.keyboard.press('Shift+Tab');check(width+' focus remains inside dialog',await page.evaluate(()=>document.activeElement.hasAttribute('data-finish-save')),true);
+ await page.keyboard.press('Escape');check(width+' cancel does not assign value',await page.evaluate(()=>window._bulkResults[0].marketPrice),null);
+ check(width+' focus returns to row',await page.evaluate(()=>document.activeElement.classList.contains('scan-finish-review')),true);
+ await page.locator('#bulk-row-0 .scan-finish-review').click();
+ await page.locator('#scanFinishChoice').selectOption('reverseHolofoil');
+ if(shots)await page.screenshot({path:`${shots}/scan-finish-${width}.png`});
+ await page.locator('[data-finish-save]').click();
+ check(width+' reverse choice uses reverse price',await page.evaluate(()=>window._bulkResults[0].marketPrice),9);
+ check(width+' exact confirmed label saved',await page.evaluate(()=>_bulkScanRowToCard(window._bulkResults[0]).finish),'Reverse Holofoil');
+ check(width+' checking finish costs no extra scan',scans,1);check(width+' checking finish repeats no price fetch',priceCalls,1);
+ await page.locator('#bulk-row-0 .scan-finish-review').click();await page.locator('#scanFinishChoice').selectOption('stamped');await page.locator('[data-finish-save]').click();
+ check(width+' known finish with missing price remains unpriced',await page.evaluate(()=>window._bulkResults[0].marketPrice),null);
+ await page.locator('#bulk-row-0 .scan-finish-review').click();await page.locator('#scanFinishChoice').selectOption('__other');await page.locator('[data-finish-save]').click();
+ check(width+' empty custom finish is rejected',await page.locator('#scanFinishPicker').isVisible(),true);
+ await page.locator('#scanFinishCustom').fill('Promo <stamped>');await page.locator('[data-finish-save]').click();
+ check(width+' custom finish label rendered as text',await page.locator('#bulk-row-0 .scan-finish-review').textContent(),'Promo <stamped>');
+ check(width+' custom finish invents no value',await page.evaluate(()=>window._bulkResults[0].marketPrice),null);
+ await page.locator('#bulk-row-0 .scan-finish-review').click();await page.locator('#scanFinishChoice').selectOption('');await page.locator('[data-finish-save]').click();
+ await page.evaluate(()=>{window._bulkDraftSel=['finish-fixture'];window.googleUser={sub:'fixture'};return bulkCreateSelectedDrafts()});
+ check(width+' unconfirmed draft creates no server request',drafts,0);
+ await page.evaluate(()=>{window.googleUser=null;_bulkSaveToCollection(window._bulkResults,{0:5});document.getElementById('bulkScanOverlay').style.display='none';switchView('collection');switchCollectionSection('cards')});
+ check(width+' unconfirmed card can be saved',await page.evaluate(()=>loadPortData().length),1);
+ check(width+' saving does not turn cost into value',await page.evaluate(()=>loadPortData()[0].currentValue),null);
+ check(width+' Collection shows unknown price',await page.locator('#collectionWrap').textContent().then(s=>s.includes('Price unknown')),true);
+ check(width+' unpriced loss is not fabricated',await page.locator('#collectionWrap [data-label="P/L"]').textContent(),'—');
+ await page.reload();await page.evaluate(()=>{switchView('collection');switchCollectionSection('cards')});
+ check(width+' uncertainty survives reload',await page.evaluate(()=>loadPortData()[0].finishConfirmed),false);
+ await page.locator('#collectionWrap .scan-finish-review').click();await page.locator('#scanFinishChoice').selectOption('normal');await page.locator('[data-finish-save]').click();
+ check(width+' saved card finish can be confirmed',await page.evaluate(()=>loadPortData()[0].finish),'Normal / non-foil');
+ check(width+' Collection uses only confirmed finish price',await page.evaluate(()=>loadPortData()[0].currentValue),3);
+ await page.locator('#collectionWrap .scan-finish-review').click();
+ await page.evaluate(()=>{const p=loadPortData();p[0].buyPrice=17;savePortData(p)});
+ await page.locator('#scanFinishChoice').selectOption('holofoil');await page.locator('[data-finish-save]').click();
+ check(width+' stale dialog cannot overwrite changed card',await page.evaluate(()=>[loadPortData()[0].buyPrice,loadPortData()[0].currentValue]),[17,3]);
+ await page.keyboard.press('Escape');
+ const mtg=await page.evaluate(()=>_bulkFetchPriceMTG('Lightning Bolt','1','Fixture'));
+ check(width+' MTG foil fallback has accurate key',mtg.variant,'usd_foil');
+ check(width+' MTG keeps nonfoil unavailable and etched separate',mtg.prices,{usd:null,usd_foil:4.5,usd_etched:7});
+ await page.evaluate(async()=>{switchView('lookup');await _loadScannedCardExact({name:'Bulbasaur',number:'001',setName:'Fixture set',groundedId:'fixture-1'})});
+ check(width+' startup restore cannot replace a fresh scan',await page.evaluate(()=>{const card=selectedCard;_restoreLastLoadedCard();return selectedCard===card}),true);
+ check(width+' individual scan requires finish too',await page.evaluate(()=>selectedCard.finishConfirmed),false);
+ check(width+' single scan does not default highest/first price',await page.evaluate(()=>getEffectivePrice()),0);
+ check(width+' single scan headline is unknown',await page.locator('#priceMain').textContent(),'—');
+ await page.locator('#printingSelect').selectOption('holofoil');
+ check(width+' explicit printing selection confirms finish',await page.evaluate(()=>selectedCard.finish),'Holofoil');
+ check(width+' single selection uses correct price',await page.evaluate(()=>getEffectivePrice()),12);
+ check(width+' card-wide cached override cannot replace exact finish price',await page.evaluate(()=>{priceOverride.value='999';window._ovAutoFilled=true;return getEffectivePrice()}),12);
+ await page.evaluate(()=>{priceOverride.value='';window._ovAutoFilled=false});
+ await page.locator('#scanFinishNotice .scan-finish-review').click();await page.locator('#scanFinishChoice').selectOption('__other');await page.locator('#scanFinishCustom').fill('Textured promo');await page.locator('[data-finish-save]').click();
+ check(width+' custom single finish remains unpriced',await page.evaluate(()=>getEffectivePrice()),0);
+ check(width+' repeated checks do not duplicate placeholder',await page.locator('#printingSelect [data-scan-finish-placeholder]').count(),1);
+ await page.locator('#scanFinishNotice .scan-finish-review').click();await page.locator('#scanFinishChoice').selectOption('');await page.locator('[data-finish-save]').click();
+ await page.locator('#addCollectionBtn').click();
+ check(width+' unconfirmed save form has blank value',await page.locator('#mCurrentValue').inputValue(),'');await page.keyboard.press('Escape');
+ check(width+' manual value allowed without pretending finish known',await page.evaluate(()=>{priceOverride.value='2.50';window._ovAutoFilled=false;return [getEffectivePrice(),selectedCard.finishConfirmed]}),[2.5,false]);
+ check(width+' catalogue/source labels never become finish choices',await page.evaluate(()=>_scanFinishOptions({prices:{'TCGplayer Live':3,'Near Mint':4,nm:5,normal:0}}).map(o=>[o.key,o.market])),[['normal',0]]);
+ check(width+' unconfirmed copies are not merged',await page.evaluate(()=>{const a={cardName:'Bulbasaur',finishReviewRequired:true,scanUid:'a'},b={...a,scanUid:'b'};return _bulkDupKey(a)!==_bulkDupKey(b)}),true);
+ check(width+' confirmed different finishes are not merged',await page.evaluate(()=>{const a={success:true,cardName:'Bulbasaur',setName:'Fixture',cardNumber:'1',finishReviewRequired:true,finishConfirmed:true,finish:'Normal'},b={...a,finish:'Reverse Holofoil'};return _bulkDupKey(a)!==_bulkDupKey(b)}),true);
+ check(width+' no uncaught app errors',errors,[]);
+ await page.close();
+}
+console.log(`SUITE COMPLETE: scan-finish-browser: ${checks} passed, 0 failed`);
+}finally{await browser.close();await new Promise(r=>server.close(r))}
