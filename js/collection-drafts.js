@@ -60,35 +60,66 @@
     if (!rows.length) return;
     if (!document.getElementById('collectionDraftStyles')) {
       const style = el('style'); style.id = 'collectionDraftStyles';
-      style.textContent = `.collection-draft-tools{padding:1rem;margin-bottom:1rem;border:1px solid var(--border,#333);border-radius:12px;display:flex;flex-wrap:wrap;gap:.65rem;align-items:center}.collection-draft-tools input{width:100%;padding:.7rem;border-radius:8px;border:1px solid #555;background:var(--bg,#171717);color:inherit;box-sizing:border-box;font:inherit}.collection-draft-tools button,.collection-draft-result button{min-height:44px;padding:.55rem .8rem;border:1px solid #666;border-radius:8px;background:#252525;color:#fff;font:inherit;font-size:.8rem;cursor:pointer}.collection-draft-tools button:disabled{opacity:.5;cursor:default}.collection-draft-tools [data-create]{background:#2563eb;border-color:#3b82f6}.collection-draft-tools [data-status]{width:100%;font-size:.85rem;line-height:1.5}.collection-draft-tools [data-count]{font-size:.8rem;width:100%}.collection-draft-select{display:flex;align-items:center;gap:.5rem;min-height:44px;font-size:.8rem;cursor:pointer}.collection-draft-check{width:22px;height:22px;accent-color:#3b82f6}.collection-draft-result{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;white-space:normal;font-size:.75rem;line-height:1.4;margin-top:.3rem}`;
+      style.textContent = `
+.collection-draft-tools{padding:1rem;margin-bottom:1rem;border:1px solid var(--border);border-radius:var(--radius-lg,12px);background:var(--surface);color:var(--text);display:grid;gap:1rem}
+.collection-plan-heading,.collection-plan-selection,.collection-plan-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.collection-plan-heading{justify-content:space-between;gap:.5rem 1rem}
+.collection-plan-heading strong{font-size:.9rem}
+.collection-plan-filters{display:flex;flex-wrap:wrap;align-items:end;gap:.75rem}
+.collection-plan-filters label{display:grid;gap:.4rem;min-width:0;flex:1 1 170px;font-size:.75rem;font-weight:600;color:var(--text-muted)}
+.collection-plan-filters .collection-plan-search{flex:3 1 240px}
+.collection-draft-tools input,.collection-draft-tools select{width:100%;min-width:0;min-height:44px;padding:.65rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);background:var(--bg);color:var(--text);box-sizing:border-box;font:inherit;font-size:.85rem}
+.collection-draft-tools button,.collection-draft-result button{min-height:44px;padding:.6rem .8rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);background:var(--surface-2);color:var(--text);font:inherit;font-size:.8rem;font-weight:600;line-height:1.4;cursor:pointer}
+.collection-draft-tools button:hover:not(:disabled),.collection-draft-result button:hover{border-color:var(--text-muted)}
+.collection-draft-tools :is(button,input,select):focus-visible,.collection-draft-result button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.collection-draft-tools button:disabled{opacity:.5;cursor:default}
+.collection-draft-tools [hidden]{display:none!important}
+.collection-draft-tools [data-create]{background:var(--gold);border-color:var(--gold);color:#171108}
+.collection-plan-selection{padding-bottom:.75rem;border-bottom:1px solid var(--border)}
+.collection-plan-selection button,.collection-draft-tools [data-clear-filters]{background:transparent}
+.collection-plan-actions{justify-content:flex-end}
+.collection-draft-tools [data-count]{font-size:.75rem;color:var(--text-muted);line-height:1.5}
+.collection-draft-tools [data-status]{font-size:.85rem;line-height:1.5}
+.collection-draft-tools [data-status]:empty{display:none}
+.collection-plan-note{font-size:.73rem;line-height:1.5;color:var(--text-muted);margin:0}
+.collection-draft-tools [data-no-matches]{margin:0;padding:.75rem;border-radius:8px;background:var(--surface-2);font-size:.85rem;line-height:1.5}
+.collection-draft-select{display:flex;align-items:center;gap:.5rem;min-height:44px;font-size:.8rem;cursor:pointer}
+.collection-draft-check{width:22px;height:22px;accent-color:var(--gold)}
+.collection-draft-result{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;white-space:normal;font-size:.75rem;line-height:1.4;margin-top:.3rem}
+@media(max-width:600px){.collection-plan-actions{display:grid;grid-template-columns:1fr 1fr}.collection-plan-actions [data-create]{grid-column:1/-1;grid-row:1}.collection-plan-selection{gap:.35rem}.collection-plan-selection button{flex:1 1 auto}.collection-plan-filters .collection-plan-search{flex-basis:100%}}
+`;
       document.head.append(style);
     }
     const bar = el('div', '', 'collection-draft-tools'); bar.id = 'collectionDraftTools';
-    bar.append(el('strong', 'Plan your sale'));
+    const heading = el('div','','collection-plan-heading'); heading.append(el('strong', 'Plan your sale'));
+    const count = el('div'); count.dataset.count = ''; count.setAttribute('role','status'); heading.append(count); bar.append(heading);
+    const filters = el('div','','collection-plan-filters'); filters.setAttribute('role','group'); filters.setAttribute('aria-label','Find Collection cards');
+    const searchLabel = el('label','Find cards','collection-plan-search');
     const search = el('input'); search.type = 'search'; search.placeholder = 'Find cards by name, set, or number'; search.setAttribute('aria-label','Search collection'); search.value = query;
-    search.oninput = () => { query = search.value; paint(); }; bar.append(search);
+    search.oninput = () => { query = search.value; paint(); }; searchLabel.append(search); filters.append(searchLabel);
     const filterLabel = el('label', 'Saved card value '), filter = el('select');
     filter.dataset.valueFilter = ''; filter.setAttribute('aria-label', 'Filter collection by saved value');
-    filter.style.cssText = 'font:inherit;min-height:44px;max-width:100%;padding:.55rem;border:1px solid var(--border);border-radius:8px;color:var(--text);background:var(--surface)';
     for (const [value, text] of [['all','All values'],['under5','Under $5'],['atleast5','$5 and above'],['missing','Missing value']]) {
       const option = el('option',text); option.value=value; filter.append(option);
     }
     filter.value = valueFilter; filter.onchange = () => { valueFilter = filter.value; paint(); };
-    filterLabel.append(filter); bar.append(filterLabel);
+    filterLabel.append(filter); filters.append(filterLabel);
     const reset = button('Clear filters', () => {
       query = ''; valueFilter = 'all'; search.value = ''; filter.value = 'all'; paint(); search.focus();
-    }); reset.dataset.clearFilters = ''; bar.append(reset);
+    }); reset.dataset.clearFilters = ''; filters.append(reset); bar.append(filters);
     const empty = el('p', 'No cards match these filters. Clear filters to see your collection.');
-    empty.dataset.noMatches = ''; empty.hidden = true; empty.style.cssText = 'width:100%;margin:0;line-height:1.5';
+    empty.dataset.noMatches = ''; empty.hidden = true;
     bar.append(empty);
     const select = button('Select visible', () => { syncOwner(); const available = rowMap(loadPortData()); rows.filter(visible).forEach(p => { if (available.get(key(p))) selected.add(key(p)); }); paint(); }); select.dataset.selection = ''; select.dataset.selectVisible = '';
     const clear = button('Clear selection', () => { selected.clear(); paint(); }); clear.dataset.selection = ''; clear.dataset.clearSelection = '';
     const create = button('Prepare drafts', prepare); create.dataset.create = '';
     const compare=button('Compare selling',()=>{syncOwner();const ids=selected.size?[...selected]:rows.filter(visible).map(key);const cards=currentRows(ids).filter(Boolean);if(cards.length!==ids.length){message='A card changed or has an ambiguous ID. Refresh your collection and select it again.';paint();return;}window.CardResellSellingPlan?.openCollection(cards);});compare.dataset.compare='';
     const only = button('Keep only shown selections', () => { const available = rowMap(loadPortData()); for (const id of selected) { const p = available.get(id); if (!p || !visible(p)) selected.delete(id); } paint(); }); only.dataset.onlyVisible = '';
-    bar.append(select, clear, only, compare, create, button('View drafts', () => switchView('drafts')));
-    bar.append(el('small', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.'));
-    const count = el('div'); count.dataset.count = ''; count.setAttribute('role','status'); const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(count,status);
+    const selection = el('div','','collection-plan-selection'); selection.setAttribute('role','group'); selection.setAttribute('aria-label','Select Collection cards'); selection.append(select, clear, only);
+    const actions = el('div','','collection-plan-actions'); actions.setAttribute('role','group'); actions.setAttribute('aria-label','Use selected Collection cards'); actions.append(compare, button('View drafts', () => switchView('drafts')), create);
+    bar.append(selection,actions);
+    bar.append(el('p', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.','collection-plan-note'));
+    const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(status);
     document.getElementById('collectionWrap').before(bar);
     const byId = rowMap(rows);
     document.querySelectorAll('#collectionWrap tr.col-row').forEach(tr => {
