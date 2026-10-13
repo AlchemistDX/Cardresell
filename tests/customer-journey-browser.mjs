@@ -122,5 +122,40 @@ for (const width of [390,1280]) {
  if(shots)await page.screenshot({path:`${shots}/journey-signin-${width}.png`});
  await page.close();
 }
+// First-visit demo: exercise shipped request coordination and real tab clicks.
+for (const width of [390,1280]) {
+ const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});
+ await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
+ await page.route('**/*',r=>{
+   const u=r.request().url();
+   if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});
+   if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();
+   return r.fulfill({status:503,contentType:'application/json',body:'{"error":"offline_fixture"}'});
+ });
+ await page.goto(origin);
+ await page.waitForFunction(()=>typeof searchWithTPL==='function');
+ await page.evaluate(()=>{
+   searchWithTPL=()=>new Promise(resolve=>{window._releaseDemoCatalogue=()=>resolve({cards:[{id:'fixture-charizard',name:'Charizard',number:'004',set:{name:'Fixture set',id:'fixture'},rarity:'Rare',prices:{raw:{near_mint:{tcgplayer:{market:20}}}}}]})});
+   window._demoOutcome=null;
+   autoRunExampleCard().then(result=>window._demoOutcome=result);
+ });
+ await page.waitForFunction(()=>typeof window._releaseDemoCatalogue==='function');
+ await page.locator('.view-tab[data-view="collection"]').click();
+ await page.waitForFunction(()=>window._demoOutcome!==null);
+ check(width+' leaving Lookup abandons the pending demo',await page.evaluate(()=>window._demoOutcome),'abandoned');
+ await page.evaluate(()=>window._releaseDemoCatalogue());
+ await page.waitForTimeout(200);
+ check(width+' late demo response does not select a card',await page.evaluate(()=>selectedCard),null);
+ check(width+' Collection stays visible after late demo response',await page.locator('#collectionView').isVisible(),true);
+ await page.locator('.view-tab[data-view="lookup"]').click();
+ check(width+' returning to Lookup has no stale example text',await page.locator('#searchInput').inputValue(),'');
+ check(width+' returning to Lookup has no stale demo rows',await page.locator('#dropList .drop-item').count(),0);
+ await page.evaluate(()=>{window._demoOutcome=null;autoRunExampleCard().then(result=>window._demoOutcome=result)});
+ await page.evaluate(()=>window._releaseDemoCatalogue());
+ await page.waitForFunction(()=>window._demoOutcome!==null);
+ check(width+' idle visitor still receives the example',await page.evaluate(()=>window._demoOutcome),true);
+ check(width+' idle example selects the catalogue card',await page.evaluate(()=>selectedCard?.name),'Charizard');
+ await page.close();
+}
 console.log(`SUITE COMPLETE: customer-journey-browser: ${checks} passed, 0 failed`);
 }finally{await browser.close();await new Promise(r=>server.close(r))}

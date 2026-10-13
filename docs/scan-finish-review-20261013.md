@@ -72,3 +72,12 @@ That fresh walkthrough also reproduced an older manual-entry defect: editing the
 Ten additional assertions across the two viewports cover changed names, changed printings, independent seller values and unchanged-card preservation. Final finish gate: 116 passed. Customer journey: 90 passed. Save durability: 129 passed. Flip/pack: 100 passed. Scan hygiene: 182 passed. Asset/deployment gate: 157 passed. Release build passed. A standalone legacy entry-identity runner could not start because it hardcodes an absent `/home/user/node_modules/playwright` dependency; it is not counted as passing. No full-suite rerun was needed for the subsequent targeted identity correction.
 
 No paid scan, email or marketplace submission was used. The fresh QA card was saved only to the anonymous verification browser, not a signed-in customer account.
+
+
+## Final release verification
+
+PR #60 merged as `753b9e3d5c6f921fc1e6d2d618ec5f32900f6531`. The tested production source commit is `db2846489d434da5080507c29781745b33d1cd38`, tree `3f19e321a32203758e7255aa34c16a3cb8218621`, deployment `dpl_DHegzBUy63fAvMp6nJbdRJd5y4dU`. The public homepage returned HTTP 200 and referenced `js/core.da629249.js`.
+
+The live browser was reloaded after release. A second anonymous QA entry was renamed from the existing example to `QA manual identity check`, set `Browser only — corrected entry`, with seller value $1.25. The saved Collection detail preserved that value, showed the generic image, and generated marketplace research links without the previous card number. The first QA record remains as pre-fix evidence; neither belongs to a signed-in account. The finish dialog had already been visually verified after the CSS routing correction and its assets are unchanged in this final release.
+
+Outcome: the implemented finish-confirmation workflow and manual-identity correction are released and verified. Optical recognition accuracy on real binder/foil photographs remains unbenchmarked; the product therefore requires an explicit finish decision instead of claiming a visual verdict.
