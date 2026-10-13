@@ -72,10 +72,7 @@ function _scanChooseFinish(row, key, custom) {
 function _scanFinishButton(row, action) {
   if (!row || (!row.finishOptions && !row.finishReviewRequired)) return '';
   const bulk = /^reviewBulkFinish\('([^']+)'\)$/.exec(action);
-  if (bulk) return `<select class="scan-finish-review scan-finish-select" aria-label="Finish / printing" title="Finish / printing — automatic estimate; change if needed" onclick="event.stopPropagation()" onchange="bulkSetFinish('${_esc(bulk[1])}',this.value)">
-    ${!row.finishKey ? '<option value="">Finish / printing</option>' : ''}
-    ${(row.finishOptions||[]).map(o=>`<option value="${_esc(o.key)}" ${o.key===row.finishKey?'selected':''}>${_esc(o.label)}</option>`).join('')}
-    <option value="__other" ${row.finishKey==='__other'?'selected':''}>${row.finishKey==='__other'?_esc(row.finish):'Other finish / printing…'}</option></select>`;
+  if (bulk) return `<button type="button" class="scan-finish-chip" aria-label="Finish / printing: ${_esc(row.finish || 'Automatic')}" aria-haspopup="dialog" onclick="event.stopPropagation();${action}">${_esc(row.finish || 'Finish / printing')} ▾</button>`;
   return `<button type="button" onclick="event.stopPropagation();${action}" class="scan-finish-review">${_esc(row.finish || 'Finish / printing')} ▾</button>`;
 }
 function bulkSetFinish(rowId, key) {
@@ -124,11 +121,38 @@ function _scanFinishPicker(row, save) {
 function reviewBulkFinish(rowId) {
   const row=_bulkFindResult(rowId),owner=window.googleUser;
   if(!row)return;
-  const version=JSON.stringify(row);
-  _scanFinishPicker(row,next=>{
+  if (_DIALOGS.scanFinishPicker) _DIALOGS.scanFinishPicker();
+  const version=JSON.stringify(row),opener=document.activeElement;
+  const save=next=>{
     if(window.googleUser!==owner || _bulkFindResult(rowId)!==row || JSON.stringify(row)!==version){showToast('This batch changed. Reopen the card.');return false;}
     Object.assign(row,next);_bulkUpdateRow(rowId,row);_bulkDetectDuplicates();
-  });
+  };
+  const overlay=document.createElement('div');overlay.id='scanFinishPicker';overlay.className='scan-finish-quick-overlay';
+  overlay.innerHTML=`<section role="dialog" aria-modal="true" aria-labelledby="scanFinishTitle" class="scan-finish-quick-box">
+    <h2 id="scanFinishTitle">Finish / printing</h2>
+    <div class="scan-finish-choices">${(row.finishOptions||[]).map(o=>`<button type="button" data-finish-key="${_esc(o.key)}" aria-pressed="${o.key===row.finishKey}"><span>${_esc(o.label)}</span>${o.key===row.finishKey?'<span class="scan-finish-tick">✓</span>':''}</button>`).join('')}
+    <button type="button" data-finish-key="__other"><span>Other finish / printing…</span></button></div>
+    <button type="button" data-finish-cancel>Cancel</button></section>`;
+  document.body.appendChild(overlay);
+  const close=()=>{overlay.remove();delete _DIALOGS.scanFinishPicker;const target=opener?.isConnected?opener:document.getElementById(rowId)?.querySelector('.scan-finish-chip');target?.focus();};
+  _DIALOGS.scanFinishPicker=close;
+  overlay.querySelector('[data-finish-cancel]').onclick=close;
+  overlay.onclick=e=>{if(e.target===overlay)close();};
+  overlay.onkeydown=e=>{
+    if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}
+    if(e.key==='Tab'){
+      const buttons=[...overlay.querySelectorAll('button')],first=buttons[0],last=buttons[buttons.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  };
+  overlay.querySelectorAll('[data-finish-key]').forEach(button=>{button.onclick=()=>{
+    const key=button.dataset.finishKey;
+    if(key==='__other'){close();_scanFinishPicker(row,save);return;}
+    const next={...row};
+    if(_scanChooseFinish(next,key)&&save(next)!==false)close();
+  };});
+  (overlay.querySelector('[aria-pressed="true"]')||overlay.querySelector('button')).focus();
 }
 function reviewCollectionFinish(id) {
   const row=_crResolveForMutation(loadPortData(),id),owner=window.googleUser;
