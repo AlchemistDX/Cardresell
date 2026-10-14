@@ -1870,7 +1870,9 @@ Respond ONLY with valid JSON, no explanation:
     if (isGradeMode && ximilarToken && imageBase64) {
       const t0 = Date.now();
       let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg', isDeepGrade ? 'deep_grade' : 'grade');
-      if (!xim.ok && (xim.reason === 'no_match' || xim.reason === 'no_card_detected')) {
+      // Both models share card detection. Only a detected, unmatched card
+      // can benefit from a second identification attempt with the sports model.
+      if (!xim.ok && xim.reason === 'no_match') {
         const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport', isDeepGrade ? 'deep_grade' : 'grade');
         if (ximSport.ok) xim = ximSport;
       }
@@ -2255,18 +2257,17 @@ Respond ONLY with valid JSON, no explanation:
         !!(cardInfo?.is_slabbed === true) ||
         !!(cardInfo?.slabbed    === true);
 
-      // ── COST GATE ──
-      // Ximilar card-grader async job (endpoint grade) = 100 credits ≈ $0.109 per call on the
-      // 100k plan. At $0.10/credit user pricing:
-      //   Quick Grade (1 credit) → -9% margin (LOSES money)
-      //   Deep Grade  (2 credits) → +46% margin
-      // So we only enable Ximilar grader for Deep Grade. Quick Grade keeps
-      // the GPT-5-only path (~$0.01 cost, 89% margin).
+      // ── OPTIONAL CV GRADING ──
+      // Ximilar's card-grader uses 100 provider credits per card job, including
+      // front and back submitted together. Identification is a separate call.
+      // Both grade modes already use the configured OpenAI model and card ID;
+      // this flag controls the additional CV grading job. Actual cost depends
+      // on the provider plan, its utilization, token usage, and retries.
       //
       // The ENABLE_XIMILAR_GRADER env var is the master feature flag:
-      //   'off' | unset → GPT-5 only for all grade modes (safe default)
+      //   'off' | unset → OpenAI grading without the additional CV job
       //   'deep_only'   → Ximilar CV pillars on Deep Grade only
-      //   'all'         → Ximilar CV pillars on Quick + Deep (WARNING: unprofitable Quick Grade)
+      //   'all'         → Ximilar CV pillars on Quick + Deep
       const graderFlag = (process.env.ENABLE_XIMILAR_GRADER || 'off').toLowerCase();
       const useXimilarGrader =
         (graderFlag === 'deep_only' && isDeepGrade) ||
