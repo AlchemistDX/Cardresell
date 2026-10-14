@@ -70,7 +70,12 @@ const scry = (fuzzy, set) => {
   ok(results[1].success && results[1].cardName === 'Rubble Rouser' && results[1].cardNumber === '128' && results[1].setCode === 'sos', 'Rubble Rouser #128');
   ok(results[2].success && results[2].cardName === 'Sneering Shadewriter' && results[2].cardNumber === '101', 'Sneering Shadewriter #101');
   ok(results[1].textRescue === true && results[1].definiteMiss === false && results[1].error === '', 'rescued row labelled, not a miss');
-  ok(results[1].marketPrice === null && results[1].finishConfirmed === false && results[1].finishOptions[0].market === 0.12, 'printed-name rescue does not assume a foil finish');
+  // Owner's restored bulk flow prices immediately; the catalogue guess remains
+  // an estimate until the optional finish control is used, including OCR rescue.
+  ok(results[1].marketPrice === 0.12, 'printed-name rescue keeps the automatic catalogue price');
+  ok(results[1].finishKey === 'normal' && results[1].foilHint === '', 'printed-name rescue does not invent visual foil evidence');
+  ok(results[1].finishConfirmed === false && results[1].finishEstimated === true && results[1].finishOptions[0].market === 0.12, 'automatic finish remains an estimate with a correctable price');
+  ok(results[1].finishReviewRequired === false, 'rescued rows do not block the bulk workflow on finish confirmation');
   ok(!results[3].success && results[3].definiteMiss, 'loose one-word match stays a miss');
   ok(!results[4].success, 'garbled read stays a miss');
   ok(log.fetches.length > 0 && log.fetches.every(u => u.startsWith('https://api.scryfall.com/cards/named?fuzzy=') && u.endsWith('&set=sos')), 'every lookup limited to the batch set');

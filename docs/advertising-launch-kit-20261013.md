@@ -49,9 +49,12 @@ Use one source label per channel:
 | YouTube demo | https://www.cardresell.org/?cr_campaign=youtube |
 | Authorized Discord promotion | https://www.cardresell.org/?cr_campaign=discord |
 | Card shop QR | https://www.cardresell.org/?cr_campaign=shop_qr |
+| Company outreach email | https://www.cardresell.org/?cr_campaign=email_outreach |
 | Internal checks only | https://www.cardresell.org/?cr_campaign=qa |
 
 Labels group traffic by channel. Creative-level attribution is not implemented. Use one creative at a time per channel if you need an interpretable first comparison, and retain the ad platform's spend report separately. Do not put email addresses or customer identifiers in these links.
+
+The email-outreach label is included in the October 14 outreach-readiness candidate; use its dedicated reporting bucket after that release is deployed. Company outreach is measured separately from paid ads. Email security scanners and repeated visits can affect counts; an observed visit does not prove that a recipient personally read an email. For a product overview, use `/about`; direct fee corrections and collaboration questions to `/contact#fee-updates` and `/contact#partnerships`. Those standalone information pages do not emit the app's acquisition events; use the tagged app link as the primary email destination.
 
 ## Daily measurement
 
@@ -80,7 +83,7 @@ A proposed first paid test is $10 per day for seven days, capped at $70 total, o
 
 Review after day three and day seven. Pause immediately for broken checkout, missing paid credits, customer data exposure or repeated scan/export failures. With working tools but weak activation, fix the landing message or first-use step before increasing spend. Ten outside paying users is an initial learning target, not proof of repeat retention or profitability.
 
-Before broad spend, complete the isolated backup restore drill, refresh aging fee sources, and keep grading fees and turnaround dates within their published freshness window. Recheck the current grading snapshot before October 26, 2026 UTC. Provider permissions and Ximilar low-credit warnings have already been addressed; do not reopen those as launch blockers.
+Before broad spend, confirm the first scheduled daily backup and its retention, reconcile provider usage with billed costs, and refresh aging fee sources. The October 13 workflow review records the earlier isolated manual restore and later daily-backup enablement; do not repeat that completed drill or treat it as full application failover. Keep grading fees and turnaround dates within their published freshness window, and recheck the current grading snapshot before October 26, 2026 UTC. Provider permissions and Ximilar low-credit warnings have already been addressed; do not reopen those as launch blockers.
 
 ## Claims to keep out of the campaign
 

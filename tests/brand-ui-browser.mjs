@@ -183,5 +183,29 @@ for(const path of ['about','accuracy','contact','pricing','privacy','terms','sig
  check(path+' brand loads',await page.locator('.brand-mark').first().evaluate(i=>i.complete&&i.naturalWidth>0),true);
  if(shots)await page.screenshot({path:`${shots}/${path}.png`});await page.close();
 }
+// Public pages reached by outreach recipients: real navigation, narrow screens,
+// and contact destinations. Mail links are inspected, never opened or sent.
+for(const width of [320,390,844,1280]){
+ const page=await browser.newPage({viewport:{width,height:844},reducedMotion:'reduce'});
+ await page.route('**/*',r=>{const u=r.request().url();return u.startsWith(origin)&&!u.includes('/api/')?r.continue():r.abort()});
+ await page.goto(origin+'/about');
+ check(width+' About fits the viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.getByRole('link',{name:'partnership and fee-update information here'}).click();
+ check(width+' About reaches partnership contact',new URL(page.url()).pathname+new URL(page.url()).hash,'/contact#partnerships');
+ check(width+' partnership heading clears the sticky header',await page.locator('#partnerships-heading').evaluate(e=>e.getBoundingClientRect().top>=document.querySelector('header.site').getBoundingClientRect().bottom),true);
+ check(width+' Contact fits the viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ for(const id of ['support','fee-updates','partnerships']){
+  const href=await page.locator('#'+id+' .contact-action').getAttribute('href'),u=new URL(href);
+  check(width+' '+id+' email uses the public inbox',u.protocol+u.pathname,'mailto:will@cardresell.org');
+  check(width+' '+id+' has a useful email subject',Boolean(u.searchParams.get('subject')),true);
+ }
+ await page.getByRole('link',{name:'See how CardResell works'}).click();
+ check(width+' workflow link resolves',new URL(page.url()).pathname+new URL(page.url()).hash,'/about#workflow');
+ if(shots)await page.screenshot({path:`${shots}/outreach-about-${width}.png`,fullPage:true});
+ await page.getByRole('link',{name:'Try CardResell',exact:true}).click();
+ check(width+' public overview leads into the app',await page.locator('#lookupView').isVisible(),true);
+ if(shots){await page.goto(origin+'/contact');await page.screenshot({path:`${shots}/outreach-contact-${width}.png`,fullPage:true})}
+ await page.close();
+}
 console.log(`SUITE COMPLETE: brand-ui-browser: ${checks} passed, 0 failed`);
 }finally{await browser.close();await new Promise(r=>server.close(r))}

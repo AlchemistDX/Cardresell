@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = process.env.CR_PLAYWRIGHT || '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || 'playwright';
 const T = harness('tpl-outcome-render');
 
 const MIME = {

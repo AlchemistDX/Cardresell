@@ -48,7 +48,7 @@
  *   * The photo in IndexedDB is untouched -- an aborted refusal must not lose
  *     the seller's photograph.
  *
- * Run: NODE_PATH=/home/user/node_modules node tests/photo-download-gating-2026-09-13.mjs
+ * Run: node tests/photo-download-gating-2026-09-13.mjs (CR_CHROMIUM may select a browser)
  */
 
 import http from 'node:http';
@@ -59,7 +59,7 @@ import { harness } from './_assert.mjs';
 import { signUploadReceipt, verifyUploadReceipt } from '../api/_photoReceipt.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || 'playwright';
 const T = harness('photo download gating (draft-list button)');
 
 const TYPES = {
@@ -155,7 +155,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const APP_ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
 const { chromium } = (await import(PW)).default;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || undefined, args: ['--no-sandbox'] });
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 

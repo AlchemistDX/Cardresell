@@ -6,24 +6,24 @@
   <link rel="apple-touch-icon" href="/assets/brand/cardresell-mark-180.png">
   <meta name="theme-color" content="#111009">
 <title>Contact · CardResell</title>
-<meta name="description" content="Get in touch with the CardResell team — bug reports, feature requests, partnership inquiries.">
+<meta name="description" content="Contact Will at CardResell for support, fee-data corrections, grading information, and partnership inquiries.">
 <link rel="canonical" href="https://www.cardresell.org/contact">
 
 <!-- Open Graph / Twitter -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.cardresell.org/contact">
 <meta property="og:title" content="Contact CardResell">
-<meta property="og:description" content="Bug reports, feature requests, and partnership inquiries.">
+<meta property="og:description" content="Contact Will at CardResell for support, fee-data corrections, grading information, and partnership inquiries.">
 <meta property="og:site_name" content="CardResell">
 <meta property="og:image" content="https://www.cardresell.org/og-image.png">
-<meta property="og:image:alt" content="CardResell — net payout across 15 sell venues, after fees">
+<meta property="og:image:alt" content="CardResell — compare estimated selling payouts after fees">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Contact CardResell">
-<meta name="twitter:description" content="Bug reports, feature requests, and partnership inquiries.">
+<meta name="twitter:description" content="Contact Will at CardResell for support, fee-data corrections, grading information, and partnership inquiries.">
 <meta name="twitter:image" content="https://www.cardresell.org/og-image.png">
 <link rel="icon" href="/assets/brand/cardresell-mark-32.png" type="image/png">
 <style>
-:root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#71717a;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--radius-md:8px;--radius-xl:14px}
+:root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#a1a1aa;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--radius-md:8px;--radius-xl:14px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;font-size:15px}
 a{color:var(--gold);text-decoration:none}
@@ -45,40 +45,70 @@ strong{color:var(--text)}
 .contact-card .icon{flex-shrink:0;width:38px;height:38px;background:var(--gold-hi);border:1px solid rgba(196,122,0,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:1.1rem;font-weight:800}
 footer.site{border-top:1px solid var(--border);padding:1rem;text-align:center;font-size:.75rem;color:var(--text-faint)}
 footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
+main a{color:#f2be59;overflow-wrap:anywhere}
+main a:focus-visible,header a:focus-visible,footer a:focus-visible{outline:2px solid #f2be59;outline-offset:4px}
+.contact-card>div:last-child{min-width:0}
+.contact-card h2{margin-top:0}
+.contact-card .icon{color:#f2be59}
+.contact-action{display:inline-flex;align-items:center;min-height:44px;padding:.55rem .85rem;border:1px solid var(--border);border-radius:var(--radius-md);font-weight:700;margin-top:.3rem}
+.contact-links{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;margin:1rem 0 1.5rem}
+.contact-links a{display:inline-flex;align-items:center;min-height:44px}
+section[id]{scroll-margin-top:9rem}
+@media(max-width:480px){main{padding:1.5rem 1rem 2.5rem}.card{padding:1rem}.contact-card{gap:.75rem}.contact-card .icon{width:30px;height:30px}}
 </style>
 <link rel="stylesheet" href="/assets/brand-ui.535d636a.css">
 </head>
 <body>
 <header class="site">
   <a class="brand brand-lockup" href="/"><img class="brand-mark" src="/assets/brand/cardresell-mark-128.webp" width="36" height="36" alt=""><span>Card<span>Resell</span></span></a>
-  <nav>
+  <nav aria-label="Main navigation">
     <a href="/">Home</a>
     <a href="/pricing.html">Pricing</a>
     <a href="/about.html">About</a>
-    <a href="/contact.html">Contact</a>
+    <a href="/contact.html" aria-current="page">Contact</a>
   </nav>
 </header>
 <main>
 
-<h1>Contact</h1>
-<span class="updated">We usually respond within 1&ndash;2 business days.</span>
+<h1>Let&rsquo;s talk cards.</h1>
+<p>I'm Will, the person behind CardResell. For help, a correction, or a potential collaboration, email <a href="mailto:will@cardresell.org">will@cardresell.org</a>.</p>
+<span class="updated">I read messages personally and usually reply within 1&ndash;2 business days.</span>
+<nav class="contact-links" aria-label="Contact topics"><a href="#support">Product support</a><a href="#fee-updates">Fee &amp; data updates</a><a href="#partnerships">Partnerships</a></nav>
 
-<div class="card contact-card">
-  <div class="icon">&#128030;</div>
+<section class="card contact-card" id="support" aria-labelledby="support-heading">
+  <div class="icon" aria-hidden="true">?</div>
   <div>
-    <h2 style="margin-top:0">Bug reports &amp; feature requests</h2>
-    <p>Fastest path &mdash; open a <a href="https://github.com/AlchemistDX/Cardresell/issues/new" target="_blank" rel="noopener">GitHub issue</a>. Include the card, marketplace, and a screenshot if you can.</p>
+    <h2 id="support-heading">Product &amp; account support</h2>
+    <p>Tell me what you were trying to do, what happened, and the approximate time. Include the displayed support reference if there is one. For a card match or price issue, include the game, set, number, and finish.</p>
+    <p>Send account or billing details by email. Keep passwords, payment-card details, and private information out of screenshots and public issues.</p>
+    <a class="contact-action" href="mailto:will@cardresell.org?subject=CardResell%20support">Email for support</a>
+    <p>For a public bug report or feature idea, you can also <a href="https://github.com/AlchemistDX/Cardresell/issues/new" target="_blank" rel="noopener">open a GitHub issue</a>.</p>
   </div>
-</div>
+</section>
 
-<div class="card contact-card">
-  <div class="icon">&#9993;</div>
+<section class="card contact-card" id="fee-updates" aria-labelledby="fee-updates-heading">
+  <div class="icon" aria-hidden="true">↻</div>
   <div>
-    <h2 style="margin-top:0">Get in touch</h2>
-    <p><a href="mailto:will@cardresell.org">will@cardresell.org</a> &mdash; account &amp; billing, partnerships and marketplace integrations, DMCA / GDPR / CCPA requests, or anything else. CardResell is a one-person shop and I read every email personally.</p>
-    <p style="font-size:.85rem;opacity:.75;margin-bottom:0">Reply time: usually within 24 hours on weekdays, sometimes faster.</p>
+    <h2 id="fee-updates-heading">Fee &amp; data corrections</h2>
+    <p>Represent a marketplace, buylist, or grading company? Help keep its information accurate. Sellers are welcome to report a discrepancy too.</p>
+    <ul><li>Link to the official schedule and its effective date.</li><li>Include the country, currency, seller or service tier, and any minimums or exceptions.</li><li>Flag shipping, payment-processing, payout, or other charges that affect the total.</li><li>For grading, include service fees, declared-value limits, and published turnaround estimates.</li></ul>
+    <a class="contact-action" href="mailto:will@cardresell.org?subject=CardResell%20fee%20or%20data%20correction">Share an update</a>
+    <p>See our <a href="/accuracy">current sources and limitations</a>. A submitted update is reviewed before the comparison changes.</p>
   </div>
-</div>
+</section>
+
+<section class="card contact-card" id="partnerships" aria-labelledby="partnerships-heading">
+  <div class="icon" aria-hidden="true">+</div>
+  <div>
+    <h2 id="partnerships-heading">Partnerships &amp; integrations</h2>
+    <p>I'm interested in working with marketplaces, grading companies, card shops, and data providers on accurate information, useful seller workflows, and suitable referral programs.</p>
+    <p>Tell me about your organization, the opportunity, and the right contact. For data or API access, include the permitted use, attribution requirements, and update process. Referral terms can be discussed separately.</p>
+    <a class="contact-action" href="mailto:will@cardresell.org?subject=CardResell%20partnership%20inquiry">Discuss a collaboration</a>
+    <p><a href="/about#workflow">See how CardResell works</a> or <a href="/">try the app</a>. Being included in a comparison does not imply a partnership or endorsement.</p>
+  </div>
+</section>
+
+<p>For privacy, data-deletion, or other requests, use the same email address and describe your request.</p>
 
 <h2>Refunds</h2>
 <p><strong>Failed-scan credit refunds:</strong> eligible identification failures receive an automatic refund or offer &ldquo;Not my card &mdash; refund credit&rdquo; on the result. If the app cannot confirm a refund, send the displayed support reference to <a href="mailto:will@cardresell.org">will@cardresell.org</a>. Include the approximate time and what happened. Never send your password or payment-card details.</p>
@@ -94,7 +124,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <a href="/contact.html">Contact</a> &middot;
   <a href="/terms.html">Terms</a> &middot;
   <a href="/privacy.html">Privacy</a><br>
-  <span style="opacity:.6">&copy; 2026 Will Jones dba CardResell &middot; Bradenton, FL &middot; An independent Pokémon &amp; TCG resale tool</span>
+  <span>&copy; 2026 Will Jones dba CardResell &middot; Bradenton, FL &middot; An independent Pokémon &amp; TCG resale tool</span>
 </footer>
 </body>
 </html>

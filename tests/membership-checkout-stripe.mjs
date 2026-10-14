@@ -285,7 +285,7 @@ await t.section('Exact frozen controller recovers lost POST response through rea
 });
 await t.section('Attribution reaches Stripe as bounded metadata only', async () => {
   await reset(); const order = await store.createIntent(intent('attribution'));
-  for (const [value, expected] of [['qa', 'qa'], ['google_ads', 'google_ads'],
+  for (const [value, expected] of [['qa', 'qa'], ['google_ads', 'google_ads'], ['email_outreach', 'email_outreach'],
     ['private@example.com?token=secret', 'other_campaign'], [undefined, 'unknown']]) {
     const f = fixture(); await f.client().createCheckout(order, { campaign: value });
     const p = f.created[0];
