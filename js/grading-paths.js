@@ -9,6 +9,9 @@
     BGS: 'https://beckett.jotform.com/form/beckett-card-grading-submission',
     SGC: 'https://www.gosgc.com/card-grading/services-pricing'
   };
+  const submissionShippingScope = "Enter this card's share of shipping to the grader, return shipping and insurance. For an equal split, divide the total by the number of cards.";
+  const sgcShippingSource = 'https://www.gosgc.com/card-grading/shipping-fees';
+  const sgcValueNotice = 'SGC may apply an upcharge if the final graded value requires a higher fee tier.';
   const tiers = [
     { id: 'psa-standard', grader: 'PSA', name: 'Standard', fee: 59.99, minDays: 90, days: 100, maxValue: 1000, minCards: 1 },
     { id: 'psa-priority', grader: 'PSA', name: 'Priority', fee: 79.99, minDays: 70, days: 80, maxValue: 1500, minCards: 1 },
@@ -185,9 +188,11 @@
         '<label>Grading service<select data-field="tier"><option value="auto"' + (state.tier === 'auto' ? ' selected' : '') + '>Automatic · lowest eligible published fee</option>' +
         tiers.filter(t => t.grader === grader).map(t => '<option value="' + t.id + '"' + (state.tier === t.id ? ' selected' : '') + '>' + t.name + ' · ' + (t.stepSize || t.valueRate ? 'from ' : '') + '$' + t.fee.toFixed(2) + ' · ' + waitLabel(t) + ' working days</option>').join('') + '</select></label><div class="gp-service-summary" data-service-summary></div>' +
         '<p><a href="' + sources[grader] + '" target="_blank" rel="noopener">Published fees &amp; waits</a> · snapshot checked ' + checkedAt + '. Standard-size, unsigned cards submitted in the US; before tax, shipping, discounts and optional extras. ' + (grader === 'PSA' ? 'Value services are paused. ' : grader === 'BGS' ? 'Express with subgrades is currently available; Base and Standard are paused. No value-based surcharge is published for this service. ' : '') +
-          'Fees are calculated from each guide value and your submission size; the grader confirms final value and charges. ' + (!fresh() ? 'Fee snapshot expired; updated fees are unavailable.' : '') + '</p>' +
-        '<div class="gp-cost-coverage"><strong>What your estimate includes</strong><p>eBay selling fees and the eligible grading fee are calculated automatically.</p><p data-cost-coverage></p><button type="button" data-edit-costs>Add shipping costs</button></div>' +
-        '<details data-settings' + (state.open ? ' open' : '') + '><summary>Your submission details · assumed 1 card unless changed</summary><p>Only details we cannot know. Blank shipping stays excluded; enter 0 if none. Sale shipping below applies to both raw and graded scenarios.</p><div class="gp-grid">' +
+          'Fees are calculated from each guide value and your submission size; the grader confirms final value and charges. ' + (grader === 'SGC' ? sgcValueNotice + ' ' : '') + (!fresh() ? 'Fee snapshot expired; updated fees are unavailable.' : '') + '</p>' +
+        '<div class="gp-cost-coverage"><strong>What your estimate includes</strong><p>eBay selling fees and the eligible grading fee are calculated automatically.</p><p data-selling-fee-assumption>' + esc(context.sellingFeeNote || 'Buyer tax is not estimated in eBay selling fees.') + '</p><p data-cost-coverage></p><button type="button" data-edit-costs>Add shipping costs</button></div>' +
+        '<details data-settings' + (state.open ? ' open' : '') + '><summary>Your submission details · assumed 1 card unless changed</summary><p>Only details we cannot know. Blank shipping stays excluded; enter 0 if none. Sale shipping below applies to both raw and graded scenarios.</p>' +
+        '<p>' + esc(submissionShippingScope) + '</p>' +
+        (grader === 'SGC' ? '<p>SGC return shipping depends on card count and the total declared value of the order. Use the <a href="' + sgcShippingSource + '" target="_blank" rel="noopener">SGC return-shipping schedule</a> for your order; no flat shipping rate is assumed here.</p>' : '') + '<div class="gp-grid">' +
         input('Cards in your submission', 'count', state.count) + input('Submission shipping + insurance per card ($)', 'shipping', state.shipping) + input('Sale shipping per card ($)', 'saleShip', state.saleShip) +
         input('Other grading costs per card · tax, supplies, time ($)', 'other', state.other) +
         input('Annual capital cost (%) · 0 = off', 'rate', state.rate) + input('Extra calendar days · transit + selling', 'extra', state.extra) + '</div></details>' +
@@ -217,7 +222,9 @@
           if (typeof value !== 'number' && /^[=+@\-\t\r]/.test(text)) text = "'" + text;
           return '"' + text.replace(/"/g,'""') + '"';
         };
-        const metadata = [['CardResell conditional grading comparison',new Date().toISOString()],['Card',context.cardLabel || 'Card identity unavailable'],['Fee snapshot',checkedAt],['AI condition estimate (PSA only)',context.psaEst ?? 'unavailable'],['Scope','Guide scenarios, not predictions, sold comps, purchase profit or expected value. Sale dates/sample sizes unavailable.'],['Capital annual rate percent',state.rate],['Additional calendar days',state.extra === '' ? 'not entered' : state.extra]];
+        const metadata = [['CardResell conditional grading comparison',new Date().toISOString()],['Card',context.cardLabel || 'Card identity unavailable'],['Fee snapshot',checkedAt],['eBay buyer-tax assumption',context.sellingFeeNote || 'Buyer tax is not estimated in eBay selling fees.'],['AI condition estimate (PSA only)',context.psaEst ?? 'unavailable'],['Scope','Guide scenarios, not predictions, sold comps, purchase profit or expected value. Sale dates/sample sizes unavailable.'],['Capital annual rate percent',state.rate],['Additional calendar days',state.extra === '' ? 'not entered' : state.extra]];
+        metadata.push(['Submission shipping basis', submissionShippingScope]);
+        if (grader === 'SGC') metadata.push(['SGC value-based upcharges', sgcValueNotice], ['SGC return shipping', 'Depends on card count and total declared order value; no flat rate assumed. ' + sgcShippingSource]);
         const csv = [...metadata,[],header,...records].map(row=>row.map(cell).join(',')).join('\r\n');
         const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
         const link = document.createElement('a'); link.href=url;link.download='cardresell-'+grader.toLowerCase()+'-grading-'+new Date().toISOString().slice(0,10)+'.csv';

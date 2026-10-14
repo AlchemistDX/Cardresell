@@ -80,6 +80,15 @@ for (const a of assets) {
         `unchanged name can leave caches serving the old client against new ` +
         `APIs. Rename to ${a.base}.${actual}.${a.ext} and update every live ` +
         `reference. Do not edit this expectation to match the stale name.`);
+
+  // A direct edit to the shipped grading bundle previously omitted its source
+  // twin. The next rebuild silently removed the buyer-tax disclosure.
+  if (/^(js|css)\/grading-paths\.[a-f0-9]{8}\.(js|css)$/.test(a.rel)) {
+    const sourcePath = new URL(`../${a.ext}/grading-paths.${a.ext}`, import.meta.url);
+    check(`${a.rel} matches its rebuild source`,
+          existsSync(sourcePath) && bytes.equals(readFileSync(sourcePath)),
+          'Keep the source and generated grading asset in sync; rebuild with tools/build-grading-paths.mjs.');
+  }
 }
 
 // ── The core bundle specifically: exactly one, and it is live ──────────────
