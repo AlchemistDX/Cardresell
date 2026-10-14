@@ -15,8 +15,8 @@ const pick = (m, h) => ctx.pick(m, h);
 const common = { normal: 0.08, reverseHolofoil: 0.27 };
 ok(pick(common, '').variant === 'normal', 'unknown foil -> Normal, not dearer reverse');
 ok(pick(common, 'non_foil').variant === 'normal', 'non-foil -> Normal');
-ok(pick(common, 'foil').variant === 'reverseHolofoil', 'foil on a common -> Reverse Holo');
-ok(pick(common, 'foil').market === 0.27, 'price follows chosen variant');
+ok(pick(common, 'foil').variant === 'normal', 'generic foil tag cannot establish reverse holo');
+ok(pick(common, 'foil').market === 0.08, 'ambiguous finish uses base estimate');
 const holoRare = { holofoil: 1.2, reverseHolofoil: 2.5 };
 ok(pick(holoRare, '').variant === 'holofoil', 'holo-only base printing -> Holo');
 ok(pick(holoRare, 'foil').variant === 'holofoil', 'foil holo rare -> Holo');
@@ -46,5 +46,35 @@ ok(ctx2.f('Foil/Holo') === 'foil', 'Foil/Holo -> foil');
 ok(ctx2.f('Non-Foil') === 'non_foil', 'Non-Foil -> non_foil');
 ok(ctx2.f('') === '' && ctx2.f(undefined) === '', 'missing -> empty');
 ok((scan.match(/foil_hint: foilHintFrom\(cardInfo\._ximilar_foil\)/g) || []).length === 2, 'single + picker replies carry foil_hint');
+// Screenshot regression: the quoted reverse prices are from the owner's rows;
+// normal prices below are synthetic fixtures, not current card valuations.
+const finishRef = html.match(/\/js\/(scan-finish\.[0-9a-f]{8}\.js)/)[1];
+const finishCtx = {}; vm.createContext(finishCtx);
+vm.runInContext(fs.readFileSync(new URL('../js/'+finishRef,import.meta.url),'utf8'),finishCtx);
+for (const premium of [45.26,44.58,16.23]) {
+  const row={cardType:'pokemon',foilHint:'foil',marketPrice:premium};
+  finishCtx._scanApplyFinishReview(row,{variant:'reverseHolofoil',prices:{normal:{market:0.50},reverseHolofoil:{market:premium}}});
+  ok(row.marketPrice===0.50 && row.finishKey==='normal','premium '+premium+' does not inflate ambiguous binder row');
+  ok(row.finishBasis==='base_printing' && !row.finishConfirmed && !row.finishReviewRequired,'base assumption explicit and nonblocking');
+  ok(finishCtx._scanFinishFields(row).finishBasis==='base_printing','base assumption survives saving');
+  finishCtx._scanChooseFinish(row,'reverseHolofoil');
+  ok(row.marketPrice===premium && row.finishConfirmed && !row.finishBasis,'seller can choose exact reverse price instantly');
+}
+for (const basePrice of [null,0]) {
+  const row={cardType:'pokemon',foilHint:'foil'};
+  finishCtx._scanApplyFinishReview(row,{variant:'reverseHolofoil',prices:{normal:{market:basePrice},reverseHolofoil:{market:45.26}}});
+  ok(row.marketPrice===basePrice,'missing/zero normal price never falls through to premium');
+}
+const onlyHolo={cardType:'pokemon',foilHint:'foil'};
+finishCtx._scanApplyFinishReview(onlyHolo,{variant:'holofoil',prices:{holofoil:12}});
+ok(onlyHolo.marketPrice===12 && onlyHolo.finishKey==='holofoil','holo-only catalogue retains price');
+const onlyReverse={cardType:'pokemon',foilHint:'foil'};
+finishCtx._scanApplyFinishReview(onlyReverse,{variant:'reverseHolofoil',prices:{reverseHolofoil:45.26}});
+ok(onlyReverse.marketPrice===null && !onlyReverse.finishKey,'reverse-only feed is not proof of reverse printing');
+finishCtx._scanChooseFinish(onlyReverse,'reverseHolofoil');
+ok(onlyReverse.marketPrice===45.26 && onlyReverse.finishConfirmed,'reverse-only quote available after optional selection');
+const mtg={cardType:'mtg',foilHint:'foil'};
+finishCtx._scanApplyFinishReview(mtg,{variant:'usd',prices:{usd:1,usd_foil:5}});
+ok(mtg.marketPrice===5,'other game finish handling unchanged');
 console.log(`bulk-variant-choice: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);

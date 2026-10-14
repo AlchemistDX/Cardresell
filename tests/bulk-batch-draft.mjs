@@ -652,7 +652,7 @@ try {
       // field will fail here the same way this one did.
       // Restored automatic pricing distinguishes an estimate from a seller's
       // confirmed finish. Keep the exact union, including that provenance.
-      'catalogImageUrl', 'finish', 'finishConfirmed', 'finishEstimated', 'finishKey', 'finishOptions', 'finishPriceDate', 'finishReviewRequired'];
+      'catalogImageUrl', 'finish', 'finishBasis', 'finishConfirmed', 'finishEstimated', 'finishKey', 'finishOptions', 'finishPriceDate', 'finishReviewRequired'];
     const got = Object.keys(e).sort();
     eq('the saved entry carries exactly the committed key union',
        got.join(','), EXPECTED_KEYS.slice().sort().join(','));
