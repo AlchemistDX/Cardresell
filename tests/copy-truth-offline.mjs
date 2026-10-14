@@ -452,14 +452,15 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 
   // Issue 2 - fee recipe rows on every eligible tile
   ok(/const DAYS_TO_CASH = \{/.test(idx), 'per-venue days-to-cash table exists');
-  ok(/daysToCash: daysToCashText\(p\.pid\)/.test(idx),
-     'each row carries a daysToCash string');
+  ok(/daysToCash:\s*p\.creditOnly\s*\?\s*'Credit on sale'\s*:\s*daysToCashText\(p\.pid\)/.test(idx),
+     'payout timing distinguishes retained credit from cash');
   ok(/priceUsed: price, priceLabel: _priceLabel/.test(idx),
      'each row carries the price basis it used');
   ok(/<span>Price used <span class="fee-basis">/.test(idx),
      'the recipe renders a "Price used" line with its basis label');
-  ok(/<span>Net after all deductions<\/span>/.test(idx),
-     'the recipe subtotal is the Net line');
+  ok(/class="fee-row fee-total"/.test(idx) &&
+     ['Credit less modeled costs', 'Cash less modeled costs', 'Net after all deductions'].every(label => idx.includes(label)),
+     'the recipe subtotal distinguishes credit, modeled cash and other net deductions');
 
   // Issue 3 - pricing.html spells all 4 buylists
   const pr2 = fs.readFileSync('pricing.html','utf8');

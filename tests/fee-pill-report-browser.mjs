@@ -14,7 +14,10 @@ const shot = process.argv[2] || '';
 const b = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || undefined, args: ['--no-sandbox'] });
 try {
   const page = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  await page.addInitScript(() => localStorage.setItem('cs_landing_seen', '1'));
+  await page.addInitScript(() => {
+    localStorage.setItem('cs_landing_seen', '1');
+    localStorage.setItem('cr_density', 'detailed');
+  });
   await page.route('**/*', r => { const u = r.request().url(); if (!u.startsWith(origin) || u.includes('/api/')) return r.fulfill({ status: 204, body: '' }); return r.continue(); });
   const errs = []; page.on('pageerror', e => errs.push(e.message));
   await page.goto(origin + '/index.html', { waitUntil: 'domcontentloaded' });
@@ -39,8 +42,9 @@ try {
   ok(r.rows >= 2, 'a pill row per rendered venue: ' + r.rows);
   ok(r.items.every(i => i.text === 'Report a fee problem' && i.href.startsWith('mailto:will@cardresell.org?subject=')), 'every row has the report link');
   const ago = d => d === 0 ? ' · today' : d === 1 ? ' · 1 day ago' : ` · ${d} days ago`;
-  for (const pid of ['tcgplayer', 'poshmark', 'comc', 'fanatics', 'whatnot', 'mercari', 'manapool'])
+  for (const pid of ['tcgplayer', 'poshmark', 'fanatics', 'whatnot', 'mercari', 'manapool'])
     ok(r.audited[pid] === '2026-10-11', pid + ' re-audited Oct 11');
+  ok(r.audited.comc === '2026-10-14', 'COMC re-audited Oct 14');
   ok(r.audited.ebay === '2026-10-14', 'eBay re-audited Oct 14');
   for (const pid of ['cardsphere', 'cardkingdom', 'scg', 'cardnexus', 'tcgbulk'])
     ok(r.audited[pid] === '2026-10-13', pid + ' re-audited Oct 13');
@@ -55,6 +59,36 @@ try {
   ok(!/[<>"]/.test(eb.href), 'href carries no raw markup characters');
   ok(Math.abs(r.posh[0] - 2.95) < 1e-9 && Math.abs(r.posh[1] - 2.95) < 1e-9 && Math.abs(r.posh[2] - 3.002) < 1e-9, 'Poshmark: $15.00 pays $2.95, $15.01 pays 20%: ' + r.posh.slice(0, 3));
   ok(r.posh[3] === 'Flat commission ($15 and under)', 'Poshmark label matches its terms');
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => {
+      window._isPro = true;
+      window._userTier = 'pro_max';
+      window._membershipVenueAccess = null;
+      window._venuesEnabled = new Set(['ebay', 'tcgplayer', 'comc']);
+      window.getEffectivePrice = () => 100;
+      document.getElementById('comcService').value = 'standard';
+      document.getElementById('comcCashout').value = 'no';
+      document.getElementById('itemCost').value = '20';
+      calc();
+    });
+    const tile = page.locator('.plat-card').filter({ has: page.locator('.plat-name', { hasText: 'COMC' }) });
+    ok(await tile.locator('.plat-payout').textContent() === '$89.35', width + ': credit estimate deducts modeled upfront costs');
+    ok((await tile.locator('.comc-payout-kind').textContent()).includes('not cash'), width + ': credit label visible beside the amount');
+    ok((await tile.textContent()).includes('Credit surplus vs cost basis') && !(await tile.textContent()).includes('Profit:'), width + ': credit surplus never claims cash profit');
+    ok(!(await page.locator('.payout-rank').textContent()).includes('COMC'), width + ': consignment stays outside payout rankings');
+    await page.evaluate(() => { document.getElementById('comcCashout').value = 'yes'; calc(); });
+    ok(await tile.locator('.plat-payout').textContent() === '$78.95', width + ': cash-out uses sale credit before external postage');
+    ok((await tile.locator('.comc-payout-kind').textContent()).includes('Estimated cash'), width + ': cash selection changes the label');
+    ok((await tile.textContent()).includes('Storage, security and mailed-check charges are not included'), width + ': omissions disclosed');
+    await page.evaluate(() => { window.getEffectivePrice = () => 102; calc(); });
+    ok(await tile.locator('.plat-payout').textContent() === '—', width + ': invalid Standard listing has no misleading payout');
+    ok((await tile.textContent()).includes('Choose Elite'), width + ': invalid tier has a recovery instruction');
+    await page.evaluate(() => { document.getElementById('comcService').value = 'elite'; calc(); });
+    ok(await tile.locator('.plat-payout').textContent() === '$79.31', width + ': choosing Elite restores the estimate');
+    ok(await tile.evaluate(el => el.scrollWidth <= el.clientWidth + 1), width + ': COMC tile fits its width');
+    if (shot) await tile.screenshot({ path: shot.replace(/\.png$/, '-comc-' + width + '.png') });
+  }
   ok(errs.length === 0, 'no page errors: ' + errs.join(' | '));
 } finally { await b.close(); server.close(); }
 console.log(`fee-pill-report-browser: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
