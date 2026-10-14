@@ -4050,7 +4050,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/collection-export.95babf8e.js"></script>
 <script defer src="/js/collection-drafts.fe560779.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>
-  <script defer src="/js/binder.1c3ef574.js"></script>
+  <script defer src="/js/binder.d3266e27.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.922d48e9.js"></script>
 <script>
@@ -4249,8 +4249,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         .binder-actions button {min-height:44px}
         #binderAlignment label {display:block;margin:.5rem 0}
         #binderZoom {width:100%}
-        #binderPreview {touch-action:none;cursor:grab}
+        #binderPreview {touch-action:pan-y pinch-zoom;cursor:grab}
+        #binderPreview.binder-move-active {touch-action:none;outline:3px solid #f5ad27;outline-offset:2px}
         #binderPreview:active {cursor:grabbing}
+        #binderMovePhoto[aria-pressed="true"] {background:#f5ad27;color:#111;border-color:#f5ad27}
         #binderPockets {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
         .binder-pocket {display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;background:#202020;border:1px solid #666;border-radius:10px;padding:.6rem;cursor:pointer}
         .binder-pocket:has(input:checked) {border-color:#4ade80;background:#14291b}
@@ -4290,11 +4292,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </section>
       <div id="binderAlignment" hidden>
         <strong>Fit the photo to the grid</strong>
-        <p>Drag the photo with one finger, then zoom until each box contains one whole card. Use the arrows for small moves. For an angled page, retake it straight-on.</p>
+        <p>Zoom until each box contains one whole card. Use the arrows for small moves. On a touchscreen, choose Move photo before dragging; scrolling returns when you lift your finger. For an angled page, retake it straight-on.</p>
         <label for="binderZoom">Photo zoom <output id="binderZoomValue">100%</output></label><input id="binderZoom" type="range" min="100" max="250" value="100" step="1">
-        <div class="binder-actions" aria-label="Move photo"><button type="button" data-binder-move="left" aria-label="Move photo left">←</button><button type="button" data-binder-move="right" aria-label="Move photo right">→</button><button type="button" data-binder-move="up" aria-label="Move photo up">↑</button><button type="button" data-binder-move="down" aria-label="Move photo down">↓</button><button id="binderResetFit" type="button">Reset automatic fit</button></div>
+        <div class="binder-actions" aria-label="Move photo"><button id="binderMovePhoto" type="button" aria-pressed="false" aria-controls="binderPreview">Move photo</button><button type="button" data-binder-move="left" aria-label="Move photo left">←</button><button type="button" data-binder-move="right" aria-label="Move photo right">→</button><button type="button" data-binder-move="up" aria-label="Move photo up">↑</button><button type="button" data-binder-move="down" aria-label="Move photo down">↓</button><button id="binderResetFit" type="button">Reset automatic fit</button></div>
+        <p id="binderMoveHint" style="font-size:.85rem;color:#ddd" aria-live="polite">Swipe on the photo to scroll.</p>
       </div>
-      <canvas id="binderPreview" hidden tabindex="0" aria-label="Move binder photo within the pocket grid. Drag or use arrow keys; zoom to leave room to move." style="width:100%;max-width:500px;align-self:center;height:auto"></canvas>
+      <canvas id="binderPreview" hidden tabindex="0" aria-label="Binder photo and pocket grid. Swipe to scroll. Choose Move photo to drag, or use arrow keys. Zoom in to leave room to move." aria-describedby="binderMoveHint" style="width:100%;max-width:500px;align-self:center;height:auto"></canvas>
       <p id="binderStatus" role="status" style="margin:0;line-height:1.5"></p>
       <div id="binderBulkPick" hidden><button id="binderSelectAll" type="button">Select all</button><button id="binderSelectNone" type="button">Clear</button></div>
       <div id="binderPockets"></div>

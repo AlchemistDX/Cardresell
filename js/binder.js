@@ -4,20 +4,68 @@
   const el = id => document.getElementById(id);
   let source = null, generation = 0, busy = false;
   let cameraStream = null, cameraEpoch = 0, cameraActive = false;
-  let anchor = null, drag = null, adjusting = false;
+  let anchor = null, drag = null, adjusting = false, touchMove = false;
+  const moves = {left:[-.01,0],right:[.01,0],up:[0,-.01],down:[0,.01]};
   const edges = ['Left','Right','Top','Bottom'];
   const readMargins = () => edges.map(edge => Math.max(0,Math.min(40,Number(el('binder'+edge).value)||0))/100);
   function rectangle() { const [l,r,t,b] = readMargins(); return {x:l,y:t,w:1-l-r,h:1-t-b}; }
-  function saveRectangle(rect) {
+  function boundedRectangle(rect) {
     // Keep every crop inside original pixels; blank canvas never becomes a card.
     rect.w = Math.max(.2,Math.min(1,rect.w)); rect.h = Math.max(.2,Math.min(1,rect.h));
     rect.x = Math.max(Math.max(0,.6-rect.w),Math.min(Math.min(.4,1-rect.w),rect.x));
     rect.y = Math.max(Math.max(0,.6-rect.h),Math.min(Math.min(.4,1-rect.h),rect.y));
-    setMargins([rect.x,1-rect.x-rect.w,rect.y,1-rect.y-rect.h].map(n=>Math.round(n*10000)/100));
+    return rect;
+  }
+  function saveRectangle(rect) {
+    rect = boundedRectangle(rect);
+    const next = [rect.x,1-rect.x-rect.w,rect.y,1-rect.y-rect.h].map(n=>Math.round(n*10000)/100);
+    const before = readMargins();
+    if (!next.some((n,i)=>Math.abs(n/100-before[i])>.00005)) return false;
+    setMargins(next);
     marginsAuto = false;
+    return true;
+  }
+  function releaseDrag() {
+    const previous = drag; drag = null;
+    const preview = el('binderPreview');
+    if (previous && preview.hasPointerCapture?.(previous.id)) {
+      try { preview.releasePointerCapture(previous.id); } catch (_) {}
+    }
+  }
+  function setTouchMove(value) {
+    touchMove = !!value && !!source && !cameraActive;
+    el('binderPreview').classList.toggle('binder-move-active',touchMove);
+    el('binderMovePhoto').setAttribute('aria-pressed',String(touchMove));
+    el('binderMovePhoto').textContent = touchMove ? 'Cancel photo move' : 'Move photo';
+  }
+  function syncAlignment() {
+    const unavailable = !source || cameraActive;
+    const r = rectangle(), zoom = anchor ? anchor.w/r.w : 1;
+    let movable = false;
+    for (const button of el('binderAlignment').querySelectorAll('[data-binder-move]')) {
+      const [dx,dy] = moves[button.dataset.binderMove];
+      const next = boundedRectangle({...r,x:r.x-dx/zoom,y:r.y-dy/zoom});
+      const blocked = Math.abs(next.x-r.x)<.00005 && Math.abs(next.y-r.y)<.00005;
+      button.disabled = unavailable || blocked;
+      button.title = blocked ? 'Photo edge reached. Zoom in to make room to move.' : button.getAttribute('aria-label');
+      movable ||= !blocked;
+    }
+    // Crop encoding is cancellable. Do not disable the focused slider or
+    // movement buttons while an earlier crop render is finishing.
+    el('binderZoom').disabled = unavailable;
+    el('binderResetFit').disabled = unavailable;
+    el('binderMovePhoto').disabled = unavailable || (!movable && !touchMove);
+    el('binderMoveHint').textContent = touchMove
+      ? 'Drag the photo once. Lift your finger to return to scrolling.'
+      : !movable && !unavailable
+        ? 'Zoom in to make room to move the photo. Swiping on the photo scrolls the page.'
+        : 'Swipe on the photo to scroll. Tap Move photo to drag once, or use the arrows.';
+    for (const id of ['binderSelectAll','binderSelectNone']) el(id).disabled = busy || adjusting || unavailable;
+    el('binderRotate').disabled = busy || unavailable;
   }
   function resetAlignment() {
-    anchor = null; drag = null; adjusting = false;
+    releaseDrag(); setTouchMove(false);
+    anchor = null; adjusting = false;
     el('binderZoom').value = 100; el('binderZoomValue').textContent = '100%';
   }
   function paintPreview() {
@@ -25,24 +73,31 @@
     const current = rectangle(); if (!anchor) {anchor = {...current}; el('binderZoom').max = Math.max(100,Math.min(250,Math.floor(Math.min(anchor.w,anchor.h)/.2*100)));}
     const [cols,rows] = el('binderLayout').value.split(',').map(Number);
     const preview = el('binderPreview'); preview.hidden = false;
-    preview.width = Math.min(900,source.width); preview.height = Math.round(preview.width*source.height/source.width);
+    const width=Math.min(900,source.width),height=Math.round(width*source.height/source.width);
+    if(preview.width!==width || preview.height!==height) {preview.width=width;preview.height=height;}
     const ctx = preview.getContext('2d'), zoom = anchor.w/current.w;
     ctx.fillStyle='#111';ctx.fillRect(0,0,preview.width,preview.height);
     ctx.drawImage(source,(anchor.x-current.x*zoom)*preview.width,(anchor.y-current.y*zoom)*preview.height,preview.width*zoom,preview.height*zoom);
     ctx.strokeStyle='#f5ad27';ctx.lineWidth=2;
     for(let row=0;row<rows;row++) for(let col=0;col<cols;col++) ctx.strokeRect((anchor.x+col*anchor.w/cols)*preview.width,(anchor.y+row*anchor.h/rows)*preview.height,anchor.w/cols*preview.width,anchor.h/rows*preview.height);
     el('binderAlignment').hidden=false;
+    syncAlignment();
   }
   function invalidateAdjustment() {
-    adjusting=true; ++generation; releaseCrops(); updateCount(); paintPreview();
+    adjusting=true; ++generation; releaseCrops(true); updateCount(); paintPreview();
     message('Check the grid after moving the photo. Crop previews update when you release it.');
   }
-  function finishAdjustment() { drag=null; adjusting=false; render(); }
+  function finishAdjustment() {
+    releaseDrag(); setTouchMove(false);
+    const changed = adjusting; adjusting=false;
+    if(changed && source) render(); else updateCount();
+  }
   function movePhoto(dx,dy) {
-    if(!source || busy || cameraActive) return;
+    if(!source || cameraActive) return;
     const r=rectangle(), zoom=anchor ? anchor.w/r.w : 1;
-    saveRectangle({...r,x:r.x-dx/zoom,y:r.y-dy/zoom});
-    invalidateAdjustment(); finishAdjustment();
+    if(saveRectangle({...r,x:r.x-dx/zoom,y:r.y-dy/zoom})) {
+      invalidateAdjustment(); finishAdjustment();
+    }
   }
   function cameraGuide() {
     const video=el('binderCameraVideo'), grid=el('binderCameraGrid');
@@ -64,7 +119,7 @@
   }
   async function startCamera() {
     if(busy || adjusting) return;
-    stopCamera(); const version=cameraEpoch; cameraActive=true; updateCount();
+    stopCamera(); setTouchMove(false); const version=cameraEpoch; cameraActive=true; updateCount();
     el('binderOpenCamera').disabled=true; el('binderCamera').hidden=false;
     message('Opening camera. Match the page to the pocket guide.');
     try {
@@ -224,13 +279,17 @@
     for (const p of pockets) { p.selected = value; if (p.checkbox) p.checkbox.checked = value; }
     updateCount();
   }
-  function releaseCrops() {
+  function releaseCrops(preserveSpace = false) {
+    const container=el('binderPockets');
+    container.style.minHeight=preserveSpace ? `${container.getBoundingClientRect().height}px` : '';
+    if (!preserveSpace) container.removeAttribute('aria-busy');
     urls.forEach(url => URL.revokeObjectURL(url)); urls = []; pockets = [];
-    el('binderPockets').replaceChildren();
-    const pick = el('binderBulkPick'); if (pick) pick.hidden = true;
+    container.replaceChildren();
+    const pick = el('binderBulkPick'); if (pick && !preserveSpace) pick.hidden = true;
     updateCount();
   }
   function updateCount() {
+    syncAlignment();
     const count = carried.length + pockets.filter(p => p.selected).length;
     const plural = n => n === 1 ? '' : 's';
     if (multiPage() && pageIdx < pageQueue.length - 1) {
@@ -246,7 +305,6 @@
   function lock(value) {
     busy = value;
     el('binderControls').disabled = value;
-    el('binderAlignment').querySelectorAll('button,input').forEach(control=>{control.disabled=value;});
     updateCount();
   }
   window.clearBinderScan = () => {
@@ -278,7 +336,8 @@
   async function render() {
     if (!source) return;
     const version = ++generation;
-    releaseCrops(); lock(true);
+    releaseCrops(true); lock(true);
+    el('binderPockets').setAttribute('aria-busy','true');
     message('Preparing pocket previews…');
     try {
       const [cols, rows] = el('binderLayout').value.split(',').map(Number);
@@ -334,14 +393,18 @@
       }
       const picked = pockets.filter(p => p.selected).length, empty = pockets.length - picked;
       const pick = el('binderBulkPick'); if (pick) pick.hidden = false;
-      const fitNote = fitFallback ? 'Automatic trimming made the crops too small, so the full photo is shown. Check that each grid box contains one whole card before continuing. ' : fitted ? 'Grid fitted to your cards automatically. Drag and zoom the photo if a card is cut off. ' : '';
+      const fitNote = fitFallback ? 'Automatic trimming made the crops too small, so the full photo is shown. Check that each grid box contains one whole card before continuing. ' : fitted ? 'Grid fitted to your cards automatically. Use the zoom and movement controls if a card is cut off. ' : '';
       const smallNote = pocketEdge < SMALL_POCKET_EDGE ? ' This photo is fairly small, so fine print may be hard to read. For best accuracy, use the original photo from your camera roll.' : '';
       message(fitNote + (picked
         ? `Selected ${picked} pocket${picked === 1 ? '' : 's'} that appear to hold a card${empty ? ` and skipped ${empty} that look${empty === 1 ? 's' : ''} empty` : ''}. Untick any pocket that is empty, cut off, covered or unreadable. Changing the grid resets the selection.`
         : 'Every pocket looks empty. If that is wrong, check the grid, or tap Select all.') + smallNote);
     } catch(error) {
       if(version === generation) { releaseCrops(); message(error.message || 'Unable to prepare this page. Try individual photos.'); }
-    } finally { if(version === generation) lock(false); }
+    } finally { if(version === generation) {
+      el('binderPockets').style.minHeight='';
+      el('binderPockets').setAttribute('aria-busy','false');
+      lock(false);
+    } }
   }
   el('binderInput').addEventListener('change', event => {
     const picked = [...(event.target.files || [])]; if(!picked.length) return;
@@ -379,11 +442,11 @@
     } finally { if(url) URL.revokeObjectURL(url); if(image) image.src = ''; }
   }
   el('binderLayout').addEventListener('change',()=>{ try { localStorage.setItem(LAYOUT_KEY, el('binderLayout').value); } catch (_) {} resetAlignment(); cameraGuide(); render(); });
-  el('binderSelectAll')?.addEventListener('click',()=>{ if(!busy) setAll(true); });
-  el('binderSelectNone')?.addEventListener('click',()=>{ if(!busy) setAll(false); });
+  el('binderSelectAll')?.addEventListener('click',()=>{ if(!busy&&!adjusting&&!cameraActive) setAll(true); });
+  el('binderSelectNone')?.addEventListener('click',()=>{ if(!busy&&!adjusting&&!cameraActive) setAll(false); });
   for(const edge of ['Left','Right','Top','Bottom']) el('binder'+edge).addEventListener('change',()=>{ marginsAuto = false; resetAlignment(); render(); });
   el('binderRotate').addEventListener('click',()=>{
-    if(!source || busy) return;
+    if(!source || busy || cameraActive) return;
     const rotated = document.createElement('canvas'); rotated.width=source.height; rotated.height=source.width;
     const ctx=rotated.getContext('2d'); ctx.translate(rotated.width,0); ctx.rotate(Math.PI/2); ctx.drawImage(source,0,0);
     source.width=source.height=1; source=rotated;
@@ -397,33 +460,54 @@
   el('binderStopCamera').addEventListener('click',()=>{stopCamera();message('Camera closed. Choose a photo or reopen the camera.');});
   el('binderCameraVideo').addEventListener('loadedmetadata',()=>{if(cameraActive) cameraGuide();});
   el('binderCameraVideo').addEventListener('resize',()=>{if(cameraActive) cameraGuide();});
-  window.addEventListener('pagehide',stopCamera);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden && cameraActive) stopCamera();});
+  window.addEventListener('pagehide',()=>{finishAdjustment();stopCamera();});
+  window.addEventListener('blur',finishAdjustment);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){finishAdjustment();if(cameraActive)stopCamera();}});
   // Stop tracks even when another scan mode hides this section without cancel.
-  new MutationObserver(()=>{if(cameraActive && el('bulkBinderReview').style.display==='none') stopCamera();}).observe(el('bulkBinderReview'),{attributes:true,attributeFilter:['style']});
-  el('binderResetFit').addEventListener('click',()=>{if(!source||busy||cameraActive)return;resetAlignment();marginsAuto=true;render();});
+  new MutationObserver(()=>{if(el('bulkBinderReview').style.display==='none'){finishAdjustment();if(cameraActive)stopCamera();}}).observe(el('bulkBinderReview'),{attributes:true,attributeFilter:['style']});
+  el('binderResetFit').addEventListener('click',()=>{if(!source||cameraActive)return;resetAlignment();marginsAuto=true;render();});
   el('binderZoom').addEventListener('input',()=>{
-    if(!source||busy||cameraActive)return;
+    if(!source||cameraActive)return;
     const r=rectangle();if(!anchor)anchor={...r};const factor=Number(el('binderZoom').value)/100;
     const w=anchor.w/factor,h=anchor.h/factor;
-    saveRectangle({x:r.x+(r.w-w)/2,y:r.y+(r.h-h)/2,w,h});
-    el('binderZoomValue').textContent=el('binderZoom').value+'%'; invalidateAdjustment();
+    const changed=saveRectangle({x:r.x+(r.w-w)/2,y:r.y+(r.h-h)/2,w,h});
+    el('binderZoomValue').textContent=el('binderZoom').value+'%';
+    if(changed) invalidateAdjustment();
   });
-  el('binderZoom').addEventListener('change',()=>{if(adjusting)finishAdjustment();});
+  for(const type of ['change','pointerup','pointercancel','lostpointercapture','keyup','blur'])
+    el('binderZoom').addEventListener(type,()=>{if(adjusting)finishAdjustment();});
+  el('binderMovePhoto').addEventListener('click',()=>{
+    if(touchMove) finishAdjustment(); else {setTouchMove(true);syncAlignment();}
+  });
   document.querySelectorAll('[data-binder-move]').forEach(button=>button.addEventListener('click',()=>{
-    const delta={left:[-.01,0],right:[.01,0],up:[0,-.01],down:[0,.01]}[button.dataset.binderMove];movePhoto(...delta);
+    movePhoto(...moves[button.dataset.binderMove]);
   }));
   const preview=el('binderPreview');
-  preview.addEventListener('keydown',event=>{const delta={ArrowLeft:[-.01,0],ArrowRight:[.01,0],ArrowUp:[0,-.01],ArrowDown:[0,.01]}[event.key];if(delta){event.preventDefault();movePhoto(...delta);}});
+  // The shared dialog Escape handler runs at document capture. Cancel an
+  // active photo adjustment first, without closing its enclosing scanner.
+  window.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&(touchMove||drag||adjusting)&&el('bulkBinderReview').contains(event.target)) {
+      event.preventDefault();event.stopPropagation();finishAdjustment();
+    }
+  },true);
+  preview.addEventListener('keydown',event=>{
+    const delta={ArrowLeft:moves.left,ArrowRight:moves.right,ArrowUp:moves.up,ArrowDown:moves.down}[event.key];
+    if(delta){event.preventDefault();movePhoto(...delta);}
+  });
   preview.addEventListener('pointerdown',event=>{
-    if(!source||busy||cameraActive||drag||event.button>0)return;
+    if(drag&&event.pointerId!==drag.id){finishAdjustment();return;}
+    if(!source||cameraActive||event.button>0||event.isPrimary===false)return;
+    if(event.pointerType!=='mouse'&&!touchMove)return;
     const r=rectangle();if(!anchor)anchor={...r};
     drag={id:event.pointerId,x:event.clientX,y:event.clientY,rect:r,bounds:preview.getBoundingClientRect(),zoom:anchor.w/r.w};
-    preview.setPointerCapture(event.pointerId);invalidateAdjustment();
+    try {preview.setPointerCapture(event.pointerId);}catch(_){releaseDrag();setTouchMove(false);syncAlignment();}
   });
   preview.addEventListener('pointermove',event=>{
     if(!drag||event.pointerId!==drag.id)return;
-    saveRectangle({...drag.rect,x:drag.rect.x-(event.clientX-drag.x)/drag.bounds.width/drag.zoom,y:drag.rect.y-(event.clientY-drag.y)/drag.bounds.height/drag.zoom});paintPreview();
+    if(Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<4&&!adjusting)return;
+    if(saveRectangle({...drag.rect,x:drag.rect.x-(event.clientX-drag.x)/drag.bounds.width/drag.zoom,y:drag.rect.y-(event.clientY-drag.y)/drag.bounds.height/drag.zoom})) {
+      if(!adjusting) invalidateAdjustment(); else paintPreview();
+    }
   });
   const endDrag=event=>{if(drag&&event.pointerId===drag.id)finishAdjustment();};
   preview.addEventListener('pointerup',endDrag);preview.addEventListener('pointercancel',endDrag);preview.addEventListener('lostpointercapture',endDrag);

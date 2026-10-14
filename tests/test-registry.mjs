@@ -85,6 +85,8 @@ const EXCLUDED = {
     'Required brand/UI release gate: CR_CHROMIUM=<binary> node tests/brand-ui-browser.mjs. Full local app, two themes, four viewports, isolated service fixtures.',
   'binder-scan-browser.mjs':
     'Required binder release gate: CR_CHROMIUM=<binary> node tests/binder-scan-browser.mjs. Shipped DOM/crops/bulk handoff; synthetic images, no provider calls.',
+  'binder-interaction-browser.mjs':
+    'Required binder interaction release gate: CR_CHROMIUM=<binary> node tests/binder-interaction-browser.mjs. Full shipped page, native touch/mouse/keyboard, scroll/capture/crop races and bulk handoff at phone portrait/landscape and desktop sizes; no provider calls.',
   'grade-upload-single-draft-browser.mjs':
     'Required grading/draft/shop browser gate: CR_CHROMIUM=<binary> node tests/grade-upload-single-draft-browser.mjs. Real shipped DOM/functions, synthetic services, external network blocked.',
   'photo-guide-browser.mjs':
