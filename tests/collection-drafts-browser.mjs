@@ -12,8 +12,10 @@ const core=readFileSync(referencedHashedAssets().find(a=>a.base==='core').path,'
 const names=new Set(['renderCollectionView','_crCreateDraft','_crResolveEntry','_crMatchesById','_crIdEq']);
 const code=parse(core,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.has(n.id.name)).map(n=>core.slice(n.start,n.end)).join('\n');
 const module=readFileSync(join(ROOT,'js/collection-drafts.js'),'utf8');
+const exporter=readFileSync(join(ROOT,'js/collection-export.js'),'utf8');
 const fixture=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+`<script>
-window.googleUser={sub:'owner'};let data=[],calls=[],manifests=[],opened=[],compared=[],mode='ok',limit=10,deferHead,portReads=0;
+window.googleUser={sub:'owner'};let data=[],calls=[],manifests=[],opened=[],compared=[],downloads=[],mode='ok',limit=10,deferHead,portReads=0;
+HTMLAnchorElement.prototype.click=function(){downloads.push({name:this.download,text:decodeURIComponent(this.href.split(',').slice(1).join(','))})};
 window.CardResellSellingPlan={openCollection:cards=>compared=cards};
 const _crCreateAttempt={},_crScanPhotoAttempt={},_crDraftState={},CR_D1_SLOT='ebay:fixed-price';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -24,7 +26,7 @@ function showToast(){}function openDraftReview(id){opened.push(id)}function swit
 async function _bulkDraftHeadroom(){if(deferHead)await new Promise(r=>window.finishHead=r);return {known:true,cap:25,total:0,free:25,bulkLimit:limit}}
 async function fetchSellStamps(cards){return {ok:true,stamps:cards.map(p=>({eligible:!p.ineligible,message:'Add a card number.'}))}}
 window.fetch=async(url,opts)=>{const body=JSON.parse(opts.body);if(url.includes('action=batch')){manifests.push(body);return Response.json({count:body.rows.length})}calls.push({body,key:opts.headers['Idempotency-Key']});if(mode==='network')throw Error('lost response');if(mode==='malformed')return Response.json({});if(mode==='cap')return Response.json({code:'DRAFT_CAP_REACHED',error:'Draft capacity reached.'},{status:409});return Response.json({draftId:'drf_'+String(body.instanceId.replace('inst_col_','')).padStart(32,'0'),generation:0,existing:mode==='existing'},{status:mode==='existing'?200:201})};
-${code}\n${module}
+${code}\n${exporter}\n${module}
 function seed(list){data=list;document.getElementById('collectionView').style.display='block';document.getElementById('collectionWrap').closest('[style*="display: none"]')?.style.removeProperty('display');renderCollectionView()}
 </script>`;
 const server=createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end(fixture)});await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -35,9 +37,13 @@ try{for(const width of [390,1280]){
  await page.evaluate(()=>seed([{id:1,card:'Pikachu',set:'Base',buyPrice:1,currentValue:2,provenance:'comp'},{id:2,card:'Charizard',set:'Base',buyPrice:3},{id:3,card:'Pikachu Promo',buyPrice:0,ineligible:true}]));
  const select=()=>page.getByRole('button',{name:'Select visible',exact:true}).click();const prepare=()=>page.locator('[data-create]').click();const done=()=>page.waitForFunction(()=>!document.querySelector('[data-create]').textContent.includes('Preparing'));
  check(await page.locator('.collection-draft-check').count()===3,'every card selectable');
+ check(await page.getByRole('button',{name:'Export selected',exact:true}).isDisabled(),'export disabled without explicit selection');
  if(process.env.CR_SHOT_DIR)await page.screenshot({path:process.env.CR_SHOT_DIR+'/collection-'+width+'.png',fullPage:true});
  await page.getByRole('searchbox',{name:'Search collection'}).fill('pikachu');await select();
  check(await page.locator('.collection-draft-check:checked').count()===2,'select visible matches search');
+ await page.getByRole('button',{name:'Export selected',exact:true}).click();
+ check(await page.evaluate(()=>downloads.length===1&&downloads[0].name==='cardsell_collection_selected.csv'&&downloads[0].text.includes('Pikachu Promo')&&!downloads[0].text.includes('Charizard')),'selected export follows actual selected copies');
+ check(await page.evaluate(()=>calls.length===0&&manifests.length===0),'export does not create drafts or charge scans');
  await page.getByRole('searchbox').fill('');check(await page.locator('.collection-draft-check:checked').count()===2,'filter preserves explicit selection');
  await page.evaluate(()=>limit=1);await prepare();await done();check(await page.evaluate(()=>calls.length===0&&manifests.length===0),'Free refuses batch without writing');
  check((await page.locator('[data-status]').textContent()).includes('Starter'),'plan limit guidance');

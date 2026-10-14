@@ -34,3 +34,11 @@ Measurement spot-check on October 14: the most recent 100 `PROVIDER_USAGE` produ
 - Real eBay Seller Hub import acceptance, an independent ID/grade accuracy study, current fee confirmations and provider cost reconciliation remain evidence tasks. A passing local test is not completion of those external checks.
 
 This document is an implementation order, not a revenue forecast or a claim that later features are live.
+
+## Second release: detailed collection exports
+
+Collection CSV now preserves saved card identity, grading details, finish review state, value source and refresh date. Unknown or invalid costs and values remain blank; an actual zero remains zero. Unrealized profit is calculated only when both inputs are known, with an explicit statement that selling fees and other expenses are excluded. Each saved physical copy exports as quantity one.
+
+The collection selection toolbar offers Export selected, scoped to the current account and exact selected IDs. Missing or ambiguous selected rows stop the export instead of expanding its scope. Full collection export remains available. CSV text is escaped and protected against spreadsheet formula execution; UTF-8 BOM preserves card names.
+
+Validation: 16 CSV checks and 100 collection browser checks at mobile and desktop widths pass. These cover missing/zero values, identity details, selected rows, repeated copies and existing draft behavior. No paid access restriction, inventory mutation, repricing or scan charge is introduced. Expense accounting, realized-sale reconciliation and inventory import remain separate follow-up work; this is not a tax-ready report.
