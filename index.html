@@ -2967,11 +2967,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="fl-header">
     <div class="fl-title">Flip Log</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="fl-sub-btn" id="flipReportToggle" aria-expanded="false" aria-controls="flipReportPanel" onclick="toggleFlipReport()">Sales report</button>
       <button class="fl-sub-btn" onclick="exportFlips()">⬇ Export CSV</button>
       <button class="fl-add-btn" onclick="openAddFlip('flip')">+ Log a Flip</button>
     </div>
   </div>
 
+  <section id="flipReportPanel" class="section-panel" hidden aria-label="Sales and expense report"></section>
   <div id="flipLogWrap"></div>
 
   <!-- Portfolio (cards still held) -->
@@ -4027,6 +4029,24 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/ui.6250c45a.js"></script>
 <script defer src="/js/selling-plan.df207743.js"></script>
 <script defer src="/js/selling-advice.7b8b622b.js"></script>
+<style>
+#flipReportPanel { margin-bottom:1rem; padding:1rem; box-sizing:border-box; overflow-wrap:anywhere; }
+#flipReportPanel h3 { margin:0 0 .6rem; }
+#flipReportPanel p { margin:.6rem 0; }
+#flipReportPanel[hidden] { display:none; }
+#flipReportPanel p,#flipReportPanel li { font-size:.85rem; line-height:1.5; }
+.flip-report-controls { display:flex; flex-wrap:wrap; gap:.65rem; align-items:end; }
+.flip-report-editor { display:flex; flex-wrap:wrap; gap:.6rem; margin:.8rem 0; padding:.7rem; border:1px solid var(--border); border-radius:8px; }
+.flip-report-editor p { flex-basis:100%; }
+.flip-report-editor label { display:flex; flex-direction:column; gap:.3rem; max-width:100%; }
+.flip-report-editor input { width:140px; max-width:100%; padding:.5rem; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:6px; }
+.flip-report-controls label { display:flex; flex:1 1 140px; flex-direction:column; gap:.25rem; min-width:0; }
+.flip-report-controls input { padding:.5rem; width:100%; box-sizing:border-box; max-width:100%; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:6px; }
+.flip-report-totals { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:.8rem; }
+.flip-report-totals dt { font-size:.78rem; }
+.flip-report-totals dd { margin:.35rem 0; font-size:1.1rem; font-weight:700; }
+</style>
+<script defer src="/js/flip-report.d0ede863.js"></script>
 <script defer src="/js/collection-export.95babf8e.js"></script>
 <script defer src="/js/collection-drafts.fe560779.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>
