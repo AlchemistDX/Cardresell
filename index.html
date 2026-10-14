@@ -4050,7 +4050,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/collection-export.95babf8e.js"></script>
 <script defer src="/js/collection-drafts.fe560779.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>
-  <script defer src="/js/binder.d3266e27.js"></script>
+  <script defer src="/js/binder.21099174.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.922d48e9.js"></script>
 <script>
@@ -4240,7 +4240,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         #bulkBinderReview button:disabled {opacity:.5}
         #binderControls {border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:1rem;min-width:0}
         #binderInput {width:100%;max-width:100%}
-        #binderCamera[hidden],#binderAlignment[hidden] {display:none}
+        #binderCamera[hidden],#binderAlignment[hidden],#binderPrevious[hidden],#binderPageProgress[hidden] {display:none}
         #binderCameraStage {position:relative;max-width:500px;margin:auto;background:#000;overflow:hidden}
         #binderCameraVideo {display:block;width:100%;height:auto}
         #binderCameraGrid {position:absolute;display:grid;pointer-events:none;border:2px solid #f5ad27;box-shadow:0 0 0 500px #0006}
@@ -4265,11 +4265,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         @media(min-width:700px){#binderPockets{grid-template-columns:repeat(4,minmax(0,1fr))}}
       </style>
       <h2 style="margin:0;font-size:1.2rem">Scan a binder page <small style="font-size:.75rem;color:#f5ad27">Guided</small></h2>
+      <p id="binderPageProgress" hidden role="status" style="margin:0;color:#f5ad27;font-weight:600"></p>
       <p style="margin:0;line-height:1.5">Photograph one page straight-on in even light. Match the grid to the pockets. We tick the pockets that hold a card for you to review. This identifies cards; it does not grade them. Binder glare can hide holo and reverse-holo patterns. Check each card’s finish after identification; uncertain cards can be saved without a price.</p>
       <fieldset id="binderControls">
         <button id="binderOpenCamera" type="button">Take a guided binder photo</button>
         <label for="binderInput">Binder page photos</label>
-        <input id="binderInput" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+        <input id="binderInput" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.75rem">
           <label for="binderLayout">Pocket layout</label>
           <select id="binderLayout"><option value="2,2">2 columns × 2 rows</option><option value="3,3" selected>3 columns × 3 rows</option><option value="3,4">3 columns × 4 rows</option><option value="4,3">4 columns × 3 rows</option><option value="4,4">4 columns × 4 rows</option></select>
@@ -4302,6 +4303,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div id="binderBulkPick" hidden><button id="binderSelectAll" type="button">Select all</button><button id="binderSelectNone" type="button">Clear</button></div>
       <div id="binderPockets"></div>
       <p style="margin:0;font-size:.85rem;color:#bbb">1 ID credit per selected pocket. Only selected pockets are sent for identification. Glare or angled pages may need individual photos.</p>
+      <button id="binderPrevious" type="button" hidden>Previous page</button>
       <button id="binderContinue" type="button" disabled style="background:#f0a51c;color:#111;font-weight:800">Select the cards to scan</button>
       <button id="binderCancel" type="button">Back to scan options</button>
     </section>

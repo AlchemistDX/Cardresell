@@ -70,7 +70,8 @@
   }
   function paintPreview() {
     if (!source) return;
-    const current = rectangle(); if (!anchor) {anchor = {...current}; el('binderZoom').max = Math.max(100,Math.min(250,Math.floor(Math.min(anchor.w,anchor.h)/.2*100)));}
+    const current = rectangle(); if (!anchor) anchor = {...current};
+    el('binderZoom').max = Math.max(100,Math.min(250,Math.floor(Math.min(anchor.w,anchor.h)/.2*100)));
     const [cols,rows] = el('binderLayout').value.split(',').map(Number);
     const preview = el('binderPreview'); preview.hidden = false;
     const width=Math.min(900,source.width),height=Math.round(width*source.height/source.width);
@@ -144,9 +145,13 @@
     try {
       canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
       const jpeg=await blob(canvas); if(version!==cameraEpoch) return;
-      window.clearBinderScan();
-      pageQueue=[new File([jpeg],'binder-camera.jpg',{type:'image/jpeg'})];
-      openPage(0,margins);
+      const captured=new File([jpeg],'binder-camera.jpg',{type:'image/jpeg'});
+      // A retake replaces this page, keeping the rest of the reviewed batch.
+      stopCamera();
+      if(!pageQueue.length) {pageQueue=[captured];pageIdx=0;}
+      else pageQueue[pageIdx]=captured;
+      pageStates[pageIdx]=null;
+      openPage(pageIdx,margins);
     } catch (_) { if(version===cameraEpoch) {el('binderCapture').disabled=false;message('Could not capture this frame. Try again or choose a camera-roll photo.');} }
     finally {canvas.width=canvas.height=1;}
   }
@@ -156,8 +161,24 @@
   // a time — each keeps its own grid fit and ticks — and every ticked pocket
   // goes to ONE bulk confirmation, so the credit quote still comes once.
   const MAX_PAGES = 10;
-  let pageQueue = [], pageIdx = 0, carried = [], pageNote = '';
+  let pageQueue = [], pageIdx = 0, pageStates = [], pageNote = '';
+  let rotation = 0, pageError = false;
   const multiPage = () => pageQueue.length > 1;
+  const otherPageFiles = () => pageStates.flatMap((state,index)=>index===pageIdx ? [] : state?.files || []);
+  function rememberPage() {
+    // Keep only selected JPEGs and small review settings. The full-resolution
+    // canvas belongs to the current page and is released when navigating.
+    pageStates[pageIdx]={
+      files:pockets.filter(p=>p.selected).map(p=>p.file),
+      selection:pockets.map(p=>p.selected),
+      layout:el('binderLayout').value,rotation,margins:edges.map(edge=>el('binder'+edge).value),
+      auto:marginsAuto,anchor:anchor ? {...anchor} : null,zoom:el('binderZoom').value,
+    };
+  }
+  function hidePhoto() {
+    el('binderAlignment').hidden=true;
+    const preview=el('binderPreview');preview.width=preview.height=1;preview.hidden=true;
+  }
   const message = text => { el('binderStatus').textContent = (multiPage() ? `Page ${pageIdx + 1} of ${pageQueue.length}. ` : '') + text + pageNote; };
   // 2026-10-10: local, free pocket analysis. A pocket holding a card has
   // printed edges, text and art; an empty sleeve over a page backing is
@@ -290,13 +311,20 @@
   }
   function updateCount() {
     syncAlignment();
-    const count = carried.length + pockets.filter(p => p.selected).length;
+    const count = otherPageFiles().length + pockets.filter(p => p.selected).length;
     const plural = n => n === 1 ? '' : 's';
+    const previous=el('binderPrevious');
+    previous.hidden=!multiPage() || pageIdx===0;
+    previous.disabled=busy || adjusting || cameraActive;
+    const progress=el('binderPageProgress');
+    progress.hidden=!multiPage();
+    progress.textContent=multiPage() ? `Page ${pageIdx+1} of ${pageQueue.length} · ${count} card${plural(count)} selected across this batch` : '';
+    el('binderOpenCamera').textContent=pageQueue.length ? 'Retake this page' : 'Take a guided binder photo';
     if (multiPage() && pageIdx < pageQueue.length - 1) {
       // A page may legitimately contribute nothing (all empty), so Next is
-      // available as soon as the page is ready.
-      el('binderContinue').disabled = busy || adjusting || cameraActive || !source;
-      el('binderContinue').textContent = `Next page (${pageIdx + 2} of ${pageQueue.length}) · ${count} card${plural(count)} so far`;
+      // available when ready, including a failed page the user can skip.
+      el('binderContinue').disabled = busy || adjusting || cameraActive || (!source && !pageError);
+      el('binderContinue').textContent = `${pageError ? 'Skip this page; next' : 'Next page'} (${pageIdx + 2} of ${pageQueue.length}) · ${count} card${plural(count)} so far`;
       return;
     }
     el('binderContinue').disabled = busy || adjusting || cameraActive || count === 0;
@@ -308,12 +336,11 @@
     updateCount();
   }
   window.clearBinderScan = () => {
-    stopCamera(); resetAlignment(); el('binderAlignment').hidden=true;
+    stopCamera(); resetAlignment(); hidePhoto();
     generation++;
-    pageQueue = []; pageIdx = 0; carried = []; pageNote = '';
+    pageQueue = []; pageIdx = 0; pageStates = []; pageNote = ''; rotation=0;pageError=false;
     releaseCrops();
     if (source) { source.width = source.height = 1; source = null; }
-    const preview = el('binderPreview'); preview.width = preview.height = 1; preview.hidden = true;
     el('binderInput').value = '';
     lock(false);
   };
@@ -333,16 +360,17 @@
   function blob(canvas) {
     return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not prepare this photo.')), 'image/jpeg', .95));
   }
-  async function render() {
+  async function render(restored = null) {
     if (!source) return;
     const version = ++generation;
+    pageError=false;
     releaseCrops(true); lock(true);
     el('binderPockets').setAttribute('aria-busy','true');
     message('Preparing pocket previews…');
     try {
       const [cols, rows] = el('binderLayout').value.split(',').map(Number);
       let fitted = false;
-      if (marginsAuto) {
+      if (marginsAuto && !restored) {
         let fit = null;
         try { fit = fitGrid(source, cols, rows); } catch (_) {}
         setMargins(fit || [0, 0, 0, 0]); fitted = !!fit;
@@ -378,7 +406,8 @@
         if(version !== generation) return;
         const file = new File([jpeg],`binder-${multiPage() ? `page-${pageIdx+1}-` : ''}row-${row+1}-col-${col+1}.jpg`,{type:'image/jpeg'});
         const url = URL.createObjectURL(file); urls.push(url);
-        const pocket = {file, selected:!stats.looksEmpty, looksEmpty:!!stats.looksEmpty, stats}; pockets.push(pocket);
+        const selected=restored?.selection.length===grid.crops.length ? restored.selection[pockets.length] : !stats.looksEmpty;
+        const pocket = {file, selected, looksEmpty:!!stats.looksEmpty, stats}; pockets.push(pocket);
         const label = document.createElement('label'); label.className = 'binder-pocket';
         const img = document.createElement('img'); img.src = url; img.alt = `Row ${row+1}, column ${col+1}`;
         const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
@@ -393,13 +422,16 @@
       }
       const picked = pockets.filter(p => p.selected).length, empty = pockets.length - picked;
       const pick = el('binderBulkPick'); if (pick) pick.hidden = false;
-      const fitNote = fitFallback ? 'Automatic trimming made the crops too small, so the full photo is shown. Check that each grid box contains one whole card before continuing. ' : fitted ? 'Grid fitted to your cards automatically. Use the zoom and movement controls if a card is cut off. ' : '';
+      const fitNote = restored ? 'Your saved alignment and selections are restored. ' : fitFallback ? 'Automatic trimming made the crops too small, so the full photo is shown. Check that each grid box contains one whole card before continuing. ' : fitted ? 'Grid fitted to your cards automatically. Use the zoom and movement controls if a card is cut off. ' : '';
       const smallNote = pocketEdge < SMALL_POCKET_EDGE ? ' This photo is fairly small, so fine print may be hard to read. For best accuracy, use the original photo from your camera roll.' : '';
-      message(fitNote + (picked
+      const selectionNote = restored
+        ? `${picked} pocket${picked===1?'':'s'} selected on this page. Review your choices before continuing. Changing the grid resets the selection.`
+        : picked
         ? `Selected ${picked} pocket${picked === 1 ? '' : 's'} that appear to hold a card${empty ? ` and skipped ${empty} that look${empty === 1 ? 's' : ''} empty` : ''}. Untick any pocket that is empty, cut off, covered or unreadable. Changing the grid resets the selection.`
-        : 'Every pocket looks empty. If that is wrong, check the grid, or tap Select all.') + smallNote);
+        : 'Every pocket looks empty. If that is wrong, check the grid, or tap Select all.';
+      message(fitNote + selectionNote + smallNote);
     } catch(error) {
-      if(version === generation) { releaseCrops(); message(error.message || 'Unable to prepare this page. Try individual photos.'); }
+      if(version === generation) { pageError=true;releaseCrops(); message(error.message || 'Unable to prepare this page. Try individual photos.'); }
     } finally { if(version === generation) {
       el('binderPockets').style.minHeight='';
       el('binderPockets').setAttribute('aria-busy','false');
@@ -415,10 +447,12 @@
   });
   async function openPage(index, cameraMargins = null) {
     resetAlignment();
-    const file = pageQueue[index] || pageQueue[0]; if(!file) return;
+    const file = pageQueue[index]; if(!file) return;
     pageIdx = index;
+    pageError=false;rotation=0;
     releaseCrops();
     if (source) { source.width = source.height = 1; source = null; }
+    hidePhoto();
     for (const edge of ['Left','Right','Top','Bottom']) el('binder' + edge).value = 0;
     el('bulkBinderReview')?.scrollTo?.(0, 0);
     marginsAuto = true;
@@ -426,7 +460,8 @@
     lock(true); message('Opening photo…');
     let url, image;
     try {
-      if(!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 25*1024*1024) throw new Error('Choose a JPEG, PNG or WebP photo under 25 MB. Export HEIC photos as JPEG first.');
+      const supported=/^image\/(jpeg|png|webp)$/i.test(file.type)||(!file.type&&/\.(jpe?g|png|webp)$/i.test(file.name));
+      if(!supported || file.size > 25*1024*1024) throw new Error('Choose a JPEG, PNG or WebP photo under 25 MB. Export HEIC photos as JPEG first.');
       url = URL.createObjectURL(file);
       image = new Image(); image.src = url; await image.decode();
       if(version !== generation) return;
@@ -435,21 +470,39 @@
       source = document.createElement('canvas');
       source.width = Math.round(image.naturalWidth*ratio); source.height = Math.round(image.naturalHeight*ratio);
       source.getContext('2d').drawImage(image,0,0,source.width,source.height);
+      const saved=pageStates[index];
+      if(saved) {
+        for(let turn=0;turn<saved.rotation;turn++) rotateSource();
+        rotation=saved.rotation;
+        el('binderLayout').value=saved.layout;setMargins(saved.margins);marginsAuto=saved.auto;
+        anchor=saved.anchor ? {...saved.anchor} : null;
+        el('binderZoom').max=250;el('binderZoom').value=saved.zoom;el('binderZoomValue').textContent=saved.zoom+'%';
+      }
       if(cameraMargins) {setMargins(cameraMargins);marginsAuto=false;}
-      await render();
+      await render(saved);
     } catch(error) {
-      if(version === generation) { message(error.message || 'Could not open this image. Try a JPEG photo.'); lock(false); }
+      if(version === generation) {
+        pageError=true;
+        const recovery=!multiPage() ? '' : pageIdx<pageQueue.length-1
+          ? ' Use Skip this page to continue with the remaining photos.'
+          : otherPageFiles().length ? ' You can review the cards selected on earlier pages.' : ' Retake this page or go back to an earlier photo.';
+        message('Could not open this photo. '+(error.name==='EncodingError' ? 'Try a fresh JPEG from your camera roll.' : error.message || 'Try a JPEG photo.')+recovery);
+        lock(false);
+      }
     } finally { if(url) URL.revokeObjectURL(url); if(image) image.src = ''; }
   }
   el('binderLayout').addEventListener('change',()=>{ try { localStorage.setItem(LAYOUT_KEY, el('binderLayout').value); } catch (_) {} resetAlignment(); cameraGuide(); render(); });
   el('binderSelectAll')?.addEventListener('click',()=>{ if(!busy&&!adjusting&&!cameraActive) setAll(true); });
   el('binderSelectNone')?.addEventListener('click',()=>{ if(!busy&&!adjusting&&!cameraActive) setAll(false); });
   for(const edge of ['Left','Right','Top','Bottom']) el('binder'+edge).addEventListener('change',()=>{ marginsAuto = false; resetAlignment(); render(); });
-  el('binderRotate').addEventListener('click',()=>{
-    if(!source || busy || cameraActive) return;
+  function rotateSource() {
     const rotated = document.createElement('canvas'); rotated.width=source.height; rotated.height=source.width;
     const ctx=rotated.getContext('2d'); ctx.translate(rotated.width,0); ctx.rotate(Math.PI/2); ctx.drawImage(source,0,0);
     source.width=source.height=1; source=rotated;
+  }
+  el('binderRotate').addEventListener('click',()=>{
+    if(!source || busy || cameraActive) return;
+    rotateSource();rotation=(rotation+1)%4;
     for(const edge of ['Left','Right','Top','Bottom']) el('binder'+edge).value=0;
     marginsAuto = true; resetAlignment();
     render();
@@ -511,17 +564,23 @@
   });
   const endDrag=event=>{if(drag&&event.pointerId===drag.id)finishAdjustment();};
   preview.addEventListener('pointerup',endDrag);preview.addEventListener('pointercancel',endDrag);preview.addEventListener('lostpointercapture',endDrag);
+  el('binderPrevious').addEventListener('click',()=>{
+    if(busy||adjusting||cameraActive||pageIdx===0)return;
+    rememberPage();openPage(pageIdx-1);
+  });
   el('binderCancel').addEventListener('click',()=>{window.clearBinderScan();_bulkShowSection('modePicker');});
   el('binderContinue').addEventListener('click',()=>{
     if(busy || adjusting || cameraActive) return;
-    const pageFiles=pockets.filter(p=>p.selected).map(p=>p.file);
     if (multiPage() && pageIdx < pageQueue.length - 1) {
-      carried.push(...pageFiles);
+      rememberPage();
       pageNote = '';
       openPage(pageIdx + 1);
       return;
     }
-    const files=carried.concat(pageFiles); if(!files.length) return;
+    // Use page order even after revisiting earlier pages; replace saved choices
+    // rather than appending duplicates each time Next is pressed.
+    rememberPage();
+    const files=pageStates.flatMap(state=>state?.files || []); if(!files.length) return;
     lock(true);
     try {
       window._bulkMode='upload';
