@@ -250,8 +250,8 @@ for (const e of ['Network offline', 'Auth expired', 'Too many requests', 'Scan f
   ok('the failed-row renderer calls the hint mapper', /_bulkErrorHint\(\s*result\.error\s*\)/.test(body));
   ok('the hardcoded blanket line is gone from the renderer',
      !/>Try a clearer photo<\/div>/.test(body));
-  // The hint may share one escaped expression with the photo-rejected message.
-  ok('the hint is escaped before rendering', /_esc\([^)]*_bulkErrorHint\(/.test(body) && !/[^(]\$\{\s*_bulkErrorHint\(/.test(body));
+  // The hint is computed for the failure type and escaped at the HTML boundary.
+  ok('the hint is escaped before rendering', /const hint =[^\n]*_bulkErrorHint\(result\.error\)/.test(body) && /\$\{_esc\(hint\)\}/.test(body) && !/\$\{\s*hint\s*\}/.test(body));
 }
 
 /* ═══════════════════════════════════════════════════════════

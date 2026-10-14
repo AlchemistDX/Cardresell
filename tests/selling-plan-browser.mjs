@@ -12,7 +12,7 @@ const core=read('core'),ui=read('ui'),module=read('selling-plan');
 const extract=(s,names)=>parse(s,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)||n.type==='VariableDeclaration'&&n.declarations.some(d=>names.includes(d.id.name))).map(n=>s.slice(n.start,n.end)).join('\n');
 const fees=extract(core,['feeEbay','feeTCGPlayer','feeMercari','TCG_LEVELS']);
 const keyTrap=parse(core,{ecmaVersion:'latest'}).body.filter(n=>n.type==='ExpressionStatement'&&core.slice(n.start,n.end).startsWith("document.addEventListener('keydown'")&&core.slice(n.start,n.end).includes('_topOpenDialog')).map(n=>core.slice(n.start,n.end)).join('\n');
-const bulk=extract(ui,['_bulkUpdatePackTracker','_bulkDraftIsSelected','bulkDraftToggleRow','bulkDraftSelectAll','_bulkDraftSelectable','_bulkCopyUids','_bulkNewScanUid','_bulkResetBottomBarButtons','_bulkFinishQueue','bulkAddAllToCollection','_bulkDupKey','_bulkDetectDuplicates','_bulkClearDupBanner']);
+const bulk=extract(ui,['_bulkUpdatePackTracker','_bulkDraftIsSelected','bulkDraftToggleRow','bulkDraftSelectAll','_bulkDraftSelectable','_bulkCopyUids','_bulkNewScanUid','_bulkResetBottomBarButtons','_bulkFinishQueue','_bulkRefreshResultSummary','bulkAddAllToCollection','_bulkDupKey','_bulkDetectDuplicates','_bulkClearDupBanner']);
 let checks=0;const check=(v,m)=>{assert.ok(v,m);checks++};
 const c={window:{},Intl,Number,Set};vm.createContext(c);vm.runInContext(fees+'\n'+module,c);
 const api=c.window.CardResellSellingPlan;
