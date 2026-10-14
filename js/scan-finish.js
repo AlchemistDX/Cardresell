@@ -28,7 +28,7 @@ function _scanPriceVariantsFromFeed(feed) {
 function _scanFinishFields(row) {
   if (!row || (!row.finishOptions && !row.finishReviewRequired)) return {};
   return {finishReviewRequired:false,finishConfirmed:row.finishConfirmed===true,finishEstimated:row.finishEstimated===true,
-    finish:row.finish || '',finishKey:row.finishKey || '',
+    finish:row.finish || '',finishKey:row.finishKey || '',finishBasis:row.finishBasis || '',
     finishOptions:(row.finishOptions||[]).map(o=>({...o})),finishPriceDate:row.finishPriceDate||null};
 }
 function _scanApplyFinishReview(row, info) {
@@ -38,13 +38,21 @@ function _scanApplyFinishReview(row, info) {
   row.finishEstimated = true;
   row.finishOptions = _scanFinishOptions(info);
   row.finishPriceDate = new Date().toISOString();
-  // Keep the scan/catalogue's existing estimate. A finish correction is optional.
+  // Pokemon's generic foil tag is not evidence of a specific premium printing.
+  // Keep a usable automatic base estimate, even if the feed prefers reverse.
+  // A missing base price stays missing; never substitute a premium price.
   const options = row.finishOptions;
+  const base = row.cardType === 'pokemon'
+    ? options.find(o=>/^(normal|nonfoil|non_foil|usd)$/i.test(o.key)) : null;
   const hinted = row.foilHint === 'non_foil'
     ? options.find(o=>/^(normal|nonfoil|non_foil|usd)$/i.test(o.key))
     : row.foilHint === 'foil'
       ? options.find(o=>/^(holofoil|foil|usd_foil)$/i.test(o.key)) : null;
-  const guess = hinted || options.find(o=>o.key===info?.variant) || (options.length===1 ? options[0] : null);
+  // A sole catalogue finish is a useful default, including reverse holo.
+  // Keep it estimated until the seller chooses; no extra tap is required.
+  const guess = base || hinted || options.find(o=>o.key===info?.variant) || (options.length===1 ? options[0] : null);
+  row.finishBasis = base && options.length > 1 ? 'base_printing'
+    : row.cardType === 'pokemon' && options.length === 1 ? 'sole_available' : '';
   row.finishKey = guess?.key || '';
   row.finish = guess?.label || '';
   if (guess) {
@@ -60,6 +68,7 @@ function _scanChooseFinish(row, key, custom) {
   if (key && !option && !manual) return false;
   row.finishReviewRequired = false;
   row.finishEstimated = false;
+  row.finishBasis = '';
   row.finishConfirmed = !!(option || manual);
   row.finish = option?.label || manual;
   row.finishKey = option?.key || (manual ? '__other' : '');
@@ -206,4 +215,31 @@ function _scanConfirmLookupPrinting(key) {
   window._crBasis=null;window._ovAutoFilled=false;priceOverride.value='';
   _scanPrepareLookup(selectedCard);
   try{_persistLastLoadedCard(selectedCard);}catch(_){}
+}
+
+// Explain the recorded basis; internal "comp" is not proof of a completed sale.
+// Read-only: opening this disclosure never refreshes prices or spends credits.
+function _scanPriceBasisHtml(row) {
+  if (!row?.success) return '';
+  const priced = typeof row.marketPrice === 'number' && Number.isFinite(row.marketPrice) && row.marketPrice >= 0;
+  const seller = row.priceSource === 'seller';
+  const baseEstimate = row.finishBasis === 'base_printing' && !row.finishConfirmed;
+  const label = !priced ? 'Price details' : seller ? 'Your price' : row.priceSource === 'comp' ? (baseEstimate ? 'Base-printing estimate' : 'Market estimate') : 'Saved price';
+  const basis = !priced ? 'No usable price is available for this row. It is not valued at $0.'
+    : seller ? 'You entered this amount. It is not a verified sale or buyer offer.'
+    : row.priceSource === 'comp' ? 'This is a catalogue reference, not a verified sale of your card or a buyer offer.'
+    : 'The source of this saved amount is not recorded. Check it before relying on it.';
+  const finish = row.cardType === 'sports' ? 'Check the exact parallel or variation against your card.'
+    : row.finishConfirmed && row.finish ? 'Finish / printing: '+row.finish+' — chosen by you, not independently verified.'
+    : row.finishBasis === 'sole_available' && row.finish ? 'Finish / printing: '+row.finish+' — selected automatically because it is the only finish returned by the catalogue. You can change it in Finish / printing; no new scan is needed.'
+    : row.finishBasis === 'reverse_unconfirmed' ? 'Only a reverse-holo price is available. Choose that finish if it matches your card, or enter your own price. No new scan is needed.'
+    : baseEstimate ? 'Foil is not confirmed. The '+row.finish+' catalogue price is used as a base estimate. Choose Finish / printing to price a holo or reverse holo; no new scan is needed.'
+    : row.finish ? 'Finish / printing: '+row.finish+' — automatic guess; optional correction is available.'
+    : 'Finish / printing has not been confirmed. You can choose it if needed.';
+  const condition = row.conditionChosen === true && row.condition
+    ? 'Condition: '+row.condition+' — chosen by you. This does not certify condition-specific pricing.'
+    : 'Condition has not been chosen. Identification does not grade the card.';
+  return '<details class="scan-price-basis"><summary>'+label+'</summary><div>'
+    + [basis,finish,condition,priced ? 'Amount is per copy, before fees, shipping and purchase cost. Provider update time is not available here.' : 'Enter your own price or check the card details.'].map(t=>'<p>'+_esc(t)+'</p>').join('')
+    + '</div></details>';
 }

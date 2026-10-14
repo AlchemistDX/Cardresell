@@ -70,9 +70,21 @@ finishCtx._scanApplyFinishReview(onlyHolo,{variant:'holofoil',prices:{holofoil:1
 ok(onlyHolo.marketPrice===12 && onlyHolo.finishKey==='holofoil','holo-only catalogue retains price');
 const onlyReverse={cardType:'pokemon',foilHint:'foil'};
 finishCtx._scanApplyFinishReview(onlyReverse,{variant:'reverseHolofoil',prices:{reverseHolofoil:45.26}});
-ok(onlyReverse.marketPrice===null && !onlyReverse.finishKey,'reverse-only feed is not proof of reverse printing');
+ok(onlyReverse.marketPrice===45.26 && onlyReverse.finishKey==='reverseHolofoil','sole reverse finish is priced automatically');
+ok(onlyReverse.finish==='Reverse Holofoil' && onlyReverse.finishBasis==='sole_available','sole catalogue option records its default basis');
+ok(onlyReverse.finishEstimated && !onlyReverse.finishConfirmed && !onlyReverse.finishReviewRequired,'sole finish stays an estimate without requiring confirmation');
+ok(onlyReverse.priceSource==='comp' && !onlyReverse.unavailableReason,'usable sole price clears the missing-price explanation');
+ok(finishCtx._scanFinishFields(onlyReverse).finishBasis==='sole_available','sole finish basis survives saving');
 finishCtx._scanChooseFinish(onlyReverse,'reverseHolofoil');
-ok(onlyReverse.marketPrice===45.26 && onlyReverse.finishConfirmed,'reverse-only quote available after optional selection');
+ok(onlyReverse.marketPrice===45.26 && onlyReverse.finishConfirmed && !onlyReverse.finishBasis,'optional seller choice retains price and clears automatic basis');
+for (const foilHint of ['', 'non_foil', 'foil']) {
+  for (const [key,market] of [['reverseHolofoil',0],['reverseHolofoil',null],['ReverseHolofoil',2.25],['reverseholo',2.25]]) {
+    const row={cardType:'pokemon',foilHint};
+    finishCtx._scanApplyFinishReview(row,{variant:key,prices:{[key]:{market}}});
+    ok(row.marketPrice===market && row.finishKey===key && row.finish==='Reverse Holofoil','sole reverse finish retains zero/missing prices and aliases for '+foilHint);
+    ok(row.finishEstimated && !row.finishConfirmed && row.finishBasis==='sole_available','sole finish ignores inconclusive visual hint for '+foilHint);
+  }
+}
 const mtg={cardType:'mtg',foilHint:'foil'};
 finishCtx._scanApplyFinishReview(mtg,{variant:'usd',prices:{usd:1,usd_foil:5}});
 ok(mtg.marketPrice===5,'other game finish handling unchanged');

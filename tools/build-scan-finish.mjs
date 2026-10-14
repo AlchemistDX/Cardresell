@@ -1,0 +1,10 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+const root = new URL('../', import.meta.url);
+const source = await readFile(new URL('js/scan-finish.js', root));
+const path = `js/scan-finish.${createHash('sha256').update(source).digest('hex').slice(0,8)}.js`;
+const html = await readFile(new URL('index.html', root), 'utf8');
+if ([...html.matchAll(/js\/scan-finish\.[a-f0-9]{8}\.js/g)].length !== 1) throw Error('Expected one scan-finish asset');
+await writeFile(new URL(path, root), source);
+await writeFile(new URL('index.html', root), html.replace(/js\/scan-finish\.[a-f0-9]{8}\.js/g, path));
+console.log(path);
