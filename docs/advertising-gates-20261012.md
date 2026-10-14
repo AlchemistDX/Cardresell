@@ -1,0 +1,471 @@
+# Advertising readiness evidence — October 12, 2026
+
+This supplements and supersedes the pending evidence in the earlier October 12
+launch notes where stated below. It is not approval to buy ads or a percentage
+readiness estimate. Production is now PR #44, merge
+`f392f9bf2d3e294720fc09b98e3db68470db3d73`, released October 12.
+Public HTML, grading JS/CSS and core JS returned 200 and byte-matched the
+tested version. The initial deployment error/fatal log check found no records;
+this was a short observation window, not a long-term reliability claim.
+
+## Current control status
+
+Production Daily Backup is now ON with Last 1 day retention, after the owner
+approved the disclosed $0.25 per GB-month storage rate. The saved account page
+shows the switch enabled and the retention value. No Prod Pack was purchased.
+The first scheduled backup has not appeared yet; the two existing completed
+manual snapshots remain visible. OpenAI's existing $100 organization monthly
+limit is enforced. Earlier OFF / awaiting-approval entries below are history,
+superseded by these verified settings and the execution notes at the end.
+
+The owner corrected the carried-forward status at 15:12 Eastern: all three
+providers had already answered with permission in earlier conversations, and
+Ximilar sends low-credit warnings. Treat TCG Price Lookup, PriceCharting and
+Ximilar permission outreach as resolved for the existing CardResell use. Do not
+send the duplicate requests prepared during this continuation.
+
+Earlier conversation retrieval also recovered a TCG Price Lookup dashboard
+commercial-use license confirmation. The original replies and their detailed
+conditions were not recovered in this pass; record the owner's confirmation
+without inventing contract terms or warning thresholds. Low-credit warnings
+are an established operating control, not evidence of an automatic spending cap.
+The historical entries below that call permissions unresolved are superseded.
+
+Remaining preparation: delivered-unit cost reconciliation, first completed
+scheduled backup evidence, and a separately approved advertising budget.
+
+Continuation check: production Backups still shows Daily Backup enabled with
+Last 1 day retention and only the two completed manual snapshots. The first
+scheduled snapshot is still pending observation; no setting was changed.
+The active launch packet now includes canonical free/welcome-credit exposure
+and all current pack prices across two offline cost scenarios. These scenarios
+are useful for budgeting, but do not replace missing provider invoice allocation.
+
+## Payment fulfillment: verified for current checkout history
+
+Read-only Stripe inspection paginated the complete-session query: 31 sessions,
+`has_more: false`. Four used the launch-v2 checkout system. The remaining 27
+legacy sessions were outside this reconciliation's scope.
+
+| Current-system purchase | Gross USD | Durable credit grant |
+| --- | ---: | --- |
+| Starter initial subscription invoice | $4.99 | 25 ID, 5 Grade |
+| 25 ID pack, Free pricing | $2.99 | 25 ID |
+| 10 Grade pack, Business pricing | $4.49 | 10 Grade |
+| 25 ID pack, Business pricing | $2.24 | 25 ID |
+
+All four sessions are complete/paid; their PaymentIntents succeeded for the
+matching amounts. The subscription invoice is paid and has one paid invoice
+payment, whose PaymentIntent also succeeded. Expanded latest charges report
+zero refunded amount and no dispute at inspection time. Gross total: $14.71.
+
+Each payment was matched to its immutable checkout intent, owner, order binding,
+and saved grant receipt in production. All four original order hashes and
+grant-request bindings validate. All eight order/receipt records have Redis TTL
+`-1` (persistent). The historical Business ID pack repair is included; it was
+not replayed or repaired again. No grants, balances or payments were changed.
+
+These are purchases across two accounts in the owner/testing history, not proof
+of acquired customers, net revenue, profit or all-time fulfillment. Refund and
+dispute state is point-in-time evidence, not a guarantee about future reversals.
+No new purchase was made. Private customer/payment identifiers are deliberately
+not copied into this document.
+
+## Recovery: isolated restore and scoped invariants verified
+
+Production database: `upstash-kv-bistre-arrow`. Snapshot
+`production-launch-check-20261012` is Completed, 3.03 MB. The isolated Free-tier
+target `cardresell-recovery-drill-20261012` has a completed restore from that
+snapshot. Production was not overwritten or reconnected to the target.
+
+The eight original payment/order strings in the restored target are byte-for-byte
+identical to production. Read-only checks on the restored target additionally
+found:
+
+- Seven included-credit histories referencing eight allocation lots: all
+  referenced lots exist, owners match, no duplicate lot references within a
+  history, and ID/Grade usage remains between zero and the granted amount.
+- 42 draft records, including 32 deleted drafts: all decode and their draft IDs
+  match their authoritative key suffixes.
+- 11 saved user-data records containing two portfolio cards, zero flips and
+  68 deletion markers: portfolio/flip containers decode with the expected
+  structure.
+- Across the checked history, allocation, draft and user-data keys: 36 are
+  persistent and 32 retain an expiry. No structural errors in these checks.
+
+An inspection-only Lua decode/re-encode omitted a null field and initially made
+one order hash appear different. Reading the original stored strings resolved
+this: all original hashes validate; no stored corruption was found.
+
+Scope limits: this does not establish full application failover, every secondary
+draft index, every deletion-marker semantic, or a measured recovery-time target.
+Do not report key counts as permanently fixed; expiring records change normally.
+Keep the restored target disconnected from production applications.
+
+**Scheduled protection remains open:** production's Daily Backup switch is OFF.
+Automatic approval review rejected enabling that persistent setting without
+explicit approval. No retry or policy change was made. Confirm the available
+retention and any added charge, then obtain approval for the concrete setting.
+A successful manual snapshot/restore is not a recurring backup policy. Never
+restore over production as a drill.
+
+## Attribution: checkout labeling verified; paid campaign conversion pending
+
+An existing live QA Checkout Session is open/unpaid, $2.99 USD, with
+`acquisition_campaign=qa` and
+`acquisition_model=client_last_non_direct_30d_v1`. This confirms deployed checkout
+metadata without another charge. The latest-session query was limited to 100 and
+had more pages; it was only used to locate this QA session.
+
+The four fulfilled payments above predate these labels and remain `unknown`.
+Never relabel them direct or infer their campaign. Exclude QA from ad reporting.
+For the first genuine campaign purchase, join the session's intent to the saved
+order/grant, then check its settlement and reversals exactly as above. An unpaid
+checkout, browser success event or aggregate event count is not a conversion.
+Initial-purchase attribution does not automatically attribute renewal revenue.
+
+## Provider entitlement and cost: still blocking paid promotion
+
+Authenticated TCG Price Lookup billing showed Pro at $49.99/month, a paid
+September 28 bill and next billing October 28; the dashboard showed 10,000/day.
+This replaces the earlier unknown-plan status. It does not settle commercial
+permissions or actual marginal usage costs.
+
+The provider's FAQ allows commercial resale applications on paid plans and
+describes price caching of 5–60 minutes. Its terms (dated February 1, 2026)
+restrict competing services and resale/redistribution without explicit written
+authorization. This is a permissions ambiguity to resolve with the provider,
+not a conclusion that CardResell is in violation.
+
+Repository defaults include a six-hour fresh cache and up to 24-hour stale
+fallback in `_tplBudget.js`; another price route uses a 30-minute cache. Verify
+effective production settings and obtain explicit permission for the actual
+display/cache behavior before declaring this gate passed. Attribution already
+exists in the site's footer; attribution alone does not establish rights.
+
+Questions prepared for the provider, not sent:
+
+1. Confirm this account's current plan, daily reset timezone, hard/soft limit,
+   overage pricing and whether other applications share its allowance.
+2. Confirm permission for CardResell's paid consumer app to display card values,
+   compare estimated selling proceeds, and use data in user listing drafts.
+3. Confirm permitted cache durations, stale fallback, derivative calculations,
+   customer exports and required attribution; clarify how the terms and FAQ
+   apply to this use. We are not requesting permission to resell raw API access.
+4. Provide current commercial/API terms and any partnership option in writing.
+
+Production's observed TPL allowance remains 400 requests per aligned hour and
+60 per IP, enforcement enabled. No limit was changed. The 9,600 reservations
+possible across 24 aligned hours are neither actual usage nor a dollar cap.
+OpenAI/Ximilar billed usage, retries and overage behavior still need reconciliation
+before calculating contribution margin or selecting a customer-acquisition budget.
+Existing provider log summaries explicitly report unknown dollars as unknown.
+
+## Staged advertising release
+
+| Gate | Status | Next concrete evidence |
+| --- | --- | --- |
+| Phone and core workflow | Owner accepted; PR #44 live | Repeat only when a relevant regression appears |
+| Current-system payments | Four payments and their charge balance fees reconciled | Continue monitoring new payments and reversals; separate account Billing fee allocation |
+| Recovery | Isolated restore passes scoped checks; one-day daily backup enabled at approved $0.25/GB-month | First completed scheduled backup; timed application recovery exercise |
+| Provider permissions | Owner confirms prior replies granting permission for existing use | Complete; no duplicate outreach |
+| Unit economics | Incomplete | Actual billed scan/grade/retry costs and bounded overage exposure |
+| Acquisition tracking | QA checkout label confirmed | First real tagged purchase joined to durable fulfillment |
+| Paid advertising | Hold broad spend | Complete cost/backup checks, then owner-approved small capped pilot |
+
+Once those gates clear, begin with one channel and a distinct supported campaign
+label, agree a total spending cap, and review fulfilled purchases, support issues,
+refunds and contribution margin before expanding. Do not invent a CAC target
+from the $14.71 testing history. Pause the pilot for lost credits, duplicate
+charges, cross-account data, inability to restore, or uncontrolled provider spend.
+
+Supported message direction for review: identify cards, organize a collection,
+and compare estimated selling proceeds. State that identification and prices
+require review; availability and actual payouts vary. Do not advertise guaranteed
+grades/profit, automatic marketplace publishing, reliable automatic eBay sold
+records, or the best price across every marketplace. Bulk scanning and draft
+creation do not imply those capabilities. No ads or company emails were sent.
+
+Sources checked October 12, 2026:
+- https://tcgpricelookup.com/faq
+- https://tcgpricelookup.com/terms
+- https://upstash.com/docs/redis/features/backup
+- Authenticated Stripe, TCG Price Lookup billing, Vercel and Upstash account UI.
+
+## Advertising preparation continuation — October 12, after PR #44
+
+The live production release includes automatic multi-grader fee estimates and
+primary bulk listing-draft access. The acquisition suite passed again: 23/23.
+The account currently available in the Upstash browser shows only a Personal
+workspace with no databases. This does not overturn the earlier restore evidence
+or prove the production database is absent; it blocks fresh account-level
+verification of retention, pricing and the Daily Backup setting. No backup
+setting, provider subscription or advertising account was changed.
+
+Current official backup documentation describes daily retention choices of one
+or three days; availability and incremental price for the production resource
+still require the correct account. Prior automatic approval review rejected
+enabling Daily Backup without explicit approval. Do not retry that change under
+the broad preparation request. Prepare the exact resource, retention and cost
+for approval once access is restored.
+
+PriceCharting's indexed API documentation states internal-use licensing and
+requires a commercial agreement for sharing prices. No written agreement is
+present in this evidence. Direct refetch was blocked with HTTP 403, so this
+continuation does not assert newly inspected account terms. Add PriceCharting
+alongside TCG Price Lookup to the written-permissions gate.
+
+See advertising-launch-packet-20261012.md for copy, channel links, launch
+sequence, cost reconciliation fields and drafted provider requests.
+
+## Account evidence continuation — October 12, approximately 13:46 ET
+
+The account-access blocker is resolved. Use Vercel project Connections → Storage
+→ upstash-kv-bistre-arrow → Open in Upstash. This opens the Vercel-integrated
+Upstash account, distinct from the empty Personal workspace. The resource is
+connected to CardResell Production; aureolin-door is Preview/Development.
+
+Production Backups shows Daily Backup OFF and the completed 3.03 MB
+production-launch-check-20261012 backup, plus the earlier October 2 snapshot.
+The retention menu offers Last 1 day; Last 3 days is marked PROD. Upstash's
+official Prod Pack article says all plans support one-day daily retention and
+three-day retention requires the $200/month add-on. Propose enabling the
+existing plan's one-day daily backup only; no upgrade or restore. No setting
+was changed because the earlier approval rejection requires explicit permission.
+Verify the first completed scheduled backup after enabling before closing this gate.
+Source: https://upstash.com/blog/upstash-prod-pack
+
+Resource cost observations differ: Vercel's resource page displayed $0.30 for
+September 30–October 31; the provider dashboard displayed $0.38 with 188K
+commands. These are dashboard usage estimates with potentially different
+refresh times, not reconciled invoices. Do not combine or present them as
+separate charges.
+
+### Ximilar: authenticated allowance and invoices established
+
+Owner-selected account exposes Business 100K. Current monthly allowance:
+100,000 credits, 4,020 used, 95,980 remaining, renewal October 16. Unused plan
+credits do not roll over according to the account page. The invoice table
+shows August 16 and September 16 monthly invoices of $64 each, both Paid;
+Credit Packs and Manual Invoices each show zero entries.
+
+Statistics for October 1–12 show 3,880 credits, 388 requests and one active
+service: Collectibles Recognition. Its operation filter lists Identify a TCG
+card and Identify a sports card. The calendar-month statistics and current
+subscription allowance cover different periods; 3,880 versus 4,020 is not
+evidence of missing charges. The visible chart did not establish complete
+per-operation success/failure attribution or overage behavior.
+
+At full use, $64 / 100,000 = $0.00064 per included credit; the observed aggregate
+ratio is 10 credits per request, equivalent to $0.0064 at full plan utilization.
+This is capacity arithmetic, not measured marginal cost or cost per successful
+CardResell scan. The full $64 subscription is payable even with unused credits;
+failed attempts, binder processing, refunds and application delivery still need
+reconciliation. Do not extrapolate successful-user economics from these ratios.
+
+### OpenAI: key-scoped usage and missing hard enforcement established
+
+Owner-selected account: Personal organization / Default project. Usage key
+filter lists active Cardresell and a deleted Cardresell key. With active
+Cardresell selected and the dashboard date query October 1–12, it reports
+$1.05, 59 requests and 375,820 tokens. These are provider dashboard observations,
+not a settled invoice or count of delivered grades. UTC/calendar cutoff and
+reporting lag must be reconciled before comparing to application events.
+
+The model usage page reports several models, so the aggregate must not be
+labeled the cost of a single grading model. Requests may include testing and
+retries; the key label alone does not prove every request was a live customer.
+
+Organization Limits explicitly says “Limit not enforced” for the $100 monthly
+limit, with alerts at $80 and $100. The edit dialog exposes an OFF “Enforce a
+hard limit” switch. It was inspected and cancelled without saving. Proposed
+control: enforce the existing $100 organization monthly limit, without raising
+it. Reaching the ceiling may stop all API activity in this organization,
+including CardResell AI grading and other projects; obtain explicit owner
+approval before applying. No secrets or credential changes are needed.
+
+### Remaining gate status
+
+Access and plan evidence advanced; do not mark overall economics complete.
+Still needed: cost-to-delivery reconciliation, Ximilar exhaustion/overage
+behavior, other provider license expenses, recurring-backup approval and
+completion, OpenAI hard-limit decision, and written commercial permissions.
+No advertisements, provider messages, purchases or settings changes occurred.
+
+## Approved control execution — October 12, after 13:57 ET
+
+The owner approved one-day daily backups without a paid upgrade and enforcement
+of the existing $100 OpenAI organization limit.
+
+OpenAI: enabled Enforce a hard limit, retained $100, saved, and verified the
+Limits page now states Limit enforced. The provider warns new requests start
+failing with 429 at the limit and enforcement is not instantaneous, so final
+usage can exceed the threshold slightly. The $80/$100 alert settings were not
+changed. This limits the organization, not just CardResell, and is not a
+guarantee of an exact $100 final bill.
+
+Upstash: the enable confirmation disclosed a recurring backup storage rate of
+$0.25 per GB-month, keeping only the latest daily backup. This price was absent
+from the earlier retention menu. Cancelled the confirmation and verified Daily
+Backup is OFF; no charge or backup setting was accepted. New specific cost
+approval is required. At a 3.03 MB snapshot, the simple storage-rate estimate
+is about $0.00076/month before any minimum, rounding or size growth. This is
+not a billing quote or spending cap. No $200/month Prod Pack upgrade is proposed.
+
+The scheduled-backup gate remains open until the disclosed rate is approved,
+the setting is enabled and a scheduled backup completes. Provider commercial
+permissions and full delivered-unit economics remain open.
+
+## Backup rate approved and daily protection enabled — October 12
+
+The owner approved the newly disclosed $0.25 per GB-month rate. Confirmed
+Enable Daily Backup on production upstash-kv-bistre-arrow. After saving, the
+Backups page shows switch ON and Daily Backup: Last 1 day. The confirmation
+states only the latest daily backup is retained, overwriting the previous day.
+No plan upgrade, additional retention, restore or production reconnection was
+performed.
+
+The table still contains the two existing completed manual backups and no
+new scheduled entry. Enabling the setting is complete; verification of the
+first scheduled backup remains outstanding. This does not establish full
+application recovery or change the scope of the earlier isolated restore.
+No ads or provider permission messages were sent.
+
+## Cost reconciliation continuation — October 12 afternoon
+
+Reopened production through Vercel's Upstash integration after the browser's
+SSO session expired. Daily Backup remains ON with Last 1 day retention. The
+loaded table still shows only the two manual snapshots; no first scheduled
+backup completion is verified yet.
+
+### Ximilar operation export and prepaid packs
+
+Downloaded the account's operation JSON from Statistics, with both TCG and
+sports selected. Its explicit coverage is October 1 at 04:00 UTC through
+October 12 at 17:00 UTC (midnight October 1 through 1 p.m. October 12 Eastern),
+in hourly buckets. Do not describe it as the entire October 12 day.
+
+| Operation | Provider requests | Provider credits |
+| --- | ---: | ---: |
+| Identify a TCG card | 381 | 3,810 |
+| Identify a sports card | 7 | 70 |
+| Total | 388 | 3,880 |
+
+The series totals match the exported totals. These are account-level requests,
+not delivered customer scans; the export has no production/test or refund join.
+The Credit Packs page says there are no active packs and explicitly describes
+one-time, prepaid, non-expiring purchases used after the monthly allowance.
+Its displayed offer is $11 for 10,000 credits. No pack was bought. The inspected
+page does not establish the account's exact behavior when all credits run out,
+nor a contractual guarantee against automatic charges; ask support to confirm.
+
+Official operation pricing confirms 10 credits for TCG ID, 10 for sports ID,
+and 100 for Grade a card. These are provider operations, not the customer-facing
+physical grading-company submission fees. Public Business 100K pricing is $69;
+the owner's two paid invoices are $64 each. The planning tool now uses the
+observed account price and the observed 10K-pack offer, with source/date labels.
+Stripe fee and OpenAI unit-cost inputs remain explicitly historical/unreconciled
+assumptions. No customer price or allowance was changed.
+
+Sources: https://www.ximilar.com/pricing/#operations and authenticated Statistics,
+Credit Packs and previously verified Invoices pages. The FAQ describes monthly
+expiry, usage notices and purchased-pack fallback:
+https://www.ximilar.com/faq/technology-api/
+
+### Current-release provider observations
+
+A project-wide October 1–12 query timed out. Scoped the follow-up to production
+deployment dpl_H1gdQphFCj5yknFzRihx8BVRpVR3 and October 12, with an 18:53:02 UTC
+cutoff. The first result hit the 100-row limit; retrieved the earlier interval
+ending at its oldest timestamp. The second result had 28 records. The existing
+usage-report tool accepted 128 attempts, with zero duplicates or ignored rows.
+Observed event times span 17:27:23.309–18:10:10.664 UTC.
+
+| Provider operation / mode | Attempts | Wrapper successes | Wrapper failures |
+| --- | ---: | ---: | ---: |
+| Ximilar TCG / identify | 126 | 122 | 4 low-confidence results |
+| Ximilar TCG / grade | 1 | 1 | 0 |
+| OpenAI chat completion / grade | 1 | 1 | 0 |
+
+OpenAI reported 8,292 prompt tokens, zero cached prompt tokens and 485 completion
+tokens, including 53 reasoning tokens: 8,777 total for this one attempt. Dollar
+costs remain null. Ximilar units are not reported by the runtime observations.
+These current-release events occur AFTER the Ximilar export's 17:00 UTC cutoff;
+they cannot be reconciled by comparing their totals. This is not a complete
+monthly sample, recognition accuracy, delivered-scan count or margin proof.
+No synthetic paid scan was generated to obtain this evidence.
+
+### Vercel billing coverage mismatch
+
+The October 1–12 billing response exceeded the connector's size limit. Two
+one-day reads succeeded, but their charge periods differ from requested UTC
+windows: October 11–12 returned October 10 07:00–October 11 07:00 UTC; October
+10–11 returned October 9 07:00–October 10 07:00 UTC. Each summary covers 748
+records but only 100 sampled records and 50 of 68 service groups are exposed.
+These are team-level summaries, not proven CardResell production allocations.
+Do not turn the samples into project totals or combine them with provider
+invoices to claim a reconciled cost. Full export and billing-period alignment
+remain necessary; no missing amount is treated as zero.
+
+### Commercial permission source refreshed
+
+PriceCharting's API documentation fetched successfully on this pass, superseding
+the earlier refetch limitation. Its Usage & Attribution section explicitly
+requires a commercial license and written permission for apps used by others:
+https://www.pricecharting.com/api-documentation
+TCG Price Lookup's contact page explicitly handles commercial-use questions:
+https://tcgpricelookup.com/contact
+The existing permission drafts remain unsent. A Ximilar exhaustion/failed-call
+billing draft is now included in the launch packet. Written answers remain a
+launch dependency; this evidence does not assume permission to contact anyone.
+
+## Owner continuity correction — October 12, 15:12 Eastern
+
+Provider permission answers were already received several conversations ago.
+The earlier request to contact TCG Price Lookup, PriceCharting and Ximilar again
+was based on incomplete carried-forward context. The owner explicitly corrected
+that omission. Permission outreach is complete; the redundant draft messages
+have been removed from the active launch packet. Ximilar low-credit warnings
+are confirmed by the owner and must remain in operating notes. No new outreach
+was sent. This correction does not alter customer prices, provider settings or
+assert unprovided details about hard-stop behavior or exact contract scope.
+
+## Actual Stripe fee reconciliation — October 12, after 15:22 Eastern
+
+Read-only inspection of the CardResell live Stripe account listed 31 completed
+Checkout Sessions with has_more false. Four carry membership_version launch-v2,
+matching the earlier fulfilled-purchase set; no new completed current-system
+purchase was found. Three reference PaymentIntents directly. The subscription
+invoice's paid invoice-payment list contains one entry, has_more false, which
+supplies its PaymentIntent.
+
+Expanded each PaymentIntent's latest charge and balance transaction. Confirmed
+the balance entry's source matches that charge, amount/currency matches the
+payment, gross minus fee equals net, fee-detail amounts sum to the fee, and no
+balance entry is counted twice. All payments succeeded, charges are paid, no
+refund or dispute is present, and all four balance entries are available.
+The four sessions each have zero tax. These checks are point-in-time only.
+
+| Purchase | Gross USD | Actual processing fee | Net to Stripe balance |
+| --- | ---: | ---: | ---: |
+| Starter initial subscription | $4.99 | $0.44 | $4.55 |
+| 25 ID pack, Free price | $2.99 | $0.39 | $2.60 |
+| 10 Grade pack, Business price | $4.49 | $0.43 | $4.06 |
+| 25 ID pack, Business price | $2.24 | $0.36 | $1.88 |
+| Total | $14.71 | $1.62 | $13.09 |
+
+All charge fee details say Stripe processing fees. A separate stripe_fee query
+returned four account fee entries with has_more false: an October 5 Billing
+usage fee of $0.03, created October 6 UTC, and older July/August/September fees.
+Do not deduct the older fees from the four-purchase sample. The October fee has
+no direct invoice reference in the returned data; record it as a separate
+account expense rather than claim an exact per-purchase join. A balance marked
+available does not establish a completed bank payout.
+
+The planner's 2.9% + $0.30 processing assumption rounds to the observed fees
+for these four amounts. This small sample does not prove the rate for every
+payment method, currency or future transaction. Its future subscription Billing
+rate remains a planning input, distinct from the observed $0.03 account fee.
+These owner/testing purchases remain excluded from acquired-customer metrics.
+Full provider-cost allocation and future credit obligations are not reconciled
+by this payment check. No charges, refunds, payouts or account settings changed.
