@@ -349,6 +349,35 @@ const CTXS = [
   { name: 'everything at once',    shipCharge: 5.95, shipCost: 5.10, ebayStore: 'basic', ebayPromo: 4, ebayTopRated: 'yes', trsEligible: true },
   { name: 'top rated status only', shipCharge: 0, shipCost: 0, ebayStore: 'none',  ebayPromo: 0, ebayTopRated: 'yes', trsEligible: false },
 ];
+CTXS.push(
+  { name: '8% buyer tax', ebayBuyerTaxRate: 8 },
+  { name: '7.5% tax + store + promo + shipping + TRS', ebayBuyerTaxRate: 7.5, ebayStore: 'basic', ebayPromo: 5, shipCharge: 5, shipCost: 4, trsEligible: true }
+);
+const taxFees = feeEbay(100, 5, 'none', 5, false, 8);
+check('8% assumed tax adds $8.40 to the fee base, never to proceeds',
+  Math.abs(taxFees.buyerTaxAmount - 8.4) < 1e-9 && Math.abs(taxFees.feeBase - 113.4) < 1e-9
+  && Math.abs(netEbayForPrice(100, { shipCharge: 5, shipCost: 4, ebayPromo: 5, ebayBuyerTaxRate: 8 }) - 79.9045) < 1e-9);
+check('tax applies to final value AND promoted fees',
+  Math.abs(taxFees[0].a - 15.0255) < 1e-9 && Math.abs(taxFees[2].a - 5.67) < 1e-9);
+check('tax can cross the $10 per-order boundary',
+  feeEbay(9.25, 0, 'none', 0, false, 8)[1].a === .30
+  && feeEbay(9.26, 0, 'none', 0, false, 8)[1].a === .40);
+check('tax-inclusive Basic Store tier arithmetic',
+  Math.abs(feeEbay(2400, 0, 'basic', 0, false, 8)[0].a - 310.912) < 1e-9);
+check('tax-inclusive no-store tier arithmetic and TRS scope',
+  Math.abs(feeEbay(7000, 0, 'none', 5, true, 8)[0].a - 895.644) < 1e-9
+  && feeEbay(7000, 0, 'none', 5, true, 8)[1].a === .40
+  && feeEbay(7000, 0, 'none', 5, true, 8)[2].a === 378);
+check('explicit zero and unknown retain different provenance with identical amounts',
+  feeEbay(100, 0, 'none', 0, false, 0).buyerTaxRate === 0
+  && feeEbay(100, 0, 'none', 0, false, '').buyerTaxRate === null
+  && netEbayForPrice(100, { ebayBuyerTaxRate: 0 }) === netEbayForPrice(100, {}));
+for (const invalid of [-1, 101, NaN, Infinity, 'bad', false, [], {}]) {
+  check('invalid tax cannot produce a confident target price: ' + String(invalid),
+    listPriceForTargetNet(10, { ebayBuyerTaxRate: invalid }).reason === 'BAD_CONTEXT');
+}
+check('an unrepresentably large shipping boundary cannot loop during inversion',
+  listPriceForTargetNet(1, {shipCharge:1e308,shipCost:1e308}).reason === 'UNREACHABLE_NET');
 const TARGETS = [1, 4.99, 8, 9.5, 10, 10.5, 12, 25, 60, 99.99, 250, 900, 2499, 2501, 5000, 7499, 7501, 12000];
 
 // ── Ground truth. The reviewer's assertion is the right one: the answer must
@@ -397,7 +426,7 @@ check('🔴 returned price is the LOWEST cent price that clears — verified aga
 // asserted "clears the target within $0.05", never "is the cheapest such
 // price". Dense cent-level optimality across the step is the real guard.
 const denseBad = [];
-for (const ctx of [CTXS[0], CTXS[4]]) {
+for (const ctx of [CTXS[0], CTXS[4], CTXS[7], CTXS[8]]) {
   for (let cents = 100; cents <= 1400; cents += 1) {
     const t = cents / 100;
     const r = listPriceForTargetNet(t, ctx);
@@ -753,18 +782,12 @@ function feeOutputHash() {
         for (const price of [0.01, 4.99, 9.99, 10.00, 10.01, 25, 99.99, 2499, 2500,
                              2501, 7499, 7500, 7501, 12000]) {
           for (const shipCharge of [0, 4.99]) {
-            // CHANGED 2026-09-07. This used to pass `topRated` -- the string
-            // 'no'/'yes' -- straight into feeEbay's last argument. That
-            // argument is now a RESOLVED boolean, so the string would have
-            // silently landed as not-eligible and quietly re-frozen this hash
-            // over undiscounted output. The row label stays 'no'/'yes' so the
-            // frozen hash is comparable across the change: if it still
-            // matches, the fee ARITHMETIC is byte-identical and only the
-            // eligibility plumbing moved, which is exactly the claim.
-            const fees = feeEbay(price, shipCharge, store, promo, topRated === 'yes');
-            const total = fees.reduce((s, f) => s + Number(f.a || 0), 0);
-            rows.push([store, topRated, promo, price, shipCharge,
-                       total.toFixed(6), fees.feeBase, fees.length].join('|'));
+            for (const taxRate of [null, 0, 8]) {
+              const fees = feeEbay(price, shipCharge, store, promo, topRated === 'yes', taxRate);
+              const total = fees.reduce((s, f) => s + Number(f.a || 0), 0);
+              rows.push([store, topRated, promo, price, shipCharge, taxRate,
+                         total.toFixed(6), fees.feeBase, fees.buyerTaxAmount, fees.length].join('|'));
+            }
           }
         }
       }
@@ -774,7 +797,7 @@ function feeOutputHash() {
 }
 const currentFeeHash = feeOutputHash();
 FEE_FIXTURE.hash = 'PLACEHOLDER';
-check(`fee fixture grid is non-trivial (${896} rows hashed)`,
+check(`fee fixture covers 1,344 default, explicit-zero and 8% tax cases`,
       currentFeeHash.length === 32);
 check('FEE_MODEL_REVISION is a positive integer',
       Number.isInteger(FEE_MODEL_REVISION) && FEE_MODEL_REVISION >= 1);

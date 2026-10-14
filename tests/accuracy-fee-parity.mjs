@@ -194,7 +194,7 @@ T.check('tax: the hardcoded `items.taxNote = true` no longer exists as a stateme
   'feeEbay still sets taxNote directly -- two implementations of one venue fact');
 
 T.check('tax: the render reads the disclosure from venueTaxNote(pid)',
-  /taxNote:\s*venueTaxNote\(p\.pid\)/.test(bundle),
+  /taxNote:\s*venueTaxNote\(p\.pid, p\.feeItems\)/.test(bundle),
   'the render no longer sources taxNote from the shared helper');
 
 /* The second surface. The D3 review screen builds its own fee table and used to
@@ -206,8 +206,8 @@ T.check('tax: the render reads the disclosure from venueTaxNote(pid)',
    render site specifically, because the tile-render assertion above cannot see
    this one. */
 T.check('tax: the review screen also gates its tax row on venueTaxNote(pid)',
-  /function _reviewTaxRow\(pid\)\s*\{[\s\S]{0,200}?venueTaxNote\(pid\)/.test(bundle)
-  && /\$\{_reviewTaxRow\(pid\)\}/.test(bundle),
+  /function _reviewTaxRow\(pid, feeItems\)\s*\{[\s\S]{0,200}?venueTaxNote\(pid, feeItems\)/.test(bundle)
+  && /\$\{_reviewTaxRow\(pid, c\.items\)\}/.test(bundle),
   'the review screen emits the sales-tax row without consulting the shared helper');
 
 T.check('tax: no unconditional _reviewBasisRow tax row survives',
@@ -218,7 +218,7 @@ T.check('tax: no unconditional _reviewBasisRow tax row survives',
    sandbox and ask it about every venue. */
 let taxNoteFor = null;
 try {
-  const helperSrc = bundle.slice(bundle.indexOf('function venueTaxNote(pid)'));
+  const helperSrc = bundle.slice(bundle.indexOf('function venueTaxNote('));
   const helper = helperSrc.slice(0, helperSrc.indexOf('\n}') + 2);
   /* FEE_DISCLOSURE is now a dependency of the helper, because the WORDING moved
      in with the decision. Sliced from the bundle rather than stubbed -- a stub
@@ -234,6 +234,12 @@ T.check('tax: PLATFORMS + venueTaxNote evaluate, so the check below is not vacuo
   'could not evaluate the shipped table and helper together');
 
 if (typeof taxNoteFor === 'function') {
+  const taxItems = {buyerTaxRate:8,buyerTaxAmount:8.4};
+  T.check('tax: a stated eBay assumption supplies an amount, without changing another venue',
+    taxNoteFor('ebay',taxItems).state === 'assumed'
+    && taxNoteFor('ebay',taxItems).amount === 8.4
+    && taxNoteFor('whatnot',taxItems).state === 'included');
+
   const wrong = [...taxFields].filter(([k, v]) => !!taxNoteFor(k) !== (v.on !== 'false'));
   T.check('tax: disclosure renders if and only if taxOn !== false, for all 15 venues',
     taxFields.size > 0 && wrong.length === 0,

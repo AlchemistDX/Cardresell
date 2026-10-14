@@ -308,6 +308,15 @@ T.check('copy: an uncosted panel claims no grading cost in the caption',
     a._crSellerProfile().ebayPromo === 5, JSON.stringify(a._crSellerProfile()));
 }
 
+// Buyer tax reaches BOTH raw and graded comparisons without becoming income.
+{
+  const { api: a, win: w } = mkApi({ ebayBuyerTaxRate: '8' });
+  render(100, 1000, { api: a, win: w, cost: String(TEST_COST) });
+  const got = w._lastGradeLadder.grades.find(g => g.key === 'psa_10').upsideNet;
+  T.check('8% tax: grade upside includes the extra $9.54 fee difference',
+    Math.abs(got - (867.10 - 86.35 - TEST_COST - 9.54)) < 0.005, String(got));
+}
+
 // Neither a GLOBAL Top Rated answer nor an UNRELATED listing confirmation may
 // discount this ladder. Top Rated Plus is a per-listing benefit; there is no
 // listing here at all, so nothing could carry a per-listing confirmation.
