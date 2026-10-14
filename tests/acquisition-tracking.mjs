@@ -16,6 +16,13 @@ function browser({query='',ref='',local=memory(),session=memory(),beacon=true}={
 }
 async function event(b){b.window.trackEvent('membership_checkout_attempt',{plan:'starter',campaign:'spoofed'});return JSON.parse(await b.sent.at(-1).blob.text());}
 let passed=0;async function test(n,fn){await fn();passed++;console.log('PASS '+n);}
+await test('email outreach survives an untagged sign-in return without recipient data',async()=>{
+ const local=memory();const b=browser({query:'?cr_campaign=email_outreach&recipient=private@example.com',local});
+ assert.equal((await event(b)).props.campaign,'email_outreach');
+ const returned=browser({local,ref:'https://www.cardresell.org/signin'});
+ assert.equal((await event(returned)).props.campaign,'email_outreach');
+ assert.ok(!JSON.stringify([...local.values.values()]).includes('private@example.com'));
+});
 for(const [query,channel] of [['','direct'],['?cr_campaign=shop_qr','shop_qr'],['?utm_source=youtube&utm_campaign=launch','youtube'],['?utm_source=discord','discord'],['?utm_source=google&utm_medium=cpc','google_ads'],['?utm_source=google&utm_medium=organic','organic_search'],['?utm_source=instagram&utm_medium=paid_social','meta_ads'],['?utm_source=facebook&utm_medium=social','referral'],['?utm_source=__proto__','other_campaign'],['?cr_campaign=private@example.com','other_campaign']])
  await test('bounded attribution '+query,async()=>{const b=browser({query});assert.equal((await event(b)).props.campaign,channel);assert.equal(b.window.getAcquisitionCampaign(),channel);});
 await test('sign-in/payment returns retain channel without extending its lifetime',async()=>{
@@ -66,6 +73,14 @@ globalThis.fetch=async(url,options)=>{
 };
 async function request(method,body,query={}){const res={setHeader(){},status(c){this.code=c;return this;},json(b){this.body=b;return this;}};await handler({method,body,query},res);return res;}
 await test('server persists allowlisted campaign and reports recorded',async()=>{const r=await request('POST',{name:'membership_checkout_attempt',props:{campaign:'shop_qr',email:'private@example.com'}});assert.equal(r.body.recorded,true);assert.ok([...counts.keys()].some(k=>k.endsWith(':campaign=shop_qr')));assert.ok(!JSON.stringify(commands).includes('private@example'));});
+await test('email outreach has its own protected report bucket through useful actions',async()=>{
+ for(const name of ['page_view','authenticated_visit','listing_draft_created','membership_checkout_attempt']){
+  const r=await request('POST',{name,props:{campaign:'email_outreach'}});assert.equal(r.body.recorded,true);
+ }
+ const r=await request('GET',null,{admin:'test-admin',window:'1',breakdown:'campaign'});
+ for(const name of ['page_view','authenticated_visit','listing_draft_created','membership_checkout_attempt']) assert.equal(r.body.campaigns.email_outreach[name],1);
+ assert.equal(r.body.campaigns.other_campaign.membership_checkout_attempt,0);
+});
 await test('arbitrary campaign text creates only fixed fallback bucket',async()=>{await request('POST',{name:'page_view',props:{campaign:'private@example.com'}});assert.ok([...counts.keys()].some(k=>k.endsWith(':campaign=other_campaign')));assert.ok(!JSON.stringify(commands).includes('private@example'));});
 await test('campaign report is admin protected',async()=>{const before=commands.length;assert.equal((await request('GET',null,{breakdown:'campaign'})).code,403);assert.equal(commands.length,before);});
 await test('admin campaign counts reconcile with stored events',async()=>{const r=await request('GET',null,{admin:'test-admin',window:'1',breakdown:'campaign'});assert.equal(r.body.campaigns.shop_qr.membership_checkout_attempt,1);assert.equal(r.body.campaigns.other_campaign.page_view,1);assert.equal(r.body.campaigns.qa.membership_checkout_attempt,0);assert.match(r.body.measurement,/not_unique_customers_or_revenue/);});

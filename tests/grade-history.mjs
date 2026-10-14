@@ -67,8 +67,13 @@ try{
  check('card title rendered as text',await page.locator('#aiGradeHistoryDialog img').count(),0);
  check('mobile dialog fits',await page.locator('#aiGradeHistoryDialog').evaluate(x=>x.scrollWidth<=x.clientWidth+1),true);
  await page.screenshot({path:'/tmp/cardresell-grade-history.png'});
- await page.evaluate(()=>{window.googleUser={sub:'bob'};window._googleIdToken='bob'});
+ await page.evaluate(()=>{
+  const dialog=document.getElementById('aiGradeHistoryDialog'),close=dialog.close.bind(dialog);
+  dialog.close=()=>{window._gradeContentAtClose=dialog.querySelector('[data-grade-content]').textContent;close()};
+  window.googleUser={sub:'bob'};window._googleIdToken='bob';
+ });
  await page.waitForFunction(()=>!document.getElementById('aiGradeHistoryDialog').open);
+ check('private report is cleared before the native close call',await page.evaluate(()=>window._gradeContentAtClose),'');
  check('account switch clears private content',await page.locator('[data-grade-content]').textContent(),'');
  await page.getByRole('button',{name:'View saved grades',exact:true}).click();await page.getByText('No saved grades yet.',{exact:false}).waitFor();
  check('new account sees own empty history',await page.getByText('Light corner wear',{exact:true}).count(),0);

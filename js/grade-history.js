@@ -98,7 +98,13 @@
   // Remove private content promptly on logout/account changes, including while
   // a request from the previous account is in flight.
   setInterval(() => {
-    if (dialog?.open && owner() !== dialogOwner) { ++requestGeneration; dialog.close(); }
+    if (dialog?.open && owner() !== dialogOwner) {
+      ++requestGeneration;
+      // dialog.close() queues its close event. Clear the previous account's
+      // report before closing so no private content survives that task boundary.
+      content().replaceChildren();
+      dialog.close();
+    }
     const batch = document.getElementById('bulkGradeOverlay');
     if (batch?.style.display === 'flex' && window._bulkGradeOwner && owner() !== window._bulkGradeOwner) {
       window._bulkGradeStopRequested = true;

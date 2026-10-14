@@ -6,24 +6,24 @@
   <link rel="apple-touch-icon" href="/assets/brand/cardresell-mark-180.png">
   <meta name="theme-color" content="#111009">
 <title>About · CardResell</title>
-<meta name="description" content="CardResell helps card sellers pick the best platform to sell on after fees, with live prices from real sold comps.">
+<meta name="description" content="Identify supported trading cards, compare estimated payouts after fees, and prepare a selling plan with CardResell. Independent tools for card sellers.">
 <link rel="canonical" href="https://www.cardresell.org/about">
 
 <!-- Open Graph / Twitter -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.cardresell.org/about">
 <meta property="og:title" content="About CardResell">
-<meta property="og:description" content="CardResell helps card sellers pick the best platform to sell on after fees, with live prices from real sold comps.">
+<meta property="og:description" content="Identify supported trading cards, compare estimated payouts after fees, and prepare a selling plan with CardResell. Independent tools for card sellers.">
 <meta property="og:site_name" content="CardResell">
 <meta property="og:image" content="https://www.cardresell.org/og-image.png">
-<meta property="og:image:alt" content="CardResell — net payout across 18 selling venues, after fees">
+<meta property="og:image:alt" content="CardResell — compare estimated selling payouts after fees">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="About CardResell">
-<meta name="twitter:description" content="CardResell helps card sellers pick the best platform to sell on after fees, with live prices from real sold comps.">
+<meta name="twitter:description" content="Identify supported trading cards, compare estimated payouts after fees, and prepare a selling plan with CardResell. Independent tools for card sellers.">
 <meta name="twitter:image" content="https://www.cardresell.org/og-image.png">
 <link rel="icon" href="/assets/brand/cardresell-mark-32.png" type="image/png">
 <style>
-:root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#71717a;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--radius-md:8px;--radius-xl:14px}
+:root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#a1a1aa;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--radius-md:8px;--radius-xl:14px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;font-size:15px}
 a{color:var(--gold);text-decoration:none}
@@ -43,35 +43,60 @@ strong{color:var(--text)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 1.5rem;margin-top:1rem}
 footer.site{border-top:1px solid var(--border);padding:1rem;text-align:center;font-size:.75rem;color:var(--text-faint)}
 footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
+.intro{font-size:1.1rem;max-width:60ch}
+.actions{display:flex;flex-wrap:wrap;gap:.65rem;margin:1.4rem 0}
+.actions a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:.65rem 1rem;border:1px solid var(--border);border-radius:var(--radius-md);font-weight:700;color:var(--text)}
+.actions .primary{background:#f0aa20;color:#111;border-color:#f0aa20}
+.steps{list-style:none;padding:0;counter-reset:step;display:grid;gap:.75rem}
+.steps li{counter-increment:step;display:grid;grid-template-columns:2rem minmax(0,1fr);gap:.8rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.15rem;margin:0}
+.steps li::before{content:counter(step);display:grid;place-items:center;width:2rem;height:2rem;border-radius:50%;background:var(--gold-hi);color:#f2be59;font-weight:800}
+.steps h3{margin:0;font-size:1rem;color:var(--text)}
+.steps p{margin:.25rem 0 0}
+main a:not(.primary){color:#f2be59}
+main a:focus-visible,header a:focus-visible,footer a:focus-visible{outline:2px solid #f2be59;outline-offset:4px}
+section[id]{scroll-margin-top:9rem}
+@media(max-width:480px){main{padding:1.5rem 1rem 2.5rem}.card{padding:1rem}.intro{font-size:1rem}}
 </style>
 <link rel="stylesheet" href="/assets/brand-ui.535d636a.css">
 </head>
 <body>
 <header class="site">
   <a class="brand brand-lockup" href="/"><img class="brand-mark" src="/assets/brand/cardresell-mark-128.webp" width="36" height="36" alt=""><span>Card<span>Resell</span></span></a>
-  <nav>
+  <nav aria-label="Main navigation">
     <a href="/">Home</a>
     <a href="/pricing.html">Pricing</a>
-    <a href="/about.html">About</a>
+    <a href="/about.html" aria-current="page">About</a>
     <a href="/contact.html">Contact</a>
   </nav>
 </header>
 <main>
 
 <h1>About CardResell</h1>
-<span class="updated">Independent · Built by resellers, for resellers</span>
+<span class="updated">Independent tools for trading-card sellers · Built by Will Jones</span>
 
-<p>CardResell is a lightweight tool that helps trading-card sellers answer one question fast: <strong>where do I actually make the most money on this card, after fees?</strong></p>
+<p class="intro">Know your cards. Compare what you could keep. <strong>Make a clearer plan for your next sale.</strong></p>
 
-<p>Every marketplace advertises "low fees." In practice, eBay, TCGplayer, Mercari, Poshmark, Whatnot, Fanatics Collect, COMC, and a dozen buylists each take a different cut, add different shipping quirks, and pay out at different speeds. We pull the real numbers together across <strong>18 selling venues</strong> so you can compare listing fees, consignment and bulk shipment options. Bulk buyers need a quote for your stack; retail value is not a buyer offer.</p>
+<p>CardResell brings card identification, estimated selling costs, grading research, and saved inventory into one place. Compare <strong>18 selling venues</strong>, including marketplaces, consignment services, and bulk buyers. Available comparisons depend on your plan and card game.</p>
 
-<h2>What we do</h2>
-<ul>
-  <li><strong>Card Lookup</strong> &mdash; Search supported Pokémon, Magic, Yu-Gi-Oh!, Lorcana, and One Piece cards. Review available market-price sources and follow marketplace links to check comparable listings. Coverage varies by game, set, and printing.</li>
-  <li><strong>Fee breakdown</strong> &mdash; Same card, every marketplace, side by side. Estimated proceeds after the selected fees and shipping assumptions. Actual selling prices and charges may differ.</li>
-  <li><strong>Estimated Grade Scan</strong> &mdash; Photo a raw card and get an in-app centering / corners / edges / surface estimate before you drop $30+ on PSA/BGS.</li>
-  <li><strong>Sales Tracker</strong> &mdash; Log what you bought, what you sold it for, and where. Watch your realized P&L instead of guessing.</li>
-</ul>
+<div class="actions"><a class="primary" href="/">Try CardResell</a><a href="/accuracy">See sources &amp; limitations</a></div>
+
+<section id="workflow" aria-labelledby="workflow-heading">
+<h2 id="workflow-heading">From card to selling plan</h2>
+<ol class="steps">
+  <li><div><h3>Find and review your card</h3><p>Search by name or use photo identification. Check the set, number, condition, and finish. Bulk scans estimate prices as results arrive; the optional Finish / printing control lets you correct a match.</p></div></li>
+  <li><div><h3>Compare your options</h3><p>Estimate proceeds after fees and shipping, consider selling low-value cards together, or compare grading costs and published turnaround estimates before submitting.</p></div></li>
+  <li><div><h3>Save your work and prepare to sell</h3><p>Keep cards in Collection, prepare supported listing drafts for review and export, and record completed sales. A draft or export does not publish a marketplace listing.</p></div></li>
+</ol>
+</section>
+
+<div class="card">
+<h2 style="margin-top:0">A stack of $1 cards needs a different plan</h2>
+<p>Individual shipping and selling fees can consume the value of low-priced cards. Use the bulk and lot guidance to compare selling together, local-shop offers, or buylist quotes. <strong>Retail value is not a buyer offer</strong>; the buyer must confirm acceptance, condition, and the final payout.</p>
+</div>
+
+<h2>What the estimates mean</h2>
+<p>Lookup supports Pokémon, Magic, Yu-Gi-Oh!, Lorcana, and One Piece, with coverage varying by set and printing. Available market prices are guides; automatic eBay sold data may be unavailable. Follow the marketplace links to research comparable sales, and review the <a href="/accuracy">sources, dates, and limitations</a>.</p>
+<p>Photo-based grade estimates assess visible centering, corners, edges, and surface. They are not professional grades, authentication, or a guarantee of a grading company's result.</p>
 
 <h2>How we make money</h2>
 <p>Verified Free accounts receive 10 ID + 1 Grade credit once, plus 5 ID + 1 Grade credit each month. Issued credits never expire. Monthly paid plans are <strong>Starter $4.99, Casual $9.99, Pro $19.99, and Business $49.99</strong>. Upgrading adds scanning and grading allowances, supported venue comparisons, seller tools, and eligible credit-pack savings. See <a href="/pricing">the plan comparison</a> for current benefits and pack prices. When you click through to an eBay or TCGplayer listing we may earn an affiliate credit; it does not change the price you pay or influence our ranking.</p>
@@ -80,7 +105,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 <p>CardResell is <strong>not</strong> a grading company, not a marketplace, and not affiliated with The Pokémon Company, Nintendo, PSA, BGS, CGC, or SGC. Prices and fees are estimates &mdash; always verify with the actual marketplace before you list.</p>
 
 <h2>Contact &amp; feedback</h2>
-<p>Found a bug, want a feature, or think a fee is wrong? File an issue on <a href="https://github.com/AlchemistDX/Cardresell/issues" target="_blank" rel="noopener">GitHub</a> or use the <a href="/contact.html">contact page</a>.</p>
+<p>I built CardResell to make selling decisions easier to review, and I read feedback personally. For help, ideas, or a correction, visit <a href="/contact">Contact</a>. Marketplaces, grading companies, and card shops can find <a href="/contact#partnerships">partnership and fee-update information here</a>.</p>
 
 </main>
 <footer class="site">
@@ -91,7 +116,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <a href="/contact.html">Contact</a> &middot;
   <a href="/terms.html">Terms</a> &middot;
   <a href="/privacy.html">Privacy</a><br>
-  <span style="opacity:.6">&copy; 2026 Will Jones dba CardResell &middot; Bradenton, FL &middot; An independent Pokémon &amp; TCG resale tool</span>
+  <span>&copy; 2026 Will Jones dba CardResell &middot; Bradenton, FL &middot; An independent Pokémon &amp; TCG resale tool</span>
 </footer>
 </body>
 </html>

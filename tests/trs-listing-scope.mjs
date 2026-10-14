@@ -71,7 +71,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = process.env.CR_PLAYWRIGHT || 'playwright';
 
 const T = harness('trs-listing-scope');
 
@@ -111,7 +111,7 @@ function startHost() {
 const { server, port } = await startHost();
 const _pw = (await import(PW)).default;
 const { chromium } = _pw;
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || undefined, args: ['--no-sandbox'] });
 
 async function boot() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });

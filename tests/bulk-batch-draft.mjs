@@ -650,7 +650,9 @@ try {
       // This entry is an ADDITION to the frozen union, not a relaxation of it.
       // The assertion still demands an exact match, so the next unplanned
       // field will fail here the same way this one did.
-      'catalogImageUrl', 'finish', 'finishConfirmed', 'finishKey', 'finishOptions', 'finishPriceDate', 'finishReviewRequired'];
+      // Restored automatic pricing distinguishes an estimate from a seller's
+      // confirmed finish. Keep the exact union, including that provenance.
+      'catalogImageUrl', 'finish', 'finishConfirmed', 'finishEstimated', 'finishKey', 'finishOptions', 'finishPriceDate', 'finishReviewRequired'];
     const got = Object.keys(e).sort();
     eq('the saved entry carries exactly the committed key union',
        got.join(','), EXPECTED_KEYS.slice().sort().join(','));

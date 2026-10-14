@@ -22,7 +22,8 @@ for (const width of [390,1280]) {
    if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();
    return r.fulfill({status:503,contentType:'application/json',body:'{"error":"offline_fixture"}'});
  });
- await page.goto(origin);
+ await page.goto(origin+'/?cr_campaign=email_outreach');
+ check(width+' email entry has bounded outreach attribution',await page.evaluate(()=>getAcquisitionCampaign()),'email_outreach');
  await page.waitForFunction(()=>typeof searchWithTPL==='function');
  await page.evaluate(()=>{
    window._catalogCalls=0;
@@ -68,6 +69,7 @@ for (const width of [390,1280]) {
  check(width+' draft preparation preserves collection destination',new URL(page.url()).search,'?next=collection');
  // Return visit: the anonymous card persists across the sign-in detour.
  await page.goto(origin);
+ check(width+' sign-in detour retains email outreach attribution',await page.evaluate(()=>getAcquisitionCampaign()),'email_outreach');
  check(width+' saved card survives reload',await page.evaluate(()=>loadPortData().length),1);
  await page.evaluate(()=>switchView('drafts'));
  await page.waitForFunction(()=>!_draftsState.loading);

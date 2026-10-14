@@ -35,7 +35,7 @@ check('Rejects non-GET methods',                            /Method not allowed/
 console.log('\n[Collection modal TCGplayer deeplink]');
 check('Collection modal upgrades to product-page URL',      /buildTcgpSmart\(\{ tcgplayer: \{ url: p\.tcgplayerUrl \}/.test(INDEX));
 check('Portfolio entries store tcgplayerUrl',               /tcgplayerUrl: cardTcgpUrl/.test(INDEX));
-check('tcgplayerUrl sourced from selectedCard',             /selectedCard\.tcgplayer\?\.url/.test(INDEX));
+check('tcgplayerUrl sourced from the identity-bound card snapshot', /sourceCard && sourceCard\.tcgplayer\?\.url/.test(INDEX));
 
 console.log('\n[Sell-flow deeplink on updateSellLinks]');
 check('updateSellLinks upgrades TCGplayer to product URL',  /buildTcgpSmart\(card\)\.then/.test(INDEX));
@@ -249,7 +249,7 @@ console.log('\n[Flip modal grade capture 2026-08-13]');
 check('Flip modal has gold grade banner element',              INDEX.includes("id=\"mGradeBanner\""));
 check('Grade banner has label span',                           INDEX.includes("id=\"mGradeBannerLabel\""));
 check('_syncFlipModalGradeBanner helper defined',              INDEX.includes("function _syncFlipModalGradeBanner()"));
-check('Add-to-Collection button calls grade sync',             INDEX.includes("_syncFlipModalGradeBanner();\n  modal.classList.add('open');"));
+check('Add-to-Collection captures grade and card identity before opening', INDEX.includes("_syncFlipModalGradeBanner();\n  _captureFlipModalCard();\n  modal.classList.add('open');"));
 check('Save persists grader field on portfolio entry',         INDEX.includes("grader: savedGrader || null"));
 check('Save persists grade field on portfolio entry',          INDEX.includes("grade: savedGrade || null"));
 check('Close resets grader dataset to prevent leak',           INDEX.includes("delete modalBox.dataset.grader; delete modalBox.dataset.grade;"));
