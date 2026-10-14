@@ -50,6 +50,8 @@
     const only = bar.querySelector('[data-only-visible]'); only.hidden = !hiddenSelected; only.disabled = busy;
     const compare=bar.querySelector('[data-compare]'); if(compare) {compare.disabled=busy || (!selected.size && !count);compare.textContent=selected.size?'Compare '+selected.size+' selected card'+(selected.size===1?'':'s'):(valueFilter !== 'all' || query.trim() ? 'Compare '+count+' shown card'+(count===1?'':'s') : 'Compare entire collection');}
     const create = bar.querySelector('[data-create]'); create.disabled = busy || !selected.size;
+    const exportSelected = bar.querySelector('[data-export-selected]');
+    if (exportSelected) exportSelected.disabled = busy || !selected.size;
     create.textContent = busy ? 'Preparing drafts…' : !owner ? 'Sign in to prepare drafts' : `Prepare ${selected.size || ''} draft${selected.size === 1 ? '' : 's'}`;
   }
   function mount(next) {
@@ -113,10 +115,12 @@
     const select = button('Select visible', () => { syncOwner(); const available = rowMap(loadPortData()); rows.filter(visible).forEach(p => { if (available.get(key(p))) selected.add(key(p)); }); paint(); }); select.dataset.selection = ''; select.dataset.selectVisible = '';
     const clear = button('Clear selection', () => { selected.clear(); paint(); }); clear.dataset.selection = ''; clear.dataset.clearSelection = '';
     const create = button('Prepare drafts', prepare); create.dataset.create = '';
+    const exportSelected = button('Export selected', () => { syncOwner(); if (!selected.size) { paint(); return; } window.exportCollection([...selected]); });
+    exportSelected.dataset.exportSelected = '';
     const compare=button('Compare selling',()=>{syncOwner();const ids=selected.size?[...selected]:rows.filter(visible).map(key);const cards=currentRows(ids).filter(Boolean);if(cards.length!==ids.length){message='A card changed or has an ambiguous ID. Refresh your collection and select it again.';paint();return;}window.CardResellSellingPlan?.openCollection(cards);});compare.dataset.compare='';
     const only = button('Keep only shown selections', () => { const available = rowMap(loadPortData()); for (const id of selected) { const p = available.get(id); if (!p || !visible(p)) selected.delete(id); } paint(); }); only.dataset.onlyVisible = '';
     const selection = el('div','','collection-plan-selection'); selection.setAttribute('role','group'); selection.setAttribute('aria-label','Select Collection cards'); selection.append(select, clear, only);
-    const actions = el('div','','collection-plan-actions'); actions.setAttribute('role','group'); actions.setAttribute('aria-label','Use selected Collection cards'); actions.append(compare, button('View drafts', () => switchView('drafts')), create);
+    const actions = el('div','','collection-plan-actions'); actions.setAttribute('role','group'); actions.setAttribute('aria-label','Use selected Collection cards'); actions.append(compare, exportSelected, button('View drafts', () => switchView('drafts')), create);
     bar.append(selection,actions);
     bar.append(el('p', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.','collection-plan-note'));
     const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(status);
