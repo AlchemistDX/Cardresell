@@ -33,6 +33,7 @@ for (const width of [390,1280]) {
  });
  await page.getByRole('textbox',{name:'Search card name',exact:true}).fill('Pikachu');
  await page.getByRole('button',{name:'Search',exact:true}).click();
+ check(width+' results expose a named modal',await page.locator('#searchResultsModal').getAttribute('role'),'dialog');
  await page.locator('#searchModalGrid [data-idx="0"]').click();
  check(width+' search reaches the selected card',await page.evaluate(()=>selectedCard?.name),'Pikachu');
  check(width+' selected cheap card has useful advice',await page.locator('#sellingAdvice [data-advice-output]').getAttribute('data-route'),'hold-for-lot');
@@ -157,6 +158,69 @@ for (const width of [390,1280]) {
  await page.waitForFunction(()=>window._demoOutcome!==null);
  check(width+' idle visitor still receives the example',await page.evaluate(()=>window._demoOutcome),true);
  check(width+' idle example selects the catalogue card',await page.evaluate(()=>selectedCard?.name),'Charizard');
+ await page.close();
+}
+// Full shipped catalog: keyboard navigation and untrusted display text.
+for (const width of [390,1280]) {
+ const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>{
+  const u=r.request().url();
+  if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});
+  if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();
+  return r.fulfill({status:503,contentType:'application/json',body:'{"error":"offline_fixture"}'});
+ });
+ await page.goto(origin);await page.waitForFunction(()=>typeof searchWithTPL==='function');
+ await page.evaluate(()=>{searchWithTPL=async()=>({cards:[
+  {id:'fixture-pika',name:'Pikachu',number:'025',set:{name:'Test set',id:'fixture'},rarity:'Common',prices:{raw:{near_mint:{tcgplayer:{market:1}}}}},
+  {id:'fixture-raichu',name:'Raichu',number:'026',set:{name:'Other set',id:'other'},rarity:'Rare',prices:{raw:{near_mint:{tcgplayer:{market:2}}}}}
+ ]})});
+ await page.locator('#searchInput').fill('Pika');await page.locator('#searchBtn').click();
+ await page.locator('#searchModalGrid [data-idx="1"]').waitFor();
+ check(width+' catalog receives focus',await page.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Close search results');
+ await page.keyboard.press('Shift+Tab');
+ check(width+' reverse Tab wraps to final card',await page.evaluate(()=>document.activeElement.dataset.idx),'1');
+ await page.keyboard.press('Tab');
+ check(width+' forward Tab wraps inside dialog',await page.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Close search results');
+ await page.locator('#chipSet').click();
+ check(width+' set filter announces expanded',await page.locator('#chipSet').getAttribute('aria-expanded'),'true');
+ check(width+' filter options receive focus',await page.evaluate(()=>document.activeElement.closest('#catalogChipDrop')!==null),true);
+ await page.keyboard.press('Escape');
+ check(width+' Escape first closes filter',await page.locator('#catalogChipDrop').isHidden(),true);
+ check(width+' filter dismissal keeps catalog open',await page.locator('#searchResultsModal').isVisible(),true);
+ check(width+' filter dismissal restores chip focus',await page.evaluate(()=>document.activeElement.id),'chipSet');
+ await page.keyboard.press('Enter');
+ await page.locator('#catalogChipDrop').getByRole('button',{name:'Test set',exact:true}).click();
+ check(width+' set filter selects exact value',await page.locator('#searchModalGrid [data-idx]').count(),1);
+ check(width+' chosen filter collapses accessibly',await page.locator('#chipSet').getAttribute('aria-expanded'),'false');
+ await page.getByRole('button',{name:'Switch to list view',exact:true}).click();
+ check(width+' list toggle explains next action',await page.locator('#chipView').getAttribute('aria-label'),'Switch to grid view');
+ await page.locator('#searchModalGrid [data-idx="0"]').focus();await page.keyboard.press('Enter');
+ check(width+' keyboard selects actual card',await page.evaluate(()=>selectedCard.name),'Pikachu');
+ check(width+' selection closes catalog',await page.locator('#searchResultsModal').isHidden(),true);
+ check(width+' selection restores opener focus',await page.evaluate(()=>document.activeElement.id),'searchBtn');
+ await page.locator('#searchBtn').click();await page.locator('#searchModalGrid [data-idx="0"]').waitFor();
+ await page.keyboard.press('Escape');
+ check(width+' Escape closes result dialog',await page.locator('#searchResultsModal').isHidden(),true);
+ check(width+' Escape restores opener',await page.evaluate(()=>document.activeElement.id),'searchBtn');
+ const hostile=`<img src=x onerror="window._catalogInjected=1">O'Brien & <tag>`;
+ await page.evaluate(hostile=>{document.getElementById('searchResultsModal').style.display='flex';window._catAllRows=[{idx:'0',name:hostile,setLine:hostile,subLine:hostile,price:hostile,img:'x" onerror="window._catalogInjected=2',cardSet:hostile,cardRarity:hostile,cardNum:hostile,priceNum:1}];window._catFilter={};},hostile);
+ for(const mode of ['grid','list']){
+  await page.evaluate(mode=>{window._catViewMode=mode;_applyFilters()},mode);
+  check(width+' '+mode+' renders card text literally',(await page.locator('#searchModalGrid').innerText()).includes(hostile),true);
+  check(width+' '+mode+' creates only the intended thumbnail',await page.locator('#searchModalGrid img').count(),1);
+  check(width+' '+mode+' does not run catalog markup',await page.evaluate(()=>window._catalogInjected),undefined);
+  check(width+' '+mode+' fits viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ }
+ await page.locator('#chipSet').click();
+ check(width+' filter text stays literal',await page.locator('#catalogChipDrop').getByRole('button',{name:hostile,exact:true}).count(),1);
+ check(width+' filter text creates no image markup',await page.locator('#catalogChipDrop img').count(),0);
+ await page.locator('#catalogChipDrop').getByRole('button',{name:hostile,exact:true}).click();
+ check(width+' quotes and markup remain a usable filter value',await page.evaluate(()=>window._catFilter.set),hostile);
+ await page.reload();await page.waitForFunction(()=>typeof searchWithTPL==='function');
+ check(width+' saved list view survives reload',await page.evaluate(()=>window._catViewMode),'list');
+ check(width+' saved view control explains next action',await page.locator('#chipView').getAttribute('aria-label'),'Switch to grid view');
+ check(width+' no catalog workflow exceptions',errors,[]);
  await page.close();
 }
 console.log(`SUITE COMPLETE: customer-journey-browser: ${checks} passed, 0 failed`);

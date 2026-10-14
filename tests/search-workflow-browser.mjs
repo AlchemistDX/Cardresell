@@ -10,7 +10,7 @@ const assets=referencedHashedAssets(),html=readFileSync(join(ROOT,'index.html'),
 const source=base=>readFileSync(assets.find(a=>a.base===base).path,'utf8');
 function pick(src,names){return parse(src,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)).map(n=>src.slice(n.start,n.end)).join('\n');}
 const core=source('core'),ui=source('ui');
-const funcs=pick(core,['_snapSearchReq','_searchReqStillCurrent','_invalidateCardSearch','doSearch','searchPokemon'])+'\n'+pick(ui,['openSearchModal','openCatalog','closeSearchModal','_renderCatalogFromDrop','_storeCatalogRows','_applyFilters','_makeCatalogGridCell','_makeCatalogRow']);
+const funcs=pick(core,['_snapSearchReq','_searchReqStillCurrent','_invalidateCardSearch','doSearch','searchPokemon'])+'\n'+pick(ui,['openSearchModal','openCatalog','closeSearchModal','_closeCatalogChip','_renderCatalogFromDrop','_storeCatalogRows','_applyFilters','_makeCatalogGridCell','_makeCatalogRow']);
 const inputHandlers=core.slice(core.indexOf("searchInput.addEventListener('input'"),core.indexOf("document.getElementById('searchBtn').addEventListener"));
 const fixture=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+`<script>
 let activeGame='pokemon',searchTimeout=null,calls=0,picked=null,mode='normal';

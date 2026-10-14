@@ -524,10 +524,12 @@ img{display:block;max-width:100%;height:auto}
 .drop-meta{font-size:.72rem;color:var(--text-muted);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .drop-price{font-family:var(--mono);font-size:.82rem;font-weight:500;color:var(--green);flex-shrink:0}
 .drop-no-price{font-size:.72rem;color:var(--text-faint);flex-shrink:0}
-.cat-chip{flex-shrink:0;padding:.3rem .7rem;border-radius:999px;border:1px solid #333;background:#111;color:#ccc;font-size:.75rem;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:border-color .15s,color .15s}
+.cat-chip{font-family:inherit;flex-shrink:0;padding:.3rem .7rem;border-radius:999px;border:1px solid #333;background:#111;color:#ccc;font-size:.75rem;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:border-color .15s,color .15s}
+.cat-result{width:100%;min-width:0;text-align:left;font:inherit;appearance:none;box-sizing:border-box;border:0}
+#searchResultsModal button:focus-visible{outline:2px solid #4dd9ac;outline-offset:-3px}
 .cat-chip.active{border-color:#4dd9ac;color:#4dd9ac}
 #catalogFilterBar::-webkit-scrollbar{display:none}
-.chip-drop-item{padding:.65rem 1rem;font-size:.82rem;color:#ccc;border-bottom:1px solid #222;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.chip-drop-item{display:block;width:100%;text-align:left;background:transparent;border:0;font-family:inherit;padding:.65rem 1rem;font-size:.82rem;color:#ccc;border-bottom:1px solid #222;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .chip-drop-item:last-child{border-bottom:none}
 .chip-drop-item.selected{color:#4dd9ac;font-weight:600}
 .chip-drop-item:active{background:#1a1a1a}
@@ -3997,7 +3999,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/membership-shop.6b3f4693.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/scan-finish.98f699b9.js"></script>
-<script defer src="/js/ui.b6bdbb19.js"></script>
+<script defer src="/js/ui.8331dbae.js"></script>
 <script defer src="/js/selling-plan.e492f1c8.js"></script>
 <script defer src="/js/selling-advice.7b8b622b.js"></script>
 <script defer src="/js/collection-drafts.bfb6565e.js"></script>
@@ -4030,24 +4032,24 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
      FIREBASE AUTH MODAL
      ══════════════════════════════════════════════════════════ -->
 <!-- FULL-SCREEN SEARCH RESULTS MODAL -->
-<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:#000;z-index:8000;flex-direction:column;overflow:hidden">
+<div id="searchResultsModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle" tabindex="-1" style="display:none;position:fixed;inset:0;background:#000;z-index:8000;flex-direction:column;overflow:hidden">
   <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid #222;flex-shrink:0;background:#000">
     <button aria-label="Close search results" onclick="closeSearchModal()" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1;padding:.25rem;-webkit-tap-highlight-color:transparent">&larr;</button>
     <div style="flex:1;font-size:.95rem;font-weight:800;color:#fff" id="searchModalTitle">Results</div>
-    <div style="font-size:.72rem;color:#888" id="searchModalCount"></div>
+    <div style="font-size:.72rem;color:#888" id="searchModalCount" role="status" aria-live="polite"></div>
   </div>
   <!-- Filter bar -->
   <div id="catalogFilterBar" style="display:flex;align-items:center;gap:.5rem;padding:.5rem 1rem;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0;border-bottom:1px solid #1a1a1a;scrollbar-width:none">
-    <div class="cat-chip" id="chipSet" onclick="toggleCatalogChip('set')">Set <span id="chipSetVal"></span>&#9660;</div>
-    <div class="cat-chip" id="chipRarity" onclick="toggleCatalogChip('rarity')">Rarity <span id="chipRarityVal"></span>&#9660;</div>
-    <div class="cat-chip" id="chipNumber" onclick="toggleCatalogChip('number')"># <span id="chipNumberVal"></span>&#9660;</div>
-    <div class="cat-chip" id="chipPrice" onclick="cyclePriceSort()">Price <span id="chipPriceVal">&#8597;</span></div>
-    <div class="cat-chip" id="chipView" onclick="toggleCatalogView()" style="margin-left:auto;padding:.3rem .55rem;display:flex;align-items:center;gap:.25rem" title="Toggle list / grid view">
-      <span id="chipViewIcon" style="font-size:.95rem;line-height:1">&#9638;</span>
-    </div>
+    <button type="button" class="cat-chip" id="chipSet" aria-controls="catalogChipDrop" aria-expanded="false" onclick="toggleCatalogChip('set')">Set <span id="chipSetVal"></span>&#9660;</button>
+    <button type="button" class="cat-chip" id="chipRarity" aria-controls="catalogChipDrop" aria-expanded="false" onclick="toggleCatalogChip('rarity')">Rarity <span id="chipRarityVal"></span>&#9660;</button>
+    <button type="button" class="cat-chip" id="chipNumber" aria-controls="catalogChipDrop" aria-expanded="false" onclick="toggleCatalogChip('number')"># <span id="chipNumberVal"></span>&#9660;</button>
+    <button type="button" class="cat-chip" id="chipPrice" onclick="cyclePriceSort()">Price <span id="chipPriceVal">&#8597;</span></button>
+    <button type="button" aria-label="Switch to list view" class="cat-chip" id="chipView" onclick="toggleCatalogView()" style="margin-left:auto;padding:.3rem .55rem;display:flex;align-items:center;gap:.25rem" title="Toggle list / grid view">
+      <span id="chipViewIcon" style="font-size:.95rem;line-height:1" aria-hidden="true">&#9638;</span>
+    </button>
   </div>
   <!-- Chip dropdown (shared) -->
-  <div id="catalogChipDrop" style="display:none;position:absolute;top:0;left:0;right:0;background:#111;border-bottom:1px solid #333;z-index:9000;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+  <div id="catalogChipDrop" role="group" aria-label="Filter options" style="display:none;position:absolute;top:0;left:0;right:0;background:#111;border-bottom:1px solid #333;z-index:9000;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
   <div id="searchModalGrid" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0"></div>
 </div>
 
