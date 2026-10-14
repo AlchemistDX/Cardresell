@@ -1644,6 +1644,27 @@ console.log('\n[Quick Pricing — wiring]');
         'withheld and absent are the two states a seller most needs separated');
 }
 
+console.log('\n[Custom maximum buy price]');
+{
+  const core = readCoreBundle().source;
+  const a = core.indexOf('let _maxBuyMargin = 25;');
+  const b = core.indexOf('function calc() {', a);
+  const amount = new Function(core.slice(a,b) + '; return _maxBuyAmount;')();
+  check('25% margin on a $100 sale leaves a $61.35 offer from $86.35 net', amount(100,86.35,25) === 61.35);
+  check('fractional margins round the offer down to cents', amount(99.99,85.123,12.5) === 72.62);
+  check('zero margin gives the break-even offer', amount(100,86.359,0) === 86.35);
+  check('unachievable margins remain negative rather than advertising a free-card offer', amount(100,20,25) === -5);
+  check('exact zero offer is valid', amount(100,25,25) === 0);
+  check('invalid values cannot produce an offer', [amount(0,50,25),amount(100,NaN,25),amount(100,50,-1),amount(100,50,101),amount(100,50,NaN),amount(Infinity,50,25)].every(v=>v===null));
+  // Forward check: buying at the displayed price must meet the requested margin;
+  // the next cent must exceed it. Includes negative net and fractional values.
+  for (const [price,net,margin] of [[100,86.35,25],[99.99,85.123,12.5],[0.99,0.457,30],[1000,909.955,40]]) {
+    const offer=amount(price,net,margin);
+    check(`offer meets ${margin}% margin on ${price}`, (net-offer)/price >= margin/100-1e-12);
+    check(`next cent exceeds the ${price} offer limit`, (net-offer-.01)/price < margin/100);
+  }
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 _finish(passed, failed);
 

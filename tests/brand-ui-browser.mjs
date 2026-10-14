@@ -207,5 +207,42 @@ for(const width of [320,390,844,1280]){
  if(shots){await page.goto(origin+'/contact');await page.screenshot({path:`${shots}/outreach-contact-${width}.png`,fullPage:true})}
  await page.close();
 }
+// Actual calculator integration: custom margins share the payout engine and
+// preserve the input while typing. No paid requests or customer mutations.
+for(const theme of ['light','dark']) for(const width of [320,390,1280]) {
+ const page=await browser.newPage({viewport:{width,height:900},colorScheme:theme});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/*',r=>r.request().url().startsWith(origin)&&!r.request().url().includes('/api/')?r.continue():r.fulfill({status:204,body:''}));
+ await page.goto(origin);
+ await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;selectedCard={name:'Synthetic test card',game:'pokemon'};activeGame='pokemon';window.getEffectivePrice=()=>100;document.getElementById('shipCost').value='5';document.getElementById('shipCharge').value='0';calc()},theme);
+ for(const tier of ['free','business']) {
+  await page.evaluate(tier=>{window.googleUser={sub:'buy-target-fixture'};window._userTier=tier;window._isPro=tier!=='free';window._membershipVenueAccess={owner:'buy-target-fixture',plan:tier,tier:tier==='business'?'ultimate':'free'};calc()},tier);
+  check(`${tier} has one custom buy target`,await page.locator('.max-buy-card').count(),1);
+  await page.locator('#maxBuyMargin').fill('25');
+  check(`${tier} offer matches the actual net payout`,await page.locator('.max-buy-card').evaluate(e=>{const offer=Number(e.querySelector('output').textContent.replace(/[^\d.-]/g,'')),net=Number(e.dataset.net);return Math.abs(offer-(Math.floor((net-25+1e-9)*100)/100))<1e-9}),true);
+  check('typing preserves target focus',await page.evaluate(()=>document.activeElement.id),'maxBuyMargin');
+  await page.locator('#maxBuyMargin').fill('');
+  check('blank margin shows no offer',await page.locator('#maxBuyAmount').textContent(),'—');
+  check('blank margin is announced invalid',await page.locator('#maxBuyMargin').getAttribute('aria-invalid'),'true');
+  await page.locator('#maxBuyMargin').fill('101');
+  check('over-100 margin shows no offer',await page.locator('#maxBuyAmount').textContent(),'—');
+  await page.locator('#maxBuyMargin').fill('100');
+  check('unreachable target has explicit feedback',await page.locator('#maxBuyAmount').textContent(),'No offer meets this target');
+  await page.getByRole('button',{name:'Set target margin to 30%'}).click();
+  check('preset sets the custom margin',await page.locator('#maxBuyMargin').inputValue(),'30');
+  await page.evaluate(()=>{document.getElementById('shipCost').value='7';calc()});
+  check('recalculation retains the margin',await page.locator('#maxBuyMargin').inputValue(),'30');
+  check('new shipping changes the offer basis',await page.locator('.max-buy-card').evaluate(e=>e.dataset.net===String(window._crSellingAdviceInput.best.net)),true);
+ }
+ check(`${theme} ${width} buy target fits`,await page.locator('.max-buy-card').evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth}),true);
+ check('buy target explains margin and costs',await page.locator('#maxBuyDefinition').innerText().then(t=>t.includes('not ROI')&&t.includes('Purchase tax')),true);
+ check('newsletter no longer promises threshold alerts',await page.locator('#newsletterSection').innerText().then(t=>!t.includes('Price Drop Alerts')&&!t.includes('market alerts')),true);
+ if(shots)await page.locator('.max-buy-card').screenshot({path:`${shots}/buy-target-${theme}-${width}.png`});
+ await page.evaluate(()=>{for(const p of Object.values(PLATFORMS))p.feeAuditedOn='2020-01-01';calc()});
+ check('stale fees cannot supply a buy target',await page.locator('.max-buy-card').count(),0);
+ check('no buy-target browser errors',errors,[]);
+ await page.close();
+}
+
 console.log(`SUITE COMPLETE: brand-ui-browser: ${checks} passed, 0 failed`);
 }finally{await browser.close();await new Promise(r=>server.close(r))}
