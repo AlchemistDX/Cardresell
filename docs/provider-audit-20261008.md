@@ -78,3 +78,24 @@ Repository evidence: `docs/unit-economics-20261005.md`,
 `docs/psa-reference-pilot-20261008.md`, `docs/catalog-expansion-20261008.md`,
 `api/_ximilar.js`, `api/_gradeModel.js`, `api/ebay-sold.js`,
 `api/_ebayAuth.js`, `tools/provider-usage-report.mjs`.
+
+## Async grading diagnostics (October 14)
+
+For Ximilar `card_grade`, `PROVIDER_USAGE` now includes an allowlisted
+`job_status`, the latest `poll_http_status`, and `poll_count`. The existing
+`http_status` continues to describe submission. A 201 submission is not proof
+that grading completed. Unknown provider status text becomes `UNKNOWN`; a poll
+without an HTTP response records null. Provider charges remain unknown.
+
+`GRADE_SETTLEMENT` records the Deep-to-Quick fallback after its settlement
+returns: `quick_charge` means one customer credit charged and one returned;
+`full_refund` means zero charged and two returned. `reconciliation_required`
+and `unconfirmed` leave both amounts null. These are customer credits, not
+provider credits or invoice charges. Match the platform request metadata to
+the provider attempt; these new records contain no account, receipt, image,
+card identity, raw response or error text. Logging failures cannot interrupt
+the adjustment, and replaying a completed operation adds no new settlement.
+
+These runtime observations are subject to log retention and do not replace
+durable billing receipts. They cannot establish missing historical outcomes.
+Models, prompts, provider calls, polling budgets and credit rules are unchanged.

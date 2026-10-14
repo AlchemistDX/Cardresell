@@ -1,6 +1,7 @@
 // Ximilar card grading uses the documented async job API (sync endpoint retired).
 import { readFileSync } from 'node:fs';
 import { gradeAsync, parseGradeResponse, XIMILAR_ASYNC_SUBMIT_URL } from '../api/_ximilar_grade.js';
+import { observeProviderAttempt } from '../api/_providerUsage.js';
 let pass = 0, fail = 0;
 const check = (n, ok) => { ok ? pass++ : (fail++, console.log('  FAIL', n)); };
 const record = { _status: { code: 200 }, grades: { corners: 8, edges: 8, surface: 6, centering: 9, final: 7.5, condition: 'Near Mint' },
@@ -18,6 +19,16 @@ function sim(script) {
   return { calls, opts: { fetch, now: () => clock, sleep: async ms => { clock += ms; }, budgetMs: 55000 }, tick: ms => { clock += ms; } };
 }
 const imgs = ['RlJPTlQ=', 'QkFDSw=='];
+async function observedGrade(s) {
+  const log = console.log, observations = [];
+  console.log = line => { if (line.startsWith('PROVIDER_USAGE ')) observations.push(JSON.parse(line.slice(15))); };
+  try {
+    const result = await observeProviderAttempt({ provider: 'ximilar', operation: 'card_grade', mode: 'deep_grade', inputImages: 2 },
+      observe => gradeAsync(imgs, 'tok', observe, s.opts));
+    check('exactly one usage record per job', observations.length === 1);
+    return { result, usage: observations[0] };
+  } finally { console.log = log; }
+}
 
 // 1. happy path: CREATED -> PROCESSING -> DONE
 { const s = sim(n => n === 1 ? { body: { id: 'job-0001-abcd', status: 'CREATED' } }
@@ -30,15 +41,18 @@ const imgs = ['RlJPTlQ=', 'QkFDSw=='];
     && s.calls[0].body.records.length === 2 && s.calls[0].body.records[0]._base64 === imgs[0] && s.calls[0].body.records[1].Side === 'Back');
   check('polls GET job url', s.calls.slice(1).every(c => c.method === 'GET' && c.url === XIMILAR_ASYNC_SUBMIT_URL + 'job-0001-abcd'));
   check('token auth header', s.calls.every(c => c.auth === 'Token tok'));
-  check('observed submit status', seen.length === 1 && seen[0].status === 200);
+  check('submit status kept separate from polls', seen.filter(o => o.status !== undefined).length === 1 && seen[0].status === 200);
+  check('observed completed job and two polls', seen.at(-1).jobStatus === 'DONE' && seen.at(-2).polls === 2 && seen.at(-2).pollStatus === 200);
   check('raw keeps records for holder detection', Array.isArray(r.raw.records));
 }
 // 2. never resubmits; times out within budget
 { const s = sim(n => n === 1 ? { body: { id: 'job-slow-0001', status: 'CREATED' } } : { body: { id: 'job-slow-0001', status: 'PROCESSING' } });
-  const r = await gradeAsync(imgs, 'tok', () => {}, s.opts);
+  const { result: r, usage } = await observedGrade(s);
   check('slow job -> job_timeout', !r.ok && r.reason === 'job_timeout' && r.jobId === 'job-slow-0001');
   check('slow job never resubmitted', s.calls.filter(c => c.method === 'POST').length === 1);
   check('bounded polls', r.polls > 3 && r.polls < 40);
+  check('timeout keeps last known job state and actual poll count', usage.reason === 'job_timeout' && usage.job_status === 'PROCESSING'
+    && usage.poll_count === r.polls && usage.poll_http_status === 200);
 }
 // 3. submit failures
 { const s = sim(() => ({ status: 401, body: { status: { code: 401 } } }));
@@ -53,15 +67,33 @@ const imgs = ['RlJPTlQ=', 'QkFDSw=='];
 { const s = sim(() => ({ body: { id: '../../evil', status: 'CREATED' } }));
   check('unsafe job id rejected', (await gradeAsync(imgs, 'tok', () => {}, s.opts)).reason === 'submit_malformed'); }
 // 4. job failure status, poll auth loss, transient poll errors
-{ const s = sim(n => n === 1 ? { body: { id: 'job-fail-0001', status: 'CREATED' } } : { body: { id: 'job-fail-0001', status: 'ERROR' } });
-  const r = await gradeAsync(imgs, 'tok', () => {}, s.opts);
-  check('ERROR status -> job_failed', r.reason === 'job_failed' && r.jobStatus === 'ERROR'); }
-{ const s = sim(n => n === 1 ? { body: { id: 'job-auth-0001', status: 'CREATED' } } : { status: 403, body: {} });
-  check('poll 403 stops', (await gradeAsync(imgs, 'tok', () => {}, s.opts)).reason === 'poll_http_403'); }
+{ const s = sim(n => n === 1 ? { status: 201, body: { id: 'job-fail-0001', status: 'CREATED' } } : { body: { id: 'job-fail-0001', status: 'ERROR' } });
+  const { result: r, usage } = await observedGrade(s);
+  check('ERROR status -> job_failed', r.reason === 'job_failed' && r.jobStatus === 'ERROR');
+  check('accepted submit is not a completed job', usage.http_status === 201 && usage.poll_http_status === 200
+    && usage.job_status === 'ERROR' && usage.poll_count === 1 && usage.outcome === 'failure' && usage.reason === 'job_failed');
+  check('failed job billing is still unknown', usage.billed_units === null && usage.cost_usd === null);
+  check('failed job never resubmitted', s.calls.filter(c => c.method === 'POST').length === 1); }
+{ const s = sim(n => n === 1 ? { status: 201, body: { id: 'job-auth-0001', status: 'CREATED' } } : { status: 403, body: {} });
+  const { result: r, usage } = await observedGrade(s);
+  check('poll 403 stops', r.reason === 'poll_http_403');
+  check('poll auth failure retained separately', usage.http_status === 201 && usage.poll_http_status === 403
+    && usage.poll_count === 1 && usage.job_status === 'CREATED' && usage.reason === 'http'); }
 { const s = sim(n => n === 1 ? { body: { id: 'job-flaky-001', status: 'CREATED' } } : n < 4 ? { status: 502, body: null }
     : { body: { id: 'job-flaky-001', status: 'DONE', response: { records: [record] } } });
-  const r = await gradeAsync(imgs, 'tok', () => {}, s.opts);
-  check('transient poll 502 recovers', r.ok && s.calls.filter(c => c.method === 'POST').length === 1); }
+  const { result: r, usage } = await observedGrade(s);
+  check('transient poll 502 recovers', r.ok && s.calls.filter(c => c.method === 'POST').length === 1);
+  check('recovered job counts failed polls too', usage.poll_count === 3 && usage.poll_http_status === 200 && usage.job_status === 'DONE'); }
+for (const status of ['PRIVATE user@example.test', { private: 'PRIVATE user@example.test' }, null]) {
+  const s = sim(n => n === 1 ? { body: { id: 'job-private-01', status: 'CREATED' } } : { body: { status } });
+  const { result: r, usage } = await observedGrade(s);
+  check('unrecognized job status remains a failure', r.reason === 'job_failed' && usage.job_status === 'UNKNOWN');
+  check('diagnostics contain no raw payload or identity', !/PRIVATE|user@|job-private|RlJPTlQ/.test(JSON.stringify(usage)));
+}
+{ const s = sim(n => n === 1 ? { body: { id: 'job-network-01', status: 'CREATED' } } : { throw: 'TypeError' });
+  const { result: r, usage } = await observedGrade(s);
+  check('failed network polls counted without inventing HTTP status', r.reason === 'job_timeout' && usage.poll_http_status === null
+    && usage.poll_count === r.polls && usage.poll_count > 0 && usage.job_status === 'CREATED'); }
 // 5. stalled body is bounded by the request timeout (real timers, tiny budget)
 { const s = sim(() => ({ stall: true }));
   const t0 = Date.now(); const r = await gradeAsync(imgs, 'tok', () => {}, { fetch: s.opts.fetch, budgetMs: 300 });

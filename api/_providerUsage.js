@@ -10,6 +10,8 @@ const reasons = new Set(['http', 'empty', 'parse', 'parse_error', 'network', 'ne
   'missing_input', 'missing_token', 'missing_image', 'submit_timeout_ambiguous',
   'submit_malformed', 'job_failed', 'job_timeout']);
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+const jobStatuses = new Set(['CREATED', 'PROCESSING', 'PENDING', 'QUEUED', 'DONE', 'ERROR', 'FAILED', 'CANCELLED', 'CANCELED']);
+const httpStatus = value => Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
 
 export async function observeProviderAttempt(meta, work) {
   const started = Date.now();
@@ -28,9 +30,17 @@ export async function observeProviderAttempt(meta, work) {
     // 2026-10-10: Ximilar identification match distance (lower = closer) and
     // gap to the second candidate, for threshold calibration. Numbers only.
     match_distance: null, match_gap: null,
+    // Async grading: submission HTTP success is not job completion. Keep the
+    // last poll separate; never log provider payloads or arbitrary status text.
+    job_status: null, poll_http_status: null, poll_count: null,
   };
-  const observe = ({ status, usage, matchDistance, matchGap } = {}) => {
-    if (Number.isInteger(status) && status >= 100 && status <= 599) record.http_status = status;
+  const observe = ({ status, usage, matchDistance, matchGap, jobStatus, pollStatus, polls } = {}) => {
+    if (httpStatus(status) !== null) record.http_status = status;
+    if (record.provider === 'ximilar' && record.operation === 'card_grade') {
+      if (jobStatus !== undefined) record.job_status = jobStatuses.has(jobStatus) ? jobStatus : 'UNKNOWN';
+      if (pollStatus !== undefined) record.poll_http_status = httpStatus(pollStatus);
+      if (polls !== undefined) record.poll_count = count(polls);
+    }
     const dist = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2 ? Math.round(v * 1000) / 1000 : null;
     if (record.provider === 'ximilar' && matchDistance !== undefined) record.match_distance = dist(matchDistance);
     if (record.provider === 'ximilar' && matchGap !== undefined) record.match_gap = dist(matchGap);

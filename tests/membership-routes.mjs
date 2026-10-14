@@ -6,6 +6,7 @@ import { redisCommand as redis, redisRest } from './_idRedis.mjs';
 import { membershipEnrollmentKey, membershipReceiptKey, createMembershipConsumption } from '../api/_membershipConsumption.js';
 import { MEMBERSHIP_LEGACY_FENCE, legacyCreditFetch } from '../api/_membershipLegacyFence.js';
 import { grantMembership, membershipWelcomeKeys } from '../api/_membershipLedger.js';
+import { observeDeepGradeSettlement } from '../api/_gradeSettlement.js';
 const t = harness('membership-routes');
 const credits = (await import('../api/scan-credits.js')).default;
 const status = (await import('../api/pro-status.js')).default;
@@ -36,6 +37,17 @@ async function call(handler, method = 'POST', body = {}, extra = {}) {
   return res;
 }
 function finish(h) { delete process.env.MEMBERSHIP_BILLING_V2; delete process.env.OPENAI_API_KEY; h.restore(); }
+async function captureSettlements(work, failLogging = false) {
+  const log = console.log, settlements = [];
+  console.log = (...args) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('GRADE_SETTLEMENT ')) {
+      settlements.push(JSON.parse(args[0].slice('GRADE_SETTLEMENT '.length)));
+      if (failLogging) throw new Error('synthetic logging outage');
+    } else log(...args);
+  };
+  try { return { result: await work(), settlements }; }
+  finally { console.log = log; }
+}
 
 await t.section('normal picker cancel, accepted selection, concurrent duplicate', async () => {
   const h = billingHarness({ balance: 4 });
@@ -189,6 +201,21 @@ await t.section('normal Grade and deep Grade use versioned debit, publication an
   } finally { finish(h); }
 });
 
+await t.section('fallback observations allow only confirmed credit outcomes and safe fields', async () => {
+  for (const input of [
+    { charged: 2, refunded: 0 }, { charged: '1', refunded: '1' },
+    { charged: 1, refunded: 1, reconciliationRequired: true },
+  ]) {
+    const { settlements } = await captureSettlements(() => observeDeepGradeSettlement({
+      ...input, owner: 'PRIVATE user@example.test', receipt: 'PRIVATE receipt', error: 'PRIVATE error',
+    }));
+    t.check('unconfirmed balance is never logged as refunded', settlements.length === 1
+      && settlements[0].customer_credits_charged === null && settlements[0].customer_credits_refunded === null
+      && settlements[0].outcome === (input.reconciliationRequired ? 'reconciliation_required' : 'unconfirmed'));
+    t.check('private fields are not logged', !/PRIVATE|user@|receipt|error/.test(JSON.stringify(settlements)));
+  }
+});
+
 await t.section('Deep Grade without completed CV is billed as Quick; no assessment refunds both', async () => {
   const h = billingHarness({ balance: 0 });
   const localFetch = globalThis.fetch;
@@ -214,7 +241,7 @@ await t.section('Deep Grade without completed CV is billed as Quick; no assessme
     await redis(['SET', `scans:${UID}:paid_left`, '2']);
     globalThis.__XIMILAR_GRADE = async () => ({ ok: false, reason: 'timeout' });
     const before = await balance('grade');
-    const down = await h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos });
+    const { result: down, settlements } = await captureSettlements(() => h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos }));
     t.check('CV failure still delivers the assessment', down.statusCode === 200 && down.payload.mode === 'grade');
     t.check('CV failure is labelled downgraded, not CV-verified', down.payload.cv_downgraded === true && down.payload.cv_source === 'gpt');
     t.check('CV failure charges exactly one credit and reports one refunded',
@@ -228,12 +255,17 @@ await t.section('Deep Grade without completed CV is billed as Quick; no assessme
     const quickOps = journals.filter(j => j && j.mode === 'grade' && j.cost === 1 && j.scan === down.payload.analysis_id);
     t.check('2-credit operation refunded exactly once', deepOps.length === 1 && deepOps[0].state === 'refunded');
     t.check('replacement 1-credit operation debited', quickOps.length === 1 && quickOps[0].state === 'debited');
+    t.check('fallback observation agrees with durable receipts and response', settlements.length === 1
+      && settlements[0].event === 'deep_grade_fallback_settlement' && settlements[0].billing_version === 'membership_v2'
+      && settlements[0].outcome === 'quick_charge' && settlements[0].customer_credits_charged === down.payload.creditsUsed
+      && settlements[0].customer_credits_refunded === down.payload.credits_refunded);
     // Flag off: Deep Grade cannot run CV at all, so it is also a Quick equivalent.
     delete process.env.ENABLE_XIMILAR_GRADER; delete globalThis.__XIMILAR_GRADE;
     await redis(['SET', `scans:${UID}:paid_left`, '2']);
-    const off = await h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos });
+    const { result: off } = await captureSettlements(() => h.scan(exact(), { mode: 'grade', deepGrade: true, ...photos }), true);
     t.check('CV unavailable by configuration is never billed as Deep', off.statusCode === 200 && off.payload.cv_downgraded === true
       && off.payload.creditsUsed === 1 && await redis(['GET', `scans:${UID}:paid_left`]) === '1');
+    t.check('logging failure cannot interrupt the adjustment or result', off.payload.credits_refunded === 1);
     // No usable assessment: both credits come back.
     process.env.ENABLE_XIMILAR_GRADER = 'deep_only';
     globalThis.__XIMILAR_GRADE = async () => ({ ok: false, reason: 'timeout' });
@@ -299,8 +331,12 @@ for (const fault of ['before_debit', 'after_debit', 'refund_reply_lost', 'refund
       const body = { operation_id: (await import('node:crypto')).randomBytes(32).toString('hex'),
         mode: 'grade', deepGrade: true, imageBase64: 'A'.repeat(9000), mimeType: 'image/jpeg',
         backBase64: 'B'.repeat(9000), topEdgeBase64: 'C'.repeat(9000), bottomEdgeBase64: 'D'.repeat(9000) };
-      const result = await h.scan(exact(), body);
+      const { result, settlements } = await captureSettlements(() => h.scan(exact(), body));
       const unresolved = ['refund_unavailable', 'refund_denied'].includes(fault);
+      t.check('one observation reflects confirmed or uncertain settlement', settlements.length === 1
+        && settlements[0].outcome === (unresolved ? 'reconciliation_required' : 'full_refund')
+        && settlements[0].customer_credits_charged === (unresolved ? null : 0)
+        && settlements[0].customer_credits_refunded === (unresolved ? null : 2));
       t.check('replacement debit attempted once', debitCalls === 1);
       t.check('refund attempt count is bounded', refundCalls >= 1 && refundCalls <= 2);
       t.check('balance agrees with confirmed settlement',
@@ -319,7 +355,8 @@ for (const fault of ['before_debit', 'after_debit', 'refund_reply_lost', 'refund
         t.check('receipt is durably refunded or cancelled', ['refunded', 'cancelled'].includes(receipt.state));
       }
       const beforeReplay = await state(), calls = providerCalls;
-      const replay = await h.invokeScan(body);
+      const { result: replay, settlements: replaySettlements } = await captureSettlements(() => h.invokeScan(body));
+      t.check('replay does not record another adjustment', replaySettlements.length === 0);
       t.check('same operation replays without new charge or provider work', replay.statusCode === result.statusCode
         && JSON.stringify(replay.payload) === JSON.stringify(result.payload)
         && await state() === beforeReplay && providerCalls === calls && debitCalls === 1);

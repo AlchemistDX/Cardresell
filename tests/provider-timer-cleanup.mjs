@@ -50,6 +50,9 @@ try {
   assert.equal(observations.at(-1).input_images, 2);
   assert.equal(observations.at(-1).mode, 'deep_grade');
   assert.equal(observations.at(-1).outcome, 'success');
+  assert.equal(observations.at(-1).job_status, 'DONE');
+  assert.equal(observations.at(-1).poll_count, 0);
+  assert.equal(observations.at(-1).poll_http_status, null);
   cases += 2;
 
   // Exercise the real shipped OpenAI attempt function, with only its network
@@ -92,6 +95,13 @@ try {
   assert.equal(invalid.prompt_tokens, null);
   assert.equal(invalid.completion_tokens, null);
   assert.equal(invalid.total_tokens, null);
+  await observeProviderAttempt({ provider: 'ximilar', operation: 'tcg_id' }, async observe => {
+    observe({ jobStatus: 'DONE', pollStatus: 200, polls: 2 });
+    return { ok: true };
+  });
+  assert.equal(observations.at(-1).job_status, null, 'async grading fields do not apply to identification');
+  assert.equal(observations.at(-1).poll_http_status, null);
+  assert.equal(observations.at(-1).poll_count, null);
   cases++;
   const before = observations.length;
   await identifyWithXimilar('', '', '');
