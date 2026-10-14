@@ -41,7 +41,9 @@ try {
   const ago = d => d === 0 ? ' · today' : d === 1 ? ' · 1 day ago' : ` · ${d} days ago`;
   for (const pid of ['ebay', 'tcgplayer', 'poshmark', 'comc', 'fanatics', 'whatnot', 'mercari', 'manapool'])
     ok(r.audited[pid] === '2026-10-11', pid + ' re-audited Oct 11');
-  for (const pid of ['cardsphere', 'cardmarket', 'cardkingdom', 'coolstuffinc', 'scg', 'cardnexus', 'tcgbulk'])
+  for (const pid of ['cardsphere', 'cardkingdom', 'scg', 'cardnexus', 'tcgbulk'])
+    ok(r.audited[pid] === '2026-10-13', pid + ' re-audited Oct 13');
+  for (const pid of ['cardmarket', 'coolstuffinc'])
     ok(r.audited[pid] === '2026-09-01', pid + ' keeps its Sep 1 date (not re-read)');
   const eb = r.items.find(i => i.pid === 'ebay');
   ok(eb && eb.pill.endsWith('Oct 11, 2026' + ago(r.age.ebay)), 'eBay pill shows date and age: ' + (eb && eb.pill));

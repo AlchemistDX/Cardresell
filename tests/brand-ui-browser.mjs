@@ -176,7 +176,7 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  check('no uncaught UI errors',errors,[]);await page.close();
 }
 // All standalone pages retain readable navigation and use the same mark.
-for(const path of ['about','accuracy','contact','pricing','privacy','terms','signin']){
+for(const path of ['about','accuracy','changelog','contact','pricing','privacy','terms','signin']){
  const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
  await page.route('**/*',r=>r.request().url().startsWith(origin)?r.continue():r.abort());
  await page.goto(origin+'/'+path);if(shots)await page.screenshot({path:shots+'/'+path+'.png'});check(path+' has no horizontal overflow',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

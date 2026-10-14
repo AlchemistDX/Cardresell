@@ -78,9 +78,9 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <a class="brand brand-lockup" href="/"><img class="brand-mark" src="/assets/brand/cardresell-mark-128.webp" width="36" height="36" alt=""><span>Card<span>Resell</span></span></a>
   <nav>
     <a href="/">Home</a>
-    <a href="/pricing.html">Pricing</a>
-    <a href="/about.html">About</a>
-    <a href="/contact.html">Contact</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
   </nav>
 </header>
 <main>
@@ -88,74 +88,55 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 <h1>Accuracy &amp; Methodology</h1>
 <span class="updated">Last updated · Oct 13, 2026 · Fee verification dates are shown separately</span>
 
-<p>CardResell exists so card sellers can pick the venue that actually pays them the most. That only works if you can trust the numbers. This page publishes exactly how we calculate them, where the source data comes from, and what we know we get wrong.</p>
+<p>CardResell helps card sellers compare estimated proceeds and choose a selling route. That only works if you can trust the numbers. This page publishes exactly how we calculate them, where the source data comes from, and what we know we get wrong.</p>
 
-<div class="changelog" id="changelog">
-  <div class="changelog-title">Changelog · newest first</div>
-  <div class="changelog-entry"><span class="changelog-date">Oct 13, 2026</span><strong>Three bulk selling options added.</strong> Full Grip Games and Meta TCG cover eligible English Pokémon bulk; Card Conduit Standard covers Magic shipments. These require a whole-stack cash quote or assessed buylist value, known shipping and extra deductions. No bulk offer is inferred from a retail price. Card Conduit Standard includes 10% plus $0.03 per card. Source rules were checked on public pages, not verified directly by these companies.</div>
-  <div class="changelog-entry"><span class="changelog-date">Oct 11, 2026</span><strong>eBay, TCGplayer, COMC, Fanatics&nbsp;Collect, Whatnot, Mercari, Poshmark and Mana&nbsp;Pool re-verified.</strong> Each was re-read against its own published fee pages. One correction shipped: Poshmark's terms charge the $2.95 flat fee on sales of $15 <em>and under</em>, so a sale of exactly $15.00 now pays $2.95 rather than 20%. Whatnot moved to sales-volume tiers on Sep 21, 2026; its base tier is still 8%, and its published schedule still lists 0% on the portion over $1,500 for trading cards (limited time), so the estimate is unchanged. Lower tiers for high-volume Whatnot sellers are not modelled, so the estimate errs high on fees for them. Cardsphere, Cardmarket, Card&nbsp;Kingdom, CoolStuffInc, Star&nbsp;City&nbsp;Games, CardNexus and TCG&nbsp;Bulk were not re-read in this pass and keep their Sep 1 dates. Each fee breakdown now also says how many days ago its schedule was read, and has a &ldquo;Report a fee problem&rdquo; link.</div>
-  <div class="changelog-entry"><span class="changelog-date">Oct 8, 2026</span><strong>Photo estimates and catalogue limits.</strong> Quick and Deep Grade are photo-based screening estimates, not professional grades or a calibrated accuracy guarantee. Deep Grade uses additional edge photos. If its computer-vision step is unavailable but a usable Quick assessment completes, the result is labelled and billed as Quick Grade. Camera focus and glare hints are advisory; review the photos yourself. This update does not re-verify the marketplace fee schedules below.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 8, 2026</span><strong>The sales-tax caveat reached one venue out of fifteen. It now reaches nine.</strong> The fee breakdown carries a &ldquo;Buyer sales tax &mdash; not estimated&rdquo; row, because on some venues the fee is charged on a base that includes tax the buyer paid and you never receive. That row was hardcoded inside the eBay fee function, so it appeared on eBay and nowhere else &mdash; not because the other fourteen venues had been cleared, but because there was no per-venue value to leave blank. Every venue now records both the answer and <em>how the answer was established</em>, and the two are kept apart on purpose: a page that says &ldquo;item price plus shipping&rdquo; is a confirmed zero, a page that never mentions tax is not. <strong>2 venues are confirmed tax-inclusive, 6 are confirmed zero, 7 are unknown</strong>, and unknown shows the caveat rather than hiding behind it. The correction we are least proud of is <strong>Whatnot</strong>: its commission excludes tax, which we read and recorded as a zero &mdash; three paragraphs later the same page states that its payment processing fee is charged on the total order value <em>including buyer-paid tax</em>. We still model no tax rate anywhere; the gap is disclosed, not guessed. Full working, with source quotes, is in the tax table below.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 7, 2026</span><strong>Verification stamps became real dates, and two disclosures were corrected.</strong> The stamps were month strings ("Sep&nbsp;2026") and their age was measured from the <em>last</em> day of that month, which always rounded toward fresh and could hide up to 29 days of age. A stamp dated in the future was worse: its age was clamped to zero, so it read as permanently verified. Stamps are now the actual date each schedule was read &mdash; <strong>Sep&nbsp;1,&nbsp;2026</strong>, the date of the full audit &mdash; and a missing, unparseable or future date now reads as <strong>not verified</strong> rather than as fresh. The pill also now says <strong>&ldquo;Fee schedule verified&rdquo;</strong> so it cannot be mistaken for a verified price. Separately: the fee note used to read &ldquo;fees are charged on the item price only&rdquo;, which describes our estimate but states it as eBay's rule &mdash; eBay charges on the total sale including buyer-paid shipping and sales tax, so our estimate can run low, and the note now says so. The unmodelled buyer-sales-tax row showed <strong>$0.00</strong>; an unknown amount is not zero, so it now shows an em dash.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 2, 2026</span><strong>Poshmark, COMC and Fanatics&nbsp;Collect re-read again; no rate moved.</strong> Poshmark still charges <strong>$2.95 flat under $15 and 20% at $15+</strong>. COMC per-card intake still runs <strong>$0.65&ndash;$2.50</strong> across Standard/Select/Elite (raw and graded; odd-sized items run to $5), and cash-out is still <strong>10% plus $1 when converting under $250</strong>, $5 for a US check and $15 outside the US. Fanatics&nbsp;Collect Buy&nbsp;Now is still <strong>6% below 120% of Card&nbsp;Ladder market value and 12% at or above</strong> &mdash; we re-checked because a flat 8% is widely repeated second-hand, and it is wrong. New disclosure this pass: Fanatics now offers eligible US sellers a <strong>FanCash payout at 0% marketplace seller fee</strong> on both Buy&nbsp;Now and auctions. We do not model it in Net payout because it pays in store credit rather than cash, and vault fees still apply &mdash; it is now noted on the Fanatics row instead.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Poshmark, COMC and Fanatics&nbsp;Collect re-verified.</strong> Re-read against each venue's own published schedule; no rate changed, so only the verification stamps moved to Sep&nbsp;2026. Poshmark remains $2.95 under $15 and 20% at $15+. COMC remains per-card intake plus a 5% transaction fee, with the 10% cash-out optional. Fanatics&nbsp;Collect Buy&nbsp;Now remains tiered against Card&nbsp;Ladder market value &mdash; <strong>6% below 120%, 12% at or above</strong>, not a flat 8% &mdash; and its auctions remain 0% seller with a 20% buyer premium. Tier contents restated to match the app: <strong>Pro = 9 venues, Pro&nbsp;Max adds 4 buylists</strong>.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Terms &amp; Privacy rewritten.</strong> Florida venue and governing law, and a refund policy limited to failed scans. <a href="/terms.html">Terms</a> &middot; <a href="/privacy.html">Privacy</a></div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Full 15-venue fee audit + cross-border disclosure.</strong> Every venue was re-read against its own published fee schedule, terms and help center. Corrections shipped: Whatnot's commission bills the item only while its 2.9% + $0.30 bills the whole order including shipping; Mana Pool's 5% excludes shipping but its card processing does not; CardNexus's 8% bills the order total, not just the item; COMC adds $1 when you cash out under $250; TCG&nbsp;Bulk charges a 10% service fee and Star&nbsp;City&nbsp;Games charges 10% on Ship&nbsp;+&nbsp;Sell. Separately, every venue now shows its operator country, payout currency and what selling across a border actually costs &mdash; including on locked rows. <strong>Cardmarket is a German company and CardNexus is a French one</strong>; both are now labelled as foreign venues rather than presented as if they were domestic.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Stale-fee guardrail.</strong> Two thresholds, not one. A venue re-verified 31&ndash;45 days ago keeps its <strong>Verified</strong> label but turns amber, so you can see the clock running. Past <strong>45 days</strong> it changes to a <span class="pill-stale">• Stale</span> pill, and a stale venue cannot rank #1 in the payout list while any freshly verified venue remains. If every venue becomes stale, CardResell labels the ranking as reference-only rather than presenting a stale winner as current. As of the Sep&nbsp;1,&nbsp;2026 full audit below, no venue is stale.</div>
-  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Changelog started.</strong> We're now dating every accuracy-affecting change on this page, newest first, so you can see exactly what moved and when.</div>
-  <div class="changelog-entry"><span class="changelog-date">Aug 31, 2026</span><strong>TCGplayer and eBay fee corrections.</strong> TCGplayer commission corrected 10.25% &rarr; <strong>10.75%</strong>, plus 2.5% + $0.30 payment processing, both charged on item&nbsp;+&nbsp;shipping, capped at $75/item. eBay's final value fee confirmed to apply to the <strong>whole order &mdash; item + shipping + tax</strong> &mdash; not the item alone, with a per-order charge of $0.30 at or below $10 and $0.40 above.</div>
-  <div class="changelog-entry"><span class="changelog-date">Aug 30, 2026</span><strong>eBay + TCGplayer + Whatnot + Mercari + Mana Pool + Cardsphere + Cardmarket + SCG + Card Kingdom + CoolStuffInc + CardNexus + TCG Bulk fees re-verified</strong> against each venue's official help pages. No fee changes detected; verification stamps refreshed to Aug 2026.</div>
-  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>High-price clamp.</strong> When a feed's raw High comes back above 3 &times; Market (or 3 &times; Mid when Market is missing), the displayed High is capped at that anchor and the original is kept as <code>highRaw</code>. High is display context only &mdash; Net Payout is calculated from Market Value.</div>
-  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>PriceCharting wins over TCGplayer</strong> for graded values (PSA 10, PSA 9, BGS, CGC, SGC, TAG). PriceCharting samples eBay sold comps directly and matched hand-audited reality more often. Backed by a 3-attempt retry, 12s timeout, and 60s error cache.</div>
-  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>Grade-switch race protection.</strong> Added a <code>_syncGen</code> generation guard so rapid PSA 10 &rarr; PSA 9 &rarr; BGS 10 flips can't leave a stale grade result on screen.</div>
-</div>
+<p id="changelog">Read the <a href="/changelog">product changelog</a> for dated fee reviews and technical history.</p>
 
 <div class="toc">
   <div class="toc-title">On this page</div>
-  <a href="#prices">Live pricing</a>
+  <a href="#prices">Pricing sources</a>
   <a href="#graded">Graded price sanity checks</a>
   <a href="#fees">Marketplace fees</a>
   <a href="#grading">Estimated grade scans</a>
   <a href="#coverage">Card database coverage</a>
   <a href="#limits">Known limits</a>
-  <a href="#changelog">Changelog</a>
+  <a href="/changelog">Product changelog</a>
 </div>
 
 <div class="stat-grid">
   <div class="stat"><div class="stat-num">20,506</div><div class="stat-lab">Pokémon cards indexed</div></div>
   <div class="stat"><div class="stat-num">171</div><div class="stat-lab">Sets covered</div></div>
-  <div class="stat"><div class="stat-num">15</div><div class="stat-lab">Sell venues compared</div></div>
+  <div class="stat"><div class="stat-num">18</div><div class="stat-lab">Selling options · 15 ranked + 3 bulk</div></div>
   <div class="stat"><div class="stat-num">Weekly</div><div class="stat-lab">Auto-index refresh</div></div>
 </div>
 
-<h2 id="prices">Live pricing</h2>
-<p>When you look up a card, we fetch its live market price from up to three sources in parallel and merge them into a single price ladder per printing (Normal, Holofoil, Reverse Holo, Unlimited, 1st Edition, etc.).</p>
+<h2 id="prices">Pricing sources and limits</h2>
+<p>Prices depend on the card, printing, grade and available provider data. A fresh lookup can return a cached or older market reference. An estimate is not a buyer offer or proof of a recent sale of your card.</p>
 <ul>
-  <li><strong>TCGplayer Market Price</strong> — pulled via the official TCGplayer / TCGcsv feed on every card load. This is the primary price for ungraded Pokémon, MTG, Yu-Gi-Oh!, Lorcana, and One Piece singles.</li>
-  <li><strong>eBay sold comps</strong> — recent completed sales for the same card + printing, used to sanity-check TCGplayer and to power the sports-card path (eBay is the only real comp source for sports).</li>
-  <li><strong>PriceCharting</strong> — used for graded values (PSA, BGS, CGC, SGC, TAG) and as a graded-tier backstop when TCGplayer's graded slot is empty. See <a href="#graded">Graded price sanity checks</a> below.</li>
+<li><strong>TCGplayer market references</strong> may arrive through TCG Price Lookup, game catalogues or TCGcsv. <a href="https://tcgcsv.com/" target="_blank" rel="noopener">TCGcsv</a> is a separate public data service; it is not an official TCGplayer-operated feed. Coverage and update times vary.</li>
+<li><strong>eBay sold comparisons</strong> are currently unavailable automatically in the app. Marketplace research links remain available so you can inspect comparable sales yourself and enter a price you have checked. An empty or unavailable feed is not evidence that no cards sold.</li>
+<li><strong>PriceCharting and SportsCardsPro</strong> supply reference values where a matching product and grade are available. Their guide prices are distinct from an itemized list of completed transactions.</li>
 </ul>
-
 <div class="methodology-box">
-  <p><strong>High-price clamp.</strong> Net Payout is calculated from Market Value. "High" is display context only and is never the payout basis. If a feed's raw High comes back above 3× the current Market Price on the same card (or 3× Mid when Market is missing), we cap the displayed High at that anchor and keep the original as <code>highRaw</code>. This is why you'll sometimes see the raw High shown crossed out on a card — it's the correct behavior.</p>
+  <p><strong>High-price clamp.</strong> Net Payout is calculated from Market Value. "High" is display context only and is never the payout basis. If a feed's raw High comes back above 3× the current Market Price on the same card (or 3× Mid when Market is missing), we cap the displayed High at that anchor and retain the original for comparison. This is why you'll sometimes see the raw High shown crossed out on a card — it's the correct behavior.</p>
   <p>The clamp fires on every read path (fresh fetch, cached, printing-switch, grade-switch) so the same card can't show two different Highs depending on how you got to it.</p>
 </div>
 
 <div class="methodology-box">
-  <p><strong>Sell Now and Patient are calculated, not observed.</strong> Sell Now and Patient are calculated pricing suggestions around the displayed Comp value, not observed sales or a measured market range. The in-app explanation shows the adjustment used.</p>
+  <p><strong>Sell Now and Patient are calculated, not observed.</strong> Sell Now and Patient are calculated pricing suggestions around the displayed Comp value, not observed sales or a measured market range. The adjustments are −15% and +15% of the displayed Comp value; neither predicts how quickly a card will sell.</p>
 </div>
 
 <h2 id="graded">Graded price sanity checks</h2>
 <p>Graded values (PSA 10, PSA 9, BGS 10, etc.) are harder than raw prices because different data sources use different sample sizes and different clean rules. Our current policy:</p>
 <ol>
-  <li><strong>PriceCharting wins over TCGplayer</strong> for graded slots. PriceCharting samples eBay sold comps directly and its numbers matched hand-audited reality more often (e.g. Mew GG10 PSA 10 was $557.50 on PriceCharting vs. $120 on TCGplayer's stale graded slot).</li>
-  <li><strong>3-attempt retry with 12s timeout</strong> against PriceCharting, plus a 60s error cache so a bad response never spams the API.</li>
-  <li><strong>Grade-switch race protection</strong> — a <code>_syncGen</code> generation guard prevents stale grade-change results from overwriting a newer one when you rapid-flip between PSA 10 → PSA 9 → BGS 10.</li>
+  <li><strong>PriceCharting wins over TCGplayer</strong> for graded slots. This is our source-priority rule, not a published accuracy benchmark or a guarantee that the reference matches your exact card.</li>
+  <li><strong>Unavailable values stay unavailable.</strong> A failed or missing price lookup is not a zero-dollar valuation.</li>
+  <li><strong>Selected grade stays consistent.</strong> A delayed price response for an earlier grade must not replace the grade you most recently chose.</li>
   <li><strong>Reverse Holo / Holofoil dropdown stays pruned</strong> when you switch grades — no dead options bleeding across printings.</li>
 </ol>
 
 <h2 id="fees">Marketplace fees</h2>
-<p>We track the exact fee schedule for every venue in the payout ranking and re-verify it on the cadence below. Every fee row on a card's Net Payout tile carries a <span class="pill-verified">• Fee schedule verified &lt;date&gt;</span> pill that links here. That pill dates the <em>fee schedule</em> we read &mdash; it is not a statement about a card's price, which we never verify. If a fee has changed and we haven't caught it yet, <a href="/contact.html">tell us</a>.</p>
+<p>We track the exact fee schedule for every venue in the payout ranking and re-verify it on the cadence below. Every fee row on a card's Net Payout tile carries a <span class="pill-verified">• Fee schedule verified &lt;date&gt;</span> pill that links here. That pill dates the <em>fee schedule</em> we read &mdash; it is not a statement about a card's price, which we never verify. If a fee has changed and we haven't caught it yet, <a href="/contact">tell us</a>.</p>
 <div class="table-scroll" role="region" aria-label="Accuracy data table — scroll horizontally" tabindex="0"><table class="fee-table">
 <!-- 2026-09-07: THESE DATES ARE A SECOND COPY. The shipped fee model carries its
      own `feeAuditedOn` per venue in PLATFORMS (js/core.<hash>.js); the "Last
@@ -176,19 +157,27 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
     <tr><td>Mercari</td><td>Flat 10% selling fee on item&nbsp;+ buyer-paid shipping · no seller payment-processing fee since Jan&nbsp;6,&nbsp;2025 (buyer pays a separate 3.6% Buyer Protection fee)</td><td>Oct 11, 2026</td><td><a href="https://www.mercari.com/us/help_center/article/2518/" target="_blank" rel="noopener">Mercari fee structure</a></td></tr>
     <tr><td>Poshmark</td><td>$2.95 flat at $15 and under &middot; 20% above $15, charged on the final order price (not the order total) per the Nov&nbsp;25,&nbsp;2024 fee policy &middot; buyer-funded prepaid label</td><td>Oct 11, 2026</td><td><a href="https://poshmark.com/terms" target="_blank" rel="noopener">Poshmark fee policy</a></td></tr>
     <tr><td>Mana Pool</td><td>5% marketplace fee on merchandise only (never shipping) + Stripe 2.9% + $0.30 charged on item&nbsp;+ shipping &middot; MTG only</td><td>Oct 11, 2026</td><td><a href="https://support.manapool.com/hc/en-us/articles/21779686206615-Fees-Mana-Pool-and-Credit-Card-Fees" target="_blank" rel="noopener">Mana Pool fees</a></td></tr>
-    <tr><td>Cardsphere</td><td>3% seller fee per card + withdrawal of 10% or $10, whichever is greater (8% / $8 to a PayPal business account) &middot; MTG only</td><td>Sep 1, 2026</td><td><a href="https://www.cardsphere.com/terms" target="_blank" rel="noopener">Cardsphere terms</a></td></tr>
+    <tr><td>Cardsphere</td><td>3% seller fee per card + withdrawal of 10% or $10, whichever is greater (8% / $8 for eligible business-transfer countries) &middot; MTG only</td><td>Oct 13, 2026</td><td><a href="https://www.cardsphere.com/terms" target="_blank" rel="noopener">Cardsphere terms</a></td></tr>
     <tr><td>Cardmarket</td><td>5% commission on article value only, capped at &euro;100/article, + 3% currency conversion &middot; German operator, EUR payouts &middot; US-seller eligibility unconfirmed</td><td>Sep 1, 2026</td><td><a href="https://www.cardmarket.com/en/Policies/Fees" target="_blank" rel="noopener">Cardmarket fee table</a></td></tr>
-    <tr><td>Card Kingdom (buylist)</td><td>Outright purchase, no commission &middot; ~50% cash / +30% store-credit bonus &middot; condition markdowns published per price band (NM&nbsp;100% &rarr; G&nbsp;40&ndash;70%)</td><td>Sep 1, 2026</td><td><a href="https://www.cardkingdom.com/purchasing/how_to_sell" target="_blank" rel="noopener">Card Kingdom how to sell</a></td></tr>
-    <tr><td>CoolStuffInc (buylist)</td><td>Outright purchase, no commission &middot; ~48% cash / +25% store-credit bonus &middot; played cards paid at 75% of the near-mint price &middot; $2.99 to return declined cards separately</td><td>Sep 1, 2026</td><td><a href="https://www.coolstuffinc.com/main_selllist.php" target="_blank" rel="noopener">CoolStuffInc sell list</a></td></tr>
-    <tr><td>Star City Games (buylist)</td><td>Outright purchase &middot; ~55% cash / +30% store-credit bonus &middot; Sell List and in-person pay no service fee; <strong>Ship&nbsp;+&nbsp;Sell charges 10%</strong> (5% at $10,000+)</td><td>Sep 1, 2026</td><td><a href="https://sellyourcards.starcitygames.com/" target="_blank" rel="noopener">SCG sell your cards</a></td></tr>
-    <tr><td>CardNexus</td><td>Flat 8% North America seller commission charged on the <em>order total</em> (items&nbsp;+ shipping) &middot; no seller processing or payout fee &middot; French operator, region locked at signup</td><td>Sep 1, 2026</td><td><a href="https://help.cardnexus.com/articles/9938652-fee-structure-overview" target="_blank" rel="noopener">CardNexus fee structure</a></td></tr>
-    <tr><td>TCG Bulk (aggregator)</td><td>Compares offers from multiple US buylist buyers &middot; <strong>10% TCG Bulk service fee</strong> deducted from seller proceeds &middot; optional 3.5% shipment protection &middot; seller pays outbound shipping</td><td>Sep 1, 2026</td><td><a href="https://tcgbulk.com/page/terms-of-service" target="_blank" rel="noopener">TCG Bulk terms</a></td></tr>
+    <tr><td>Card Kingdom (buylist)</td><td>Outright purchase, no commission &middot; 50% cash is our illustrative assumption, not a live offer / published +30% store-credit bonus &middot; condition markdowns published per price band (NM&nbsp;100% &rarr; G&nbsp;40&ndash;70%)</td><td>Oct 13, 2026</td><td><a href="https://www.cardkingdom.com/purchasing/how_to_sell" target="_blank" rel="noopener">Card Kingdom how to sell</a></td></tr>
+    <tr><td>CoolStuffInc (buylist)</td><td>Outright purchase, no commission &middot; 48% cash is our illustrative assumption, not a live offer / +25% store-credit bonus &middot; played cards paid at 75% of the near-mint price &middot; $2.99 to return declined cards separately</td><td>Sep 1, 2026</td><td><a href="https://www.coolstuffinc.com/main_selllist.php" target="_blank" rel="noopener">CoolStuffInc sell list</a></td></tr>
+    <tr><td>Star City Games (buylist)</td><td>Outright purchase &middot; 55% cash is our illustrative assumption, not a live offer / up to +30% store-credit bonus &middot; Sell List and in-person pay no service fee; <strong>Ship&nbsp;+&nbsp;Sell charges 10%</strong> (5% over $10,000)</td><td>Oct 13, 2026</td><td><a href="https://sellyourcards.starcitygames.com/" target="_blank" rel="noopener">SCG sell your cards</a></td></tr>
+    <tr><td>CardNexus</td><td>Flat 8% North America seller commission charged on the <em>order total</em> (items&nbsp;+ shipping) &middot; no seller processing or payout fee &middot; French operator, region locked at signup</td><td>Oct 13, 2026</td><td><a href="https://help.cardnexus.com/articles/9938652-fee-structure-overview" target="_blank" rel="noopener">CardNexus fee structure</a></td></tr>
+    <tr><td>TCG Bulk (aggregator)</td><td>Compares offers from multiple US buylist buyers &middot; <strong>10% TCG Bulk service fee</strong> deducted from seller proceeds &middot; optional 3.5% shipment protection &middot; seller pays outbound shipping</td><td>Oct 13, 2026</td><td><a href="https://tcgbulk.com/page/terms-of-service" target="_blank" rel="noopener">TCG Bulk terms</a></td></tr>
   </tbody>
 </table></div>
 
+<h3 id="bulk-options">Three additional bulk selling options</h3>
+<p>The 18 supported selling options comprise 15 fee models above plus these 3 shipment workflows. Availability depends on your plan, card game, region and buyer requirements. Bulk offers are not inferred from retail card prices.</p>
+<ul>
+<li><a href="https://www.fullgripgames.com/buylistfaq" target="_blank" rel="noopener">Full Grip Games</a>: eligible English Pokémon bulk; enter a cash quote and shipping or preparation deductions.</li>
+<li><a href="https://metatcg.com/pages/bulk-buy-submission" target="_blank" rel="noopener">Meta TCG</a>: eligible English Pokémon bulk; check current acceptance and category rates, then enter the whole-shipment quote.</li>
+<li><a href="https://cardconduit.com/faq" target="_blank" rel="noopener">Card Conduit Standard</a>: Magic shipments; the model deducts 10% of assessed buylist value plus $0.03 per processed card. Enter shipping and other deductions separately.</li>
+</ul>
+<p class="fee-note">These bulk-program rules were checked October 13, 2026. They are not extra rows in the per-card fee ranking.</p>
 <h3>Sales tax and the fee base</h3>
 <p>A venue's fee rate is only half the number. The other half is <em>what the rate is charged on</em> &mdash; and on some venues that base includes the sales tax the buyer paid, which is money you never receive but are charged a percentage of. <strong>We do not model sales tax anywhere on this site.</strong> We do not know the buyer's jurisdiction when we show you an estimate, and we would rather show you a caveat than invent a rate. So where a fee is charged on a tax-inclusive base, <strong>our estimate can run low &mdash; on the orders where the buyer actually paid tax</strong>, and by a share of that tax rather than the whole of it. On an order with no tax, there is nothing missing. The fee breakdown says which of those two situations you are in on that venue's row.</p>
-<p>What we will not do is let &ldquo;we never checked&rdquo; look like &ldquo;we checked and it does not apply&rdquo;. Those are different facts and they now have different values in the code. Of the fifteen venues: <strong>2 are confirmed tax-inclusive</strong>, <strong>5 are excluded</strong>, and <strong>8 are unknown</strong> &mdash; the published fee page does not settle it. Unknown shows the caveat, so <strong>10 of 15</strong> venues carry the sales-tax row; before this pass, one did.</p>
+<p>What we will not do is let &ldquo;we never checked&rdquo; look like &ldquo;we checked and it does not apply&rdquo;. Those are different facts and they now have different values in the code. Of the fifteen ranked fee models: <strong>2 are confirmed tax-inclusive</strong>, <strong>5 are excluded</strong>, and <strong>8 are unknown</strong> &mdash; the published fee page does not settle it. Unknown shows the caveat, so <strong>10 of 15</strong> venues carry the sales-tax row; before this pass, one did.</p>
 <p><strong>&ldquo;Excluded&rdquo; does not mean the buyer paid no tax.</strong> It means no fee we charge you against can contain it &mdash; because the venue publishes its fee as tax-exclusive, or because this model charges you no fee at that venue at all, so there is no base for tax to sit in. It is a statement about our arithmetic, not a tax determination about the venue, and nothing on this page tells you what tax a venue owes or collects. We got this wrong in an earlier draft of this table: four buylists were marked excluded on the reasoning that a store buying your cards has no buyer checkout, therefore no buyer tax. Whether a sale is taxable turns on the applicable rules and exemptions, not on the shape of the transaction, so that inference was not ours to make. One of the four (TCG Bulk) turned out not to be a direct buylist at all and is now unknown.</p>
 <!-- 2026-09-08 (T2.9 / BIAS-10): THIS TABLE IS A SECOND COPY of `taxOn`/`taxBasis`
      in PLATFORMS (js/core.<hash>.js). The reasoning, verbatim source quotes and
@@ -253,26 +242,26 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 <p>Known upstream gaps:</p>
 <ul>
   <li>4 older McDonald's Pokémon promo sets have broken image URLs at the upstream image CDN. Prices work; images 404.</li>
-  <li>Alpha Black Lotus and a handful of reserved-list MTG cards have no TCGplayer market row — we fall back to eBay comps or return an honest "no comp data".</li>
+  <li>Alpha Black Lotus and a handful of reserved-list MTG cards have no TCGplayer market row — another reference may be available, or the card remains unpriced.</li>
   <li>One Piece Luffy Leader mapping in the tcgcsv resolver is being tuned; one specific printing may resolve slowly.</li>
 </ul>
 
 <h2 id="limits">Known limits</h2>
 <div class="limits">
   <ul>
-    <li><strong>Buylist quotes are estimated, not live.</strong> Card Kingdom, CoolStuffInc, Star City Games, and TCG Bulk offer real quotes only after you build a cart on their site. Our ratios are honest averages; verify the exact number before shipping cards.</li>
-    <li><strong>Cashout timing is not baked into net payout.</strong> COMC 2–6 wk intake, Fanatics vault dwell, Cardsphere 10% PayPal cashout — these are surfaced as red flags on each tile but they don't reduce the dollar number.</li>
-    <li><strong>Sports-card sold comps depend on eBay availability.</strong> If eBay's Marketplace Insights API rate-limits us (403s from Vercel IPs happen), we fall back to sparser data. We flag this in the UI when it happens.</li>
+    <li><strong>Buylist quotes are estimated, not live.</strong> Card Kingdom, CoolStuffInc, Star City Games, and TCG Bulk offer real quotes only after you build a cart on their site. Our ratios are modelling assumptions, not measured averages or current buyer quotes; verify the exact offer before shipping cards.</li>
+    <li><strong>Waiting time is not a dollar deduction.</strong> Intake delays and payout timing matter even when estimated cash-out fees are already included. Read the fee breakdown and venue requirements.</li>
+    <li><strong>Sports pricing may need manual research.</strong> Automatic eBay sold records are currently unavailable. Where a guide price is available it is labelled separately; otherwise inspect marketplace results and enter your own checked value.</li>
     <li><strong>Cardmarket international shipping</strong> from a US seller is not modeled — you have to add that to your "Your shipping cost" field yourself.</li>
     <li><strong>eBay Top Rated seller discounts</strong> are user-input, not detected. If you toggle it on and you're not actually Top Rated, the number's wrong.</li>
   </ul>
 </div>
 
-<p style="margin-top:2rem;font-size:.82rem;color:var(--text-faint)">If you spot a fee that's out of date or a price that doesn't match a real sold listing, <a href="/contact.html">email us</a> — we log every report and audit the flagged venue within a week.</p>
+<p style="margin-top:2rem;font-size:.82rem;color:var(--text-faint)">If you spot a fee that's out of date or a price that doesn't match a real sold listing, <a href="/contact">email us</a> — include the venue, source link and the difference you found so we can review it.</p>
 
 </main>
 <footer class="site">
-  <a href="/">Home</a> &middot; <a href="/pricing.html">Pricing</a> &middot; <a href="/about.html">About</a> &middot; <a href="/contact.html">Contact</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>
+  <a href="/">Home</a> &middot; <a href="/pricing">Pricing</a> &middot; <a href="/about">About</a> &middot; <a href="/contact">Contact</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>
 </footer>
 </body>
 </html>

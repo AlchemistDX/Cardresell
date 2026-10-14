@@ -1100,7 +1100,7 @@ try {
         !/max\(4 ?(&times;|×) ?Market/.test(accuracy) && !/4(&times;|×) ?Market/.test(accuracy),
         'do not stamp a lie: the code clamps at 3x');
   check('/accuracy states the real 3x clamp',
-        /3 ?(&times;|×) ?Market/.test(accuracy));
+        /3 ?(&times;|×) ?(?:the current )?Market/.test(accuracy));
   check('/accuracy no longer says payout is calculated from High',
         !/Net Payout is calculated against a clamped/.test(accuracy));
   check('/accuracy states payout comes from Market Value',
