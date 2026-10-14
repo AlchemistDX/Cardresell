@@ -173,15 +173,30 @@ eq('Mana Pool marketplace fee is item-only',
 eq('CardNexus 8% bills the order total including shipping',
   sum(feeCardNexus(100, 5)), 8.40);
 
-// COMC cash-out add-on. $100 card, standard raw sub ($0.65), 5% tx = $5.00,
-// $5 ship-in. convertible = 100 - 5 - 5 = 90 -> 10% = 9.00, plus $1 under-$250.
-eq('COMC adds the $1 under-$250 cash-out surcharge',
-  sum(feeCOMC(100, 'standard', false, 'yes')), 0.65 + 5.00 + 5 + 9.00 + 1);
-// A large card clears the $250 threshold: convertible = 1000 - 50 - 5 = 945 -> 94.50, no $1.
-eq('COMC drops the surcharge above $250',
-  sum(feeCOMC(1000, 'standard', false, 'yes')), 0.65 + 50.00 + 5 + 94.50);
-assert('COMC surcharge is absent when not cashing out',
-  !feeCOMC(100, 'standard', false, 'no').some(f => /surcharge/i.test(f.l)));
+// COMC domestic PayPal, withdrawing this sale's credit. Intake was funded
+// upfront and postage is an external expense, so neither reduces sale credit.
+// Official conversion examples charge the $1 in credit before conversion:
+// https://comc.zendesk.com/hc/en-us/articles/4407897214107
+// $100 sale -> $95 credit -> $94 converted -> $84.60 cash, before $5 postage
+// and $0.65 intake already paid. Total return after modeled costs: $78.95.
+eq('COMC cash estimate preserves the full sale-credit base',
+  100 - sum(feeCOMC(100, 'standard', false, 'yes')), 78.95);
+eq('COMC no cash-out retains credit less modeled upfront costs',
+  100 - sum(feeCOMC(100, 'standard', false, 'no')), 89.35);
+eq('COMC large cash-out has no small-withdrawal charge',
+  sum(feeCOMC(1000, 'elite', false, 'yes')), 2 + 50 + 5 + 95);
+assert('COMC small-withdrawal charge is absent when keeping credit',
+  !feeCOMC(100, 'standard', false, 'no').some(f => /cash-out/i.test(f.l)));
+assert('COMC $264 sale clears $250 credit even after external postage',
+  !feeCOMC(264, 'elite', false, 'yes').some(f => /Small cash-out/.test(f.l)));
+assert('COMC $263 sale remains below the small-withdrawal boundary',
+  feeCOMC(263, 'elite', false, 'yes').some(f => /Small cash-out/.test(f.l)));
+for (const [credit, cash] of [[23.23,20],[112.12,100],[444.45,400],[1111.12,1000]]) {
+  const deductions = feeCOMC(credit / 0.95, 'elite', false, 'yes')
+    .filter(f => /cash-out/i.test(f.l)).reduce((n,f) => n + f.a, 0);
+  assert(`COMC published ${credit} credit conversion agrees within one cent`,
+    Math.abs(credit - deductions - cash) < 0.01);
+}
 
 // Legacy-call safety for the newly two-arg functions.
 assert('feeWhatnot tolerates missing shipCharge', Number.isFinite(sum(feeWhatnot(100))));
