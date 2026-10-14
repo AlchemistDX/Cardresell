@@ -15,6 +15,7 @@ function gradeLabelFor(grade) {
 }
 import { gradeWithXimilar } from './_ximilar_grade.js';
 import { observeProviderAttempt } from './_providerUsage.js';
+import { observeDeepGradeSettlement } from './_gradeSettlement.js';
 import { getUserTier, TIER_BENEFITS, isPaidTier } from './_tier.js';
 import { newIdReceipt, idEntitlement, idBilling, offerIdConfirmation, idBillingFailure, claimIdRetry,
   membershipRouteMode, membershipBilling, publishMembershipScan, membershipBalances } from './_membershipRouteBilling.js';
@@ -2318,8 +2319,8 @@ Respond ONLY with valid JSON, no explanation:
               edges:     xg.cv?.edges || [],
             };
           }
-        } catch(e) {
-          console.warn('[scan] ximilar-grader threw, keeping GPT sub-grades:', e?.message || e);
+        } catch {
+          console.warn('[scan] ximilar-grader threw, keeping GPT sub-grades');
         }
       }
       // Deep Grade without a completed CV step is a Quick Grade equivalent.
@@ -2328,7 +2329,9 @@ Respond ONLY with valid JSON, no explanation:
         try {
           const settled = await settleDeepGradeWithoutCv();
           cvDowngrade = { credits_charged: settled.charged, credits_refunded: settled.refunded };
+          observeDeepGradeSettlement({ membershipV2, charged: settled.charged, refunded: settled.refunded });
         } catch {
+          observeDeepGradeSettlement({ membershipV2, reconciliationRequired: true });
           return res.status(503).json({ code: 'billing_reconciliation_required',
             error: `We could not confirm your credit adjustment. Please contact will@cardresell.org before starting another scan. Billing reference: ${gradeBillingContext.receipt}`,
             billing_reference: gradeBillingContext.receipt });

@@ -107,6 +107,7 @@ export async function gradeAsync(imgs, apiToken, observe = () => {}, opts = {}) 
   console.log('[scan] ximilar-grader job submitted', jobId);
 
   let status = submitted.data?.status || 'CREATED', job = submitted.data, polls = 0;
+  observe({ jobStatus: status, polls });
   if (status !== 'DONE') await wait(Math.min(FIRST_POLL_DELAY_MS, Math.max(0, left() - 1000)));
   while (status !== 'DONE') {
     if (!['CREATED', 'PROCESSING', 'PENDING', 'QUEUED'].includes(status)) {
@@ -118,6 +119,8 @@ export async function gradeAsync(imgs, apiToken, observe = () => {}, opts = {}) 
     try {
       polled = await timedJson(XIMILAR_ASYNC_SUBMIT_URL + encodeURIComponent(jobId), { method: 'GET', headers }, left(), fetchImpl);
     } catch { polled = null; } // transient poll failure: keep polling within budget
+    observe({ pollStatus: polled?.status ?? null, polls });
+    if (polled?.ok && !polled.parseError && polled.data) observe({ jobStatus: polled.data.status ?? null });
     if (polled?.ok && !polled.parseError && polled.data) { job = polled.data; status = job.status; }
     else if (polled && [401, 403, 404].includes(polled.status)) return { ok: false, reason: `poll_http_${polled.status}`, jobId };
     if (status !== 'DONE') await wait(Math.min(POLL_INTERVAL_MS, Math.max(0, left() - 1000)));
