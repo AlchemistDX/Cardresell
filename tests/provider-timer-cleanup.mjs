@@ -55,6 +55,59 @@ try {
   assert.equal(observations.at(-1).poll_http_status, null);
   cases += 2;
 
+  // Exercise the real recognition request and decision boundary together. The
+  // rotation option must not add a retry or relax uncertain-match handling.
+  const identityCases = [
+    { label: 'TCG high confidence', kind: 'tcg', mode: 'identify', distances: [0.34, 0.8], expected: 'high' },
+    { label: 'TCG high boundary', kind: 'tcg', mode: 'identify', distances: [0.35, 0.8], expected: 'medium' },
+    { label: 'TCG medium', kind: 'tcg', mode: 'identify', distances: [0.549, 0.9], expected: 'medium' },
+    { label: 'TCG close alternatives', kind: 'tcg', mode: 'identify', distances: [0.2, 0.21], expected: 'picker' },
+    { label: 'TCG reject boundary', kind: 'tcg', mode: 'identify', distances: [0.55, 0.9], expected: 'miss' },
+    { label: 'TCG weak match', kind: 'tcg', mode: 'identify', distances: [0.8, 0.9], expected: 'miss' },
+    { label: 'TCG absent distance', kind: 'tcg', mode: 'identify', distances: [], expected: 'miss' },
+    { label: 'TCG during Quick Grade', kind: 'tcg', mode: 'grade', distances: [0.2, 0.8], expected: 'high' },
+    { label: 'TCG during Deep Grade', kind: 'tcg', mode: 'deep_grade', distances: [0.2, 0.8], expected: 'high' },
+    { label: 'sports identification', kind: 'sport', mode: 'identify', distances: [0.2, 0.8], expected: 'high' },
+    { label: 'sports during grading', kind: 'sport', mode: 'grade', distances: [0.2, 0.8], expected: 'high' },
+  ];
+  for (const fixture of identityCases) {
+    const requests = [];
+    const before = observations.length;
+    globalThis.fetch = async (url, options) => {
+      requests.push({ url, options });
+      return { ok: true, status: 200, json: async () => ({ records: [{ _objects: [{
+        _identification: {
+          best_match: { name: 'Minun' }, alternatives: [{ name: 'Plusle' }], distances: fixture.distances,
+        },
+      }] }] }) };
+    };
+    const result = await identifyWithXimilar('unchanged-image-fixture', 'image/jpeg', 'fixture', fixture.kind, fixture.mode);
+    assert.equal(requests.length, 1, `${fixture.label}: only one provider request`);
+    assert.equal(requests[0].url, `https://api.ximilar.com/collectibles/v2/${fixture.kind}_id`);
+    assert.equal(requests[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(requests[0].options.body), {
+      records: [{ _base64: 'unchanged-image-fixture' }], ...(fixture.kind === 'tcg' ? { rotate: true } : {}),
+    }, `${fixture.label}: preserve image, enable only the documented TCG option`);
+    assert.equal(observations.length, before + 1);
+    assert.equal(observations.at(-1).operation, `${fixture.kind}_id`);
+    assert.equal(observations.at(-1).mode, fixture.mode);
+    assert.equal(observations.at(-1).outcome, fixture.expected === 'miss' ? 'failure' : 'success');
+    if (fixture.expected === 'miss') {
+      assert.equal(result.ok, false, fixture.label);
+      assert.equal(result.reason, 'low_confidence', fixture.label);
+      assert.equal(result.cardInfo, undefined, fixture.label);
+    } else if (fixture.expected === 'picker') {
+      assert.equal(result.ok, true);
+      assert.equal(result.needsPicker, true, fixture.label);
+      assert.deepEqual(result.candidates.map(c => c.card_name), ['Minun', 'Plusle']);
+    } else {
+      assert.equal(result.ok, true, fixture.label);
+      assert.equal(result.needsPicker, undefined, fixture.label);
+      assert.equal(result.cardInfo.confidence, fixture.expected, fixture.label);
+    }
+    cases++;
+  }
+
   // Exercise the real shipped OpenAI attempt function, with only its network
   // boundary replaced. Each paid fallback must retain its own usage record.
   const scan = readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');

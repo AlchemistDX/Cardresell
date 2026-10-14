@@ -1,9 +1,8 @@
 import { observeProviderAttempt } from './_providerUsage.js';
 // _ximilar.js — Ximilar Collectibles Recognition wrapper.
 //
-// Purpose-built purpose: return a cardInfo-shaped object (same fields as
-// scan.js's GPT-5 result) so callers can use it as a drop-in replacement.
-// Falls back to null on any error/no-match so caller can chain to GPT.
+// Returns a cardInfo-shaped result or an explicit failure reason. Identification
+// callers surface misses without substituting an ungrounded card guess.
 //
 // Endpoints used:
 //   POST https://api.ximilar.com/collectibles/v2/tcg_id     — TCG (Pokemon, MTG, Yugioh, Lorcana, OP)
@@ -16,7 +15,7 @@ import { observeProviderAttempt } from './_providerUsage.js';
 // Distance thresholds (Ximilar returns 0..1+, lower = more similar):
 //   < 0.35 → very confident, single answer
 //   < 0.55 → confident, but if 2nd candidate is also close return picker
-//   >= 0.55 → not confident enough, let GPT try
+//   >= 0.55 → not confident enough, return a miss
 const DIST_HIGH_CONF      = 0.35;
 const DIST_MEDIUM_CONF    = 0.55;
 const DIST_GAP_FOR_SINGLE = 0.15; // 2nd must be at least this far from 1st for single-answer
@@ -35,17 +34,19 @@ const DIST_GAP_FOR_SINGLE = 0.15; // 2nd must be at least this far from 1st for 
 export async function identifyWithXimilar(imageBase64, mime, apiToken, kind = 'tcg', mode = 'identify') {
   if (!apiToken || !imageBase64) return { ok: false, reason: 'missing_input' };
   return observeProviderAttempt({ provider: 'ximilar', operation: kind === 'sport' ? 'sport_id' : 'tcg_id', mode, inputImages: 1 },
-    observe => identify(imageBase64, mime, apiToken, kind, observe));
+    observe => identify(imageBase64, apiToken, kind, observe));
 }
 
-async function identify(imageBase64, mime, apiToken, kind, observe) {
+async function identify(imageBase64, apiToken, kind, observe) {
 
   const url = kind === 'sport'
     ? 'https://api.ximilar.com/collectibles/v2/sport_id'
     : 'https://api.ximilar.com/collectibles/v2/tcg_id';
 
-  const dataUrl = `data:${mime || 'image/jpeg'};base64,${imageBase64}`;
   const body = { records: [{ _base64: imageBase64 }] };
+  // TCG rotation correction defaults off. Ask the same identification request to
+  // orient the detected card; keep sports on its separately documented options.
+  if (kind !== 'sport') body.rotate = true;
 
   // Ximilar accepts either `_base64` or `_url`. Use base64 since the client
   // uploaded the image directly and we haven't stored it anywhere public.
@@ -169,7 +170,7 @@ async function identify(imageBase64, mime, apiToken, kind, observe) {
     };
   }
 
-  // Too uncertain — let GPT handle it
+  // Too uncertain — preserve the miss instead of presenting a weak guess.
   return { ok: false, reason: 'low_confidence', distance: dBest };
 }
 
