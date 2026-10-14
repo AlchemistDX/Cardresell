@@ -467,9 +467,9 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'catalogue does not advertise dormant storage or listing quantities');
   ok(!/eBay, COMC, Fanatics Collect &amp; more/.test(idx),
      'homepage feature blurb no longer promises COMC/Fanatics on Free');
-  ok(/eBay, TCGplayer, Whatnot &amp; more/.test(idx),
+  ok(/Start with eBay \+ TCGplayer free/.test(idx),
      'homepage feature blurb names venues Free actually sees');
-  ok(/Check Subscriptions for current plan details/.test(idx),
+  ok(/href="\/pricing.html">Compare plans<\/a>/.test(idx),
      'home upsell refers to the current catalogue rather than retired tier bundles');
 
   // Issue 4 - Ultimate removed from every user-facing surface
