@@ -364,7 +364,7 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
 // -- Issues 1/2/3/4/5 (2026-09-01) ----------------------------------------
 {
   // Issue 1 - accuracy stamp and changelog
-  const ac = fs.readFileSync('accuracy.html','utf8');
+  const ac = fs.readFileSync('accuracy.html','utf8') + fs.readFileSync('changelog.html','utf8');
   // The header date must be well-formed AND must equal the newest changelog
   // entry. Pinning one literal date made this fail on every honest re-audit;
   // the real invariant is that the stamp can't drift from the log that
@@ -469,7 +469,7 @@ ok(/autoRunExampleCard\(\)\.then\(\(ok\) => \{[\s\S]{0,600}classList\.add\('firs
      'homepage feature blurb no longer promises COMC/Fanatics on Free');
   ok(/Start with eBay \+ TCGplayer free/.test(idx),
      'homepage feature blurb names venues Free actually sees');
-  ok(/href="\/pricing.html">Compare plans<\/a>/.test(idx),
+  ok(/href="\/pricing">Compare plans<\/a>/.test(idx),
      'home upsell refers to the current catalogue rather than retired tier bundles');
 
   // Issue 4 - Ultimate removed from every user-facing surface

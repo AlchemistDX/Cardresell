@@ -687,7 +687,7 @@ console.log('\n[Quick Pricing — wiring]');
 
   // Sell Now / Comp / Patient survive, relabelled.
   check('Q7: the three suggestions are still offered',
-        /label:'Sell Now'/.test(core) && /label:'Comp'/.test(core) && /label:'Patient'/.test(core),
+        /label:'Sell Now −15%'/.test(core) && /label:'Comp'/.test(core) && /label:'Patient \+15%'/.test(core),
         'option (iii) keeps them -- it changes what they are called');
   check('Q7: they are labelled calculated suggestions, not estimates of a market',
         (core.match(/calculated suggestion/g) || []).length >= 2,

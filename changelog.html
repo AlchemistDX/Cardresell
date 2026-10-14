@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="apple-touch-icon" href="/assets/brand/cardresell-mark-180.png">
+  <meta name="theme-color" content="#111009">
+<title>Changelog · CardResell</title>
+<meta name="description" content="Dated product changes, fee reviews and technical history for CardResell.">
+<link rel="canonical" href="https://www.cardresell.org/changelog">
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.cardresell.org/changelog">
+<meta property="og:title" content="CardResell product changelog">
+<meta property="og:description" content="Dated product changes, fee reviews and technical history for CardResell.">
+<meta property="og:site_name" content="CardResell">
+<meta property="og:image" content="https://www.cardresell.org/og-image.png">
+<meta property="og:image:alt" content="CardResell — net payout across 18 selling venues, after fees">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="CardResell product changelog">
+<meta name="twitter:description" content="Dated product changes, fee reviews and technical history for CardResell.">
+<meta name="twitter:image" content="https://www.cardresell.org/og-image.png">
+<link rel="icon" href="/assets/brand/cardresell-mark-32.png" type="image/png">
+<style>
+:root{--bg:#0a0a0b;--surface:#141416;--surface-2:#1c1c1f;--border:#2a2a2e;--text:#eee;--text-muted:#a1a1aa;--text-faint:#71717a;--gold:#c47a00;--gold-hi:rgba(196,122,0,.14);--green:#4ade80;--red:#f87171;--radius-md:8px;--radius-xl:14px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;font-size:15px}
+a{color:var(--gold);text-decoration:none}
+a:hover{text-decoration:underline}
+header.site{position:sticky;top:0;background:rgba(10,10,11,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;z-index:10}
+header.site .brand{font-weight:800;letter-spacing:-.02em;font-size:1.05rem;color:var(--text)}
+header.site .brand span{color:var(--gold)}
+header.site nav a{margin-left:1rem;color:var(--text-muted);font-size:.85rem;font-weight:600}
+header.site nav a:hover{color:var(--text);text-decoration:none}
+main{max-width:820px;margin:0 auto;padding:2rem 1.25rem 3rem}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:0 0 .35rem}
+.updated{color:var(--text-faint);font-size:.78rem;margin-bottom:1.75rem;display:block}
+h2{font-size:1.2rem;font-weight:800;letter-spacing:-.01em;margin:2.4rem 0 .5rem;color:var(--text);scroll-margin-top:5rem}
+h3{font-size:.98rem;font-weight:700;margin:1.4rem 0 .35rem;color:var(--text)}
+p,ul,ol{color:var(--text-muted);margin:.55rem 0}
+li{margin:.25rem 0}
+strong{color:var(--text)}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.85em;background:var(--surface-2);padding:.05em .35em;border-radius:4px;color:var(--text)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:1.25rem 1.5rem;margin-top:1rem}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin:1rem 0}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1rem}
+.stat-num{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:1.35rem;font-weight:600;color:var(--gold);letter-spacing:-.02em}
+.stat-lab{font-size:.72rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-top:.2rem}
+.methodology-box{background:var(--surface);border-left:3px solid var(--gold);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:.9rem 0}
+.methodology-box p:first-child{margin-top:0}
+.methodology-box p:last-child{margin-bottom:0}
+table.fee-table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.85rem}
+table.fee-table th,table.fee-table td{border-bottom:1px solid var(--border);padding:.55rem .5rem;text-align:left}
+table.fee-table th{color:var(--text-faint);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em}
+table.fee-table td{color:var(--text-muted)}
+table.fee-table td:first-child{color:var(--text);font-weight:600}
+.pill-verified{display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;color:var(--green);background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.28);border-radius:99px;padding:.1rem .5rem;white-space:nowrap}
+.pill-stale{display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;color:#f59e0b;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.32);border-radius:99px;padding:.1rem .5rem;white-space:nowrap;margin-left:.35rem}
+.changelog{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:1rem 0}
+.changelog-title{font-size:.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:.6rem}
+.changelog-entry{border-left:2px solid var(--gold);padding:.15rem 0 .15rem .75rem;margin:.55rem 0;font-size:.85rem;color:var(--text-muted)}
+.changelog-entry strong{color:var(--text);font-weight:600}
+.changelog-date{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.72rem;color:var(--text-faint);letter-spacing:.02em;text-transform:uppercase;font-weight:700;display:inline-block;min-width:5.5rem;margin-right:.35rem}
+.limits{background:rgba(248,113,113,.05);border:1px solid rgba(248,113,113,.2);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:.9rem 0}
+.limits strong{color:var(--red)}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.85rem 1.1rem;margin:1.25rem 0;font-size:.88rem}
+.toc-title{font-size:.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:.5rem}
+.toc a{display:inline-block;color:var(--text-muted);margin-right:1rem;padding:.15rem 0;font-weight:600}
+.toc a:hover{color:var(--gold)}
+footer.site{border-top:1px solid var(--border);padding:1rem;text-align:center;font-size:.75rem;color:var(--text-faint)}
+footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
+</style>
+<link rel="stylesheet" href="/assets/brand-ui.535d636a.css">
+</head>
+<body>
+<header class="site">
+  <a class="brand brand-lockup" href="/"><img class="brand-mark" src="/assets/brand/cardresell-mark-128.webp" width="36" height="36" alt=""><span>Card<span>Resell</span></span></a>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
+  </nav>
+</header>
+<main><h1>Product changelog</h1><p>Dated changes and technical history. For current methods and limitations, read <a href="/accuracy">Accuracy &amp; Methodology</a>.</p><div class="changelog" id="changelog">
+  <div class="changelog-title">Changelog · newest first</div>
+<div class="changelog-entry"><span class="changelog-date">Oct 13, 2026</span><strong>Public review corrections and fee refresh.</strong> Cardsphere, Card Kingdom, Star City Games, CardNexus and TCG Bulk were re-read against their published schedules; model rates are unchanged. Cardmarket blocked retrieval and CoolStuffInc returned general shop content, so both retain Sep 1 dates pending confirmation. Clarified 15 ranked fee models plus 3 bulk selling options, corrected provider attribution and purchase availability, and moved technical history here. Fee verification does not validate card values or buylist assumptions.</div>
+
+  <div class="changelog-entry"><span class="changelog-date">Oct 13, 2026</span><strong>Three bulk selling options added.</strong> Full Grip Games and Meta TCG cover eligible English Pokémon bulk; Card Conduit Standard covers Magic shipments. These require a whole-stack cash quote or assessed buylist value, known shipping and extra deductions. No bulk offer is inferred from a retail price. Card Conduit Standard includes 10% plus $0.03 per card. Source rules were checked on public pages, not verified directly by these companies.</div>
+  <div class="changelog-entry"><span class="changelog-date">Oct 11, 2026</span><strong>eBay, TCGplayer, COMC, Fanatics&nbsp;Collect, Whatnot, Mercari, Poshmark and Mana&nbsp;Pool re-verified.</strong> Each was re-read against its own published fee pages. One correction shipped: Poshmark's terms charge the $2.95 flat fee on sales of $15 <em>and under</em>, so a sale of exactly $15.00 now pays $2.95 rather than 20%. Whatnot moved to sales-volume tiers on Sep 21, 2026; its base tier is still 8%, and its published schedule still lists 0% on the portion over $1,500 for trading cards (limited time), so the estimate is unchanged. Lower tiers for high-volume Whatnot sellers are not modelled, so the estimate errs high on fees for them. Cardsphere, Cardmarket, Card&nbsp;Kingdom, CoolStuffInc, Star&nbsp;City&nbsp;Games, CardNexus and TCG&nbsp;Bulk were not re-read in this pass and keep their Sep 1 dates. Each fee breakdown now also says how many days ago its schedule was read, and has a &ldquo;Report a fee problem&rdquo; link.</div>
+  <div class="changelog-entry"><span class="changelog-date">Oct 8, 2026</span><strong>Photo estimates and catalogue limits.</strong> Quick and Deep Grade are photo-based screening estimates, not professional grades or a calibrated accuracy guarantee. Deep Grade uses additional edge photos. If its computer-vision step is unavailable but a usable Quick assessment completes, the result is labelled and billed as Quick Grade. Camera focus and glare hints are advisory; review the photos yourself. This update does not re-verify the marketplace fee schedules below.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 8, 2026</span><strong>The sales-tax caveat reached one venue out of fifteen. It now reaches nine.</strong> The fee breakdown carries a &ldquo;Buyer sales tax &mdash; not estimated&rdquo; row, because on some venues the fee is charged on a base that includes tax the buyer paid and you never receive. That row was hardcoded inside the eBay fee function, so it appeared on eBay and nowhere else &mdash; not because the other fourteen venues had been cleared, but because there was no per-venue value to leave blank. Every venue now records both the answer and <em>how the answer was established</em>, and the two are kept apart on purpose: a page that says &ldquo;item price plus shipping&rdquo; is a confirmed zero, a page that never mentions tax is not. <strong>2 venues are confirmed tax-inclusive, 6 are confirmed zero, 7 are unknown</strong>, and unknown shows the caveat rather than hiding behind it. The correction we are least proud of is <strong>Whatnot</strong>: its commission excludes tax, which we read and recorded as a zero &mdash; three paragraphs later the same page states that its payment processing fee is charged on the total order value <em>including buyer-paid tax</em>. We still model no tax rate anywhere; the gap is disclosed, not guessed. Full working, with source quotes, is in the tax table below.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 7, 2026</span><strong>Verification stamps became real dates, and two disclosures were corrected.</strong> The stamps were month strings ("Sep&nbsp;2026") and their age was measured from the <em>last</em> day of that month, which always rounded toward fresh and could hide up to 29 days of age. A stamp dated in the future was worse: its age was clamped to zero, so it read as permanently verified. Stamps are now the actual date each schedule was read &mdash; <strong>Sep&nbsp;1,&nbsp;2026</strong>, the date of the full audit &mdash; and a missing, unparseable or future date now reads as <strong>not verified</strong> rather than as fresh. The pill also now says <strong>&ldquo;Fee schedule verified&rdquo;</strong> so it cannot be mistaken for a verified price. Separately: the fee note used to read &ldquo;fees are charged on the item price only&rdquo;, which describes our estimate but states it as eBay's rule &mdash; eBay charges on the total sale including buyer-paid shipping and sales tax, so our estimate can run low, and the note now says so. The unmodelled buyer-sales-tax row showed <strong>$0.00</strong>; an unknown amount is not zero, so it now shows an em dash.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 2, 2026</span><strong>Poshmark, COMC and Fanatics&nbsp;Collect re-read again; no rate moved.</strong> Poshmark still charges <strong>$2.95 flat under $15 and 20% at $15+</strong>. COMC per-card intake still runs <strong>$0.65&ndash;$2.50</strong> across Standard/Select/Elite (raw and graded; odd-sized items run to $5), and cash-out is still <strong>10% plus $1 when converting under $250</strong>, $5 for a US check and $15 outside the US. Fanatics&nbsp;Collect Buy&nbsp;Now is still <strong>6% below 120% of Card&nbsp;Ladder market value and 12% at or above</strong> &mdash; we re-checked because a flat 8% is widely repeated second-hand, and it is wrong. New disclosure this pass: Fanatics now offers eligible US sellers a <strong>FanCash payout at 0% marketplace seller fee</strong> on both Buy&nbsp;Now and auctions. We do not model it in Net payout because it pays in store credit rather than cash, and vault fees still apply &mdash; it is now noted on the Fanatics row instead.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Poshmark, COMC and Fanatics&nbsp;Collect re-verified.</strong> Re-read against each venue's own published schedule; no rate changed, so only the verification stamps moved to Sep&nbsp;2026. Poshmark remains $2.95 under $15 and 20% at $15+. COMC remains per-card intake plus a 5% transaction fee, with the 10% cash-out optional. Fanatics&nbsp;Collect Buy&nbsp;Now remains tiered against Card&nbsp;Ladder market value &mdash; <strong>6% below 120%, 12% at or above</strong>, not a flat 8% &mdash; and its auctions remain 0% seller with a 20% buyer premium. Tier contents restated to match the app: <strong>Pro = 9 venues, Pro&nbsp;Max adds 4 buylists</strong>.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Terms &amp; Privacy rewritten.</strong> Florida venue and governing law, and a refund policy limited to failed scans. <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a></div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Full 15-venue fee audit + cross-border disclosure.</strong> Every venue was re-read against its own published fee schedule, terms and help center. Corrections shipped: Whatnot's commission bills the item only while its 2.9% + $0.30 bills the whole order including shipping; Mana Pool's 5% excludes shipping but its card processing does not; CardNexus's 8% bills the order total, not just the item; COMC adds $1 when you cash out under $250; TCG&nbsp;Bulk charges a 10% service fee and Star&nbsp;City&nbsp;Games charges 10% on Ship&nbsp;+&nbsp;Sell. Separately, every venue now shows its operator country, payout currency and what selling across a border actually costs &mdash; including on locked rows. <strong>Cardmarket is a German company and CardNexus is a French one</strong>; both are now labelled as foreign venues rather than presented as if they were domestic.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Stale-fee guardrail.</strong> Two thresholds, not one. A venue re-verified 31&ndash;45 days ago keeps its <strong>Verified</strong> label but turns amber, so you can see the clock running. Past <strong>45 days</strong> it changes to a <span class="pill-stale">• Stale</span> pill, and a stale venue cannot rank #1 in the payout list while any freshly verified venue remains. If every venue becomes stale, CardResell labels the ranking as reference-only rather than presenting a stale winner as current. As of the Sep&nbsp;1,&nbsp;2026 full audit below, no venue is stale.</div>
+  <div class="changelog-entry"><span class="changelog-date">Sep 1, 2026</span><strong>Changelog started.</strong> We're now dating every accuracy-affecting change on this page, newest first, so you can see exactly what moved and when.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 31, 2026</span><strong>TCGplayer and eBay fee corrections.</strong> TCGplayer commission corrected 10.25% &rarr; <strong>10.75%</strong>, plus 2.5% + $0.30 payment processing, both charged on item&nbsp;+&nbsp;shipping, capped at $75/item. eBay's final value fee confirmed to apply to the <strong>whole order &mdash; item + shipping + tax</strong> &mdash; not the item alone, with a per-order charge of $0.30 at or below $10 and $0.40 above.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 30, 2026</span><strong>eBay + TCGplayer + Whatnot + Mercari + Mana Pool + Cardsphere + Cardmarket + SCG + Card Kingdom + CoolStuffInc + CardNexus + TCG Bulk fees re-verified</strong> against each venue's official help pages. No fee changes detected; verification stamps refreshed to Aug 2026.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>High-price clamp.</strong> When a feed's raw High comes back above 3 &times; Market (or 3 &times; Mid when Market is missing), the displayed High is capped at that anchor and the original is kept as <code>highRaw</code>. High is display context only &mdash; Net Payout is calculated from Market Value.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>PriceCharting wins over TCGplayer</strong> for graded values (PSA 10, PSA 9, BGS, CGC, SGC, TAG). PriceCharting samples eBay sold comps directly and matched hand-audited reality more often. Backed by a 3-attempt retry, 12s timeout, and 60s error cache.</div>
+  <div class="changelog-entry"><span class="changelog-date">Aug 2026</span><strong>Grade-switch race protection.</strong> Added a <code>_syncGen</code> generation guard so rapid PSA 10 &rarr; PSA 9 &rarr; BGS 10 flips can't leave a stale grade result on screen.</div>
+</div>
+
+</main>
+<footer class="site">
+  <a href="/">Home</a> &middot; <a href="/pricing">Pricing</a> &middot; <a href="/about">About</a> &middot; <a href="/contact">Contact</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>
+</footer>
+</body>
+</html>

@@ -2054,15 +2054,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
     <!-- Credit balances row -->
     <div id="settingsScanCredits" style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-bottom:.75rem">
-      <!-- Card Grader Credits -->
+      <!-- Card Grade credits -->
       <div style="padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
-        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">Grader Credits</div>
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">Grade credits</div>
         <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="settingsScanCount">—</div>
         <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="settingsScanSub">Sign in to check</div>
       </div>
-      <!-- ID Scanner Credits -->
+      <!-- ID credits -->
       <div style="padding:.55rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md)">
-        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">ID Scanner Credits</div>
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.2rem">ID credits</div>
         <div style="font-size:.95rem;font-weight:800;color:var(--text)" id="idScanCount">—</div>
         <div style="font-size:.62rem;color:var(--text-muted);margin-top:.1rem" id="idScanSub">Sign in to check</div>
       </div>
@@ -2228,7 +2228,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div class="sgc-headline" id="scanGradeCTAHeadline">Worth grading? Submit now.</div>
       <div class="sgc-sub">Compare expected resale value with grading fees before submitting.</div>
       <!-- AI Grading Estimate CTA -->
-      <button onclick="window._openGradeAfterScan=true;cancelScan()" style="width:100%;margin-bottom:.6rem;padding:.65rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:800;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">&#11088; Ai Grading Estimate &mdash; Know before you submit</button>
+      <button onclick="window._openGradeAfterScan=true;cancelScan()" style="width:100%;margin-bottom:.6rem;padding:.65rem 1rem;background:var(--gold);color:#000;border:none;border-radius:10px;font-weight:800;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem">&#11088; AI Grading Estimate &mdash; Know before you submit</button>
       <div class="sgc-btns" id="scanGradeCTABtns">
         <a href="https://www.psacard.com/submit" id="sgcPSABtn" target="_blank" rel="noopener" class="grade-cta-btn psa">&#127942; PSA</a>
         <a href="https://www.cgccards.com/submit/" id="sgcCGCBtn" target="_blank" rel="noopener" class="grade-cta-btn cgc">&#127942; CGC</a>
@@ -2277,7 +2277,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <div id="landingHero" class="welcome-summary">
   <div class="welcome-kicker">Your cards. Your next move.</div>
   <h2>Know what you could keep after selling.</h2>
-  <p>Compare estimated fees and payouts across 18 selling venues. Start with eBay + TCGplayer free. <a href="/pricing.html">Compare plans</a>.</p>
+  <p>Compare estimated fees and payouts across 18 selling venues. Start with eBay + TCGplayer free. <a href="/pricing">Compare plans</a>.</p>
   <div class="welcome-benefits"><span>Free card lookup</span><span>No account needed to search</span><span>Singles &amp; bulk options</span></div>
 </div>
 <div id="signInNudge" class="welcome-signin" style="display:none">
@@ -2293,7 +2293,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <!-- SCAN GUARANTEE LINE — subtle, appears once under social proof -->
 <div id="scanGuaranteeBar" style="padding:.35rem 1rem;text-align:center;font-size:.68rem;color:rgba(255,255,255,.42);letter-spacing:.01em;line-height:1.35;background:rgba(0,0,0,.15);border-bottom:1px solid rgba(255,255,255,.04)">
-  <span style="color:rgba(74,222,128,.75)">✓</span> Scanner can't ID your card? Eligible failed scans receive a credit refund — automatic or one-tap.  <a href="/terms.html#refunds" style="color:rgba(74,222,128,.75);text-decoration:underline;text-underline-offset:2px">Details</a>
+  <span style="color:rgba(74,222,128,.75)">✓</span> Scanner can't ID your card? Eligible failed scans receive a credit refund — automatic or one-tap.  <a href="/terms#refunds" style="color:rgba(74,222,128,.75);text-decoration:underline;text-underline-offset:2px">Details</a>
 </div>
 
 
@@ -2889,7 +2889,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <li><span class="welcome-step-number" aria-hidden="true">3</span><div><h3>Choose your next move</h3><p>Sell a single, group lower-value cards, or save them to Collection.</p></div></li>
       </ol>
       <div class="welcome-bulk"><div><strong>Working through a stack or binder?</strong><p>Scan multiple cards and adjust only what needs correcting.</p></div><button type="button" onclick="openScanMenuOnTab('id')">Scan your cards <span aria-hidden="true">→</span></button></div>
-      <p class="welcome-source-note">Price references vary by card. eBay sold comps are available when eBay serves them. <a href="/accuracy.html">How estimates work</a></p>
+      <p class="welcome-source-note">Price references vary by card. eBay sold comps are available when eBay serves them. <a href="/accuracy">How estimates work</a></p>
       <div id="introTodayBadge" class="welcome-activity" style="display:none"><span id="introTodayCount">0</span> cards searched today</div>
     </section>
   </div>
@@ -3211,7 +3211,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div class="scan-gate-options" id="scanGateIdentifySection">
       <div class="scan-gate-opt" onclick="handleScanOption('pay')">
         <div class="scan-gate-opt-info">
-          <div class="scan-gate-opt-name" id="scanGateOptName">Buy ID Scanner Credits</div>
+          <div class="scan-gate-opt-name" id="scanGateOptName">Buy ID credits</div>
           <div class="scan-gate-opt-desc" id="scanGateOptDesc">Card name &middot; Set &middot; Live prices</div>
         </div>
         <div class="scan-gate-opt-price" id="scanGateOptPrice">See packs</div>
@@ -3596,8 +3596,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     Bradenton, FL &middot;
     <a href="/pricing" target="_blank" rel="noopener">Pricing</a> &middot;
     <a href="/accuracy" target="_blank" rel="noopener">Accuracy</a> &middot;
-    <a href="/about.html" target="_blank" rel="noopener">About</a> &middot;
-    <a href="/contact.html" target="_blank" rel="noopener">Contact</a> &middot;
+    <a href="/changelog" target="_blank" rel="noopener">Changelog</a> &middot;
+    <a href="/about" target="_blank" rel="noopener">About</a> &middot;
+    <a href="/contact" target="_blank" rel="noopener">Contact</a> &middot;
     <a href="/terms" target="_blank" rel="noopener">Terms</a> &middot;
     <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
     <span style="margin-left:.75rem;font-size:.68rem;color:var(--text-faint)">⚠️ Some sell buttons are affiliate links — we may earn a small commission at no cost to you.</span>
@@ -3606,7 +3607,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <a href="https://tcgpricelookup.com" target="_blank" rel="noopener">TCG Price Lookup</a> (multi-game prices),
   <a href="https://www.ebay.com/b/Japanese-Pokemon-Cards/183454" target="_blank" rel="noopener">eBay JP</a> (Japanese Pokémon),
   <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a> (Magic),
-  <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a> (Yu-Gi-Oh!).
+  <a href="https://ygoprodeck.com" target="_blank" rel="noopener">YGOProDeck</a> (Yu-Gi-Oh!),
+  <a href="https://tcgcsv.com/" target="_blank" rel="noopener">TCGcsv</a> (TCGplayer data),
+  <a href="https://www.pricecharting.com/" target="_blank" rel="noopener">PriceCharting</a> and
+  <a href="https://www.sportscardspro.com/" target="_blank" rel="noopener">SportsCardsPro</a> (reference values).
   Platform fees from official sources (2026):
   <a href="https://www.ebay.com/help/selling/fees-credits-invoices/selling-fees" target="_blank" rel="noopener">eBay</a> ·
   <a href="https://help.tcgplayer.com/hc/en-us/articles/201357836-TCGplayer-Fees" target="_blank" rel="noopener">TCGplayer</a> ·
@@ -3919,7 +3923,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.f17a14ef.js"></script>
-<script defer src="/js/core.5b6c0ca9.js"></script>
+<script defer src="/js/core.358440b9.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
