@@ -212,8 +212,9 @@ assert('TCGplayer discloses the 3.5% international processing rate', /3\.5% \+ \
 // form's country <select> was read directly: 32 options, all European, no
 // United States. Cardmarket's FAQ says a country absent from that list cannot
 // open an account, so the hedge understated a hard block and is now banned.
-assert('Cardmarket discloses EUR payout and the US registration block',
-  /paid in EUR/.test(cbBlock) &&
+assert('Cardmarket discloses account currencies, modeled conversion and the US registration block',
+  /Account currencies include EUR and GBP/.test(cbBlock) &&
+  /modeled 3% conversion allowance/.test(cbBlock) &&
   /cannot register/.test(cbBlock) &&
   /32 European countries/.test(cbBlock) &&
   !/may not be able to register/.test(cbBlock));
