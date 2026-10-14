@@ -11,6 +11,7 @@ const source=base=>readFileSync(assets.find(a=>a.base===base).path,'utf8');
 function pick(src,names){return parse(src,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)).map(n=>src.slice(n.start,n.end)).join('\n');}
 const core=source('core'),ui=source('ui');
 const funcs=pick(core,['_snapSearchReq','_searchReqStillCurrent','_invalidateCardSearch','doSearch','searchPokemon'])+'\n'+pick(ui,['openSearchModal','openCatalog','closeSearchModal','_renderCatalogFromDrop','_storeCatalogRows','_applyFilters','_makeCatalogGridCell','_makeCatalogRow']);
+const inputHandlers=core.slice(core.indexOf("searchInput.addEventListener('input'"),core.indexOf("document.getElementById('searchBtn').addEventListener"));
 const fixture=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+`<script>
 let activeGame='pokemon',searchTimeout=null,calls=0,picked=null,mode='normal';
 const searchInput=document.getElementById('searchInput'),dropList=document.getElementById('dropList');
@@ -19,7 +20,8 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function injectPokemonImages(){}function attachDropHandlers(factory){dropList.querySelectorAll('.drop-item').forEach(row=>row.onclick=()=>picked=window._searchCards[row.dataset.idx]._tpl.name)}
 async function searchWithTPL(q){calls++;await new Promise(r=>window.finishLookup=r);if(mode==='offline')throw Error('offline');return {cards:[{name:q,number:'025',set:{name:'Test set'},rarity:'Common',prices:{raw:{near_mint:{tcgplayer:{market:2}}}}}]}}
 ${funcs}
-searchInput.addEventListener('input',()=>_invalidateCardSearch());
+function touchListingContext(){}
+${inputHandlers}
 </script>`;
 const server=createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end(fixture)});await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});let checks=0;
@@ -41,5 +43,28 @@ try{for(const width of [390,1280]){
  await page.evaluate(()=>{closeSearchModal();_invalidateCardSearch();dropList.innerHTML='<div class="drop-empty">Live catalog unavailable. No live prices.</div><div class="drop-item" data-idx="0"><div class="drop-name">Local Pikachu</div></div>';window._searchCards={0:{}};document.getElementById('searchResultsModal').style.display='flex';_renderCatalogFromDrop('Pikachu',dropList.querySelectorAll('.drop-item'));_catFilter.number='no-match';_applyFilters();});
  check((await page.locator('#searchModalGrid').textContent()).includes('No live prices'),'fallback disclosure survives filtering');
  if(process.env.CR_SHOT_DIR){mkdirSync(process.env.CR_SHOT_DIR,{recursive:true});await page.screenshot({path:join(process.env.CR_SHOT_DIR,'search-'+width+'.png')});}
+ await page.evaluate(()=>{closeSearchModal();_invalidateCardSearch();mode='normal';});
+ const callsBeforeDismiss=await page.evaluate(()=>calls);
+ await page.locator('#searchInput').fill('Cancelled query');
+ await page.locator('#searchInput').press('Escape');await page.waitForTimeout(230);
+ check(await page.evaluate(()=>calls)===callsBeforeDismiss,'Escape cancels the queued lookup before it contacts a provider');
+ check(await page.locator('#dropList').evaluate(e=>!e.classList.contains('open')),'Escape prevents the delayed dropdown from reopening');
+ await page.locator('#searchInput').fill('Eevee');
+ await page.evaluate(()=>{doSearch('Eevee')});
+ await page.locator('#searchInput').press('Escape');
+ await page.evaluate(()=>finishLookup());await page.waitForTimeout(230);
+ check(await page.locator('#dropList').evaluate(e=>!e.classList.contains('open')),'Escape keeps late autocomplete results dismissed');
+ check(await page.locator('#searchInput').inputValue()==='Eevee','dismissal preserves typed query');
+ await page.locator('#searchInput').press('Enter');await page.evaluate(()=>finishLookup());
+ await page.locator('#searchModalGrid [data-idx="0"]').waitFor();
+ check((await page.locator('#searchModalGrid').textContent()).includes('Eevee'),'explicit Enter can search again after dismissal');
+ await page.evaluate(()=>closeSearchModal());
+ await page.locator('#searchInput').fill('Bulbasaur');
+ await page.locator('#searchInput').press('Enter');
+ await page.getByRole('button',{name:'Close search results',exact:true}).click();await page.evaluate(()=>finishLookup());await page.waitForTimeout(230);
+ check(await page.locator('#dropList').evaluate(e=>!e.classList.contains('open')),'closing full results keeps its late reply dismissed');
+ check(await page.locator('#searchResultsModal').isHidden(),'late reply does not reopen full results');
+ await page.evaluate(()=>{_invalidateCardSearch();searchInput.value='Pikachu';searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true}));});
+ check(await page.locator('#searchResultsModal').isHidden(),'IME confirmation does not submit a search');
  check(errors.length===0,errors.join('\n'));await page.close();
 }console.log(`search-workflow-browser: ${checks} passed, 0 failed -- SUITE COMPLETE, exit=0`);}finally{await browser.close();await new Promise(r=>server.close(r));}
