@@ -23,7 +23,7 @@ check('server wire preserves finish',projectIdentityForWire(finished).finish,'Re
 check('draft title identifies confirmed finish',buildListingTitle(finished).title.includes('Reverse Holofoil'),true);
 const packet=buildListingPacket(finished,{now:Date.now(),price:9,priceSource:'seller'});
 check('draft item specifics identify finish',packet.aspects?.optional?.Finish,['Reverse Holofoil']);
-for (const width of [390,1280]) {
+for (const width of [320,390,1280]) {
  const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'}),errors=[];let scans=0,priceCalls=0,drafts=0;
  page.on('pageerror',e=>{errors.push(e.message);console.log('APP ERROR',e.message)});
  await page.route('**/*',r=>{
@@ -57,6 +57,22 @@ for (const width of [390,1280]) {
  check(width+' dropdown defaults to estimate',await page.locator('#bulk-row-0 .scan-finish-chip').textContent(),'Holofoil ▾');
  check(width+' subtotal immediately includes price',await page.locator('#bulkScanOverlay').textContent().then(s=>s.includes('$12.00')),true);
  check(width+' scan billed once',scans,1);
+ check(width+' automatic price is labeled as an estimate',await page.locator('#bulk-row-0 .scan-price-basis summary').textContent(),'Market estimate');
+ const basis=page.locator('#bulk-row-0 .scan-price-basis'),summary=basis.locator('summary');
+ const beforeBasis=await page.evaluate(()=>JSON.stringify(window._bulkResults));
+ await summary.focus();await page.keyboard.press('Enter');
+ check(width+' price explanation opens by keyboard',await basis.getAttribute('open'),'');
+ check(width+' explains guess without blocking price',(await basis.innerText()).includes('automatic guess'),true);
+ check(width+' does not call estimate a verified sale',(await basis.innerText()).includes('not a verified sale'),true);
+ check(width+' explains unchosen condition',(await basis.innerText()).includes('Condition has not been chosen'),true);
+ check(width+' does not invent provider timestamp',(await basis.innerText()).includes('Provider update time is not available'),true);
+ check(width+' explanation makes no new price request',priceCalls,1);
+ check(width+' explanation leaves batch unchanged',await page.evaluate(()=>JSON.stringify(window._bulkResults)),beforeBasis);
+ check(width+' expanded explanation fits viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ if(shots)await page.screenshot({path:`${shots}/price-basis-${width}.png`});
+ await page.keyboard.press('Enter');
+ check(width+' explanation collapses by keyboard',await basis.getAttribute('open'),null);
+
  check(width+' estimate persists without confirmation',await page.evaluate(()=>_scanFinishFields(window._bulkResults[0]).finishKey),'holofoil');
  check(width+' generic Lookup estimate retained',await page.evaluate(()=>_scanPriceVariantsFromFeed({market:7,variant:'tcgplayer'})[0].market),7);
  await page.locator('#bulk-row-0 .scan-finish-chip').click();
@@ -73,6 +89,16 @@ for (const width of [390,1280]) {
  check(width+' missing finish price stays unknown',await page.evaluate(()=>window._bulkResults[0].marketPrice),null);
  await page.locator('#bulk-row-0 .scan-finish-chip').click();await page.locator('[data-finish-key="normal"]').click();
  check(width+' normal finish updates price',await page.evaluate(()=>window._bulkResults[0].marketPrice),3);
+ check(width+' choosing finish still leaves price an estimate',await summary.textContent(),'Market estimate');
+ await summary.click();
+ check(width+' chosen finish is not independently verified',(await basis.innerText()).includes('chosen by you, not independently verified'),true);
+ await summary.click();
+
+ await page.evaluate(async()=>{const original=promptInline;try{promptInline=async()=> '8.50';await bulkEditPrice('bulk-row-0')}finally{promptInline=original}});
+ check(width+' price edit immediately relabels evidence',await summary.textContent(),'Your price');
+ check(width+' seller edit retains actual value',await page.evaluate(()=>window._bulkResults[0].marketPrice),8.5);
+ await page.evaluate(()=>bulkSetFinish('bulk-row-0','normal'));
+ check(width+' finish repricing returns to market evidence',await summary.textContent(),'Market estimate');
  await page.evaluate(()=>{_bulkSaveToCollection(window._bulkResults,{0:5});document.getElementById('bulkScanOverlay').style.display='none';switchView('collection');switchCollectionSection('cards')});
  check(width+' selected finish saves to Collection',await page.evaluate(()=>loadPortData()[0].finishKey),'normal');
  check(width+' selected value saves to Collection',await page.evaluate(()=>loadPortData()[0].currentValue),3);
@@ -88,6 +114,17 @@ for (const width of [390,1280]) {
  check(width+' nonfoil hint selects normal',guesses.normal,3);
  check(width+' generic source price is retained',guesses.generic,7);
  check(width+' generic source is not invented finish',guesses.finish,'');
+
+ const evidence=await page.evaluate(()=>{
+   const render=r=>{const d=document.createElement('div');d.innerHTML=_scanPriceBasisHtml({success:true,...r});return {label:d.querySelector('summary').textContent,text:d.textContent,images:d.querySelectorAll('img').length}};
+   return {seller:render({marketPrice:0,priceSource:'seller',conditionChosen:true,condition:'LP'}),unknown:render({marketPrice:4}),missing:render({marketPrice:null,priceSource:'comp'}),invalid:render({marketPrice:NaN,priceSource:'comp'}),unsafe:render({marketPrice:1,priceSource:'comp',finishConfirmed:true,finish:'<img src=x onerror=alert(1)>',conditionChosen:true,condition:'<img src=x>'})};
+ });
+ check(width+' zero seller price stays seller supplied',evidence.seller.label,'Your price');
+ check(width+' seller condition is not a pricing certification',evidence.seller.text.includes('does not certify condition-specific pricing'),true);
+ check(width+' unknown source is not attributed to market',evidence.unknown.label,'Saved price');
+ check(width+' missing price is not silently zero',evidence.missing.text.includes('not valued at $0'),true);
+ check(width+' nonfinite price is unavailable',evidence.invalid.label,'Price details');
+ check(width+' evidence text cannot create image markup',evidence.unsafe.images,0);
  check(width+' no page errors',errors,[]);
  await page.close();
 }
