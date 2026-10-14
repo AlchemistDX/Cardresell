@@ -39,18 +39,19 @@ try {
   ok(r.rows >= 2, 'a pill row per rendered venue: ' + r.rows);
   ok(r.items.every(i => i.text === 'Report a fee problem' && i.href.startsWith('mailto:will@cardresell.org?subject=')), 'every row has the report link');
   const ago = d => d === 0 ? ' · today' : d === 1 ? ' · 1 day ago' : ` · ${d} days ago`;
-  for (const pid of ['ebay', 'tcgplayer', 'poshmark', 'comc', 'fanatics', 'whatnot', 'mercari', 'manapool'])
+  for (const pid of ['tcgplayer', 'poshmark', 'comc', 'fanatics', 'whatnot', 'mercari', 'manapool'])
     ok(r.audited[pid] === '2026-10-11', pid + ' re-audited Oct 11');
+  ok(r.audited.ebay === '2026-10-14', 'eBay re-audited Oct 14');
   for (const pid of ['cardsphere', 'cardkingdom', 'scg', 'cardnexus', 'tcgbulk'])
     ok(r.audited[pid] === '2026-10-13', pid + ' re-audited Oct 13');
   for (const pid of ['cardmarket', 'coolstuffinc'])
     ok(r.audited[pid] === '2026-09-01', pid + ' keeps its Sep 1 date (not re-read)');
   const eb = r.items.find(i => i.pid === 'ebay');
-  ok(eb && eb.pill.endsWith('Oct 11, 2026' + ago(r.age.ebay)), 'eBay pill shows date and age: ' + (eb && eb.pill));
+  ok(eb && eb.pill.endsWith('Oct 14, 2026' + ago(r.age.ebay)), 'eBay pill shows date and age: ' + (eb && eb.pill));
   ok(r.items.every(i => / · (today|1 day ago|\d+ days ago)$/.test(i.pill) || /not verified/.test(i.pill)), 'every dated pill says how old it is');
   const body = decodeURIComponent((eb.href.split('&body=')[1]) || '');
   ok(decodeURIComponent(eb.href.split('subject=')[1].split('&')[0]) === 'Fee problem: eBay', 'subject names the venue');
-  ok(/^Venue: eBay\nCard: Charizard & Co\nPrice used: \$40\.00\nNet shown: \$\d+\.\d\d\nFee schedule date shown: Oct 11, 2026\n\nWhat looks wrong:\n$/.test(body), 'body is pre-filled: ' + JSON.stringify(body));
+  ok(/^Venue: eBay\nCard: Charizard & Co\nPrice used: \$40\.00\nNet shown: \$\d+\.\d\d\nFee schedule date shown: Oct 14, 2026\n\nWhat looks wrong:\n$/.test(body), 'body is pre-filled: ' + JSON.stringify(body));
   ok(!/[<>"]/.test(eb.href), 'href carries no raw markup characters');
   ok(Math.abs(r.posh[0] - 2.95) < 1e-9 && Math.abs(r.posh[1] - 2.95) < 1e-9 && Math.abs(r.posh[2] - 3.002) < 1e-9, 'Poshmark: $15.00 pays $2.95, $15.01 pays 20%: ' + r.posh.slice(0, 3));
   ok(r.posh[3] === 'Flat commission ($15 and under)', 'Poshmark label matches its terms');

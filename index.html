@@ -2710,13 +2710,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <div class="field-label">Shipping</div>
         <div class="row-2">
           <div>
-            <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.3rem">Charge to buyer</div>
+            <label for="shipCharge" style="display:block;font-size:.68rem;color:var(--text-muted);margin-bottom:.3rem">Charge to buyer</label>
             <div class="mini-input-wrap">
               <input type="number" id="shipCharge" class="mini-input" value="0" min="0" step="0.01" oninput="calc()" />
             </div>
           </div>
           <div>
-            <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.3rem">Your cost</div>
+            <label for="shipCost" style="display:block;font-size:.68rem;color:var(--text-muted);margin-bottom:.3rem">Your cost</label>
             <div class="mini-input-wrap">
               <input type="number" id="shipCost" class="mini-input" value="0" min="0" step="0.01" oninput="calc()" />
             </div>
@@ -2724,7 +2724,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </div>
 
         <!-- COGS -->
-        <div class="field-label" style="margin-top:.875rem">Your Purchase Cost / COGS</div>
+        <label for="itemCost" class="field-label" style="display:block;margin-top:.875rem">Your Purchase Cost / COGS</label>
         <div class="mini-input-wrap">
           <input type="number" id="itemCost" class="mini-input" style="width:100%" placeholder="0.00" min="0" step="0.01" oninput="calc()" />
         </div>
@@ -3923,7 +3923,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.f17a14ef.js"></script>
-<script defer src="/js/core.a4b32abd.js"></script>
+<script defer src="/js/core.2a102fb6.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
