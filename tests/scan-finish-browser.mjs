@@ -15,6 +15,8 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM||undefined,args:['--no-sandbox']});let checks=0;
 const check=(label,a,b)=>{assert.deepEqual(a,b,label);checks++;console.log('✓ '+label)};
 const catalogue={id:'fixture-1',name:'Bulbasaur',number:'001',set:{id:'fixture',name:'Fixture set'},rarity:'Common',tcgplayer:{prices:{normal:{market:3},holofoil:{market:12},reverseHolofoil:{market:9},stamped:{market:null}}}};
+// Owner's BW52 regression, with an explicitly synthetic price.
+const reverseCatalogue={id:'bwp-BW52',name:'Lillipup',number:'BW52',set:{id:'bwp',name:'BW Black Star Promos'},rarity:'Promo',tcgplayer:{prices:{reverseHolofoil:{market:2.25}}}};
 try {
 const base={card:'Bulbasaur',set:'Fixture set',setCode:'fixture',number:'001',game:'pokemon',condition:'NM'};
 const finished={...base,finish:'Reverse Holofoil'};
@@ -24,13 +26,14 @@ check('draft title identifies confirmed finish',buildListingTitle(finished).titl
 const packet=buildListingPacket(finished,{now:Date.now(),price:9,priceSource:'seller'});
 check('draft item specifics identify finish',packet.aspects?.optional?.Finish,['Reverse Holofoil']);
 for (const width of [320,390,1280]) {
- const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'}),errors=[];let scans=0,priceCalls=0,drafts=0;
+ const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'}),errors=[];let scans=0,priceCalls=0,drafts=0,scanCatalogue=catalogue;
  page.on('pageerror',e=>{errors.push(e.message);console.log('APP ERROR',e.message)});
  await page.route('**/*',r=>{
    const u=r.request().url();
    if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});
-   if(u.includes('/api/scan')){scans++;return r.fulfill({json:{card_name:'Bulbasaur',set_name:'Fixture set',set_code:'fixture',card_number:'001',card_type:'pokemon',grounded_id:'fixture-1',foil_hint:'foil'}})}
+   if(u.includes('/api/scan')){scans++;return r.fulfill({json:{card_name:scanCatalogue.name,set_name:scanCatalogue.set.name,set_code:scanCatalogue.set.id,card_number:scanCatalogue.number,card_type:'pokemon',grounded_id:scanCatalogue.id,foil_hint:'foil'}})}
    if(u.includes('api.pokemontcg.io/v2/cards/fixture-1')){priceCalls++;return r.fulfill({json:{data:catalogue}})}
+   if(u.includes('api.pokemontcg.io/v2/cards/bwp-BW52')){priceCalls++;return r.fulfill({json:{data:reverseCatalogue}})}
    if(u.includes('api.scryfall.com/cards/search'))return r.fulfill({json:{data:[{name:'Lightning Bolt',set_name:'Fixture',collector_number:'1',finishes:['nonfoil','foil','etched'],prices:{usd:null,usd_foil:'4.50',usd_etched:'7.00'}}]}});
    if(u.includes('/api/drafts'))drafts++;
    if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();
@@ -55,7 +58,7 @@ for (const width of [320,390,1280]) {
  check(width+' generic foil signal uses automatic base estimate',initial.marketPrice,3);
  check(width+' finish review is optional',initial.finishReviewRequired,false);
  check(width+' dropdown defaults to estimate',await page.locator('#bulk-row-0 .scan-finish-chip').textContent(),'Normal / non-foil ▾');
- check(width+' subtotal immediately includes price',await page.locator('#bulkScanOverlay').textContent().then(s=>s.includes('$3.00')),true);
+ check(width+' subtotal immediately includes price',await page.locator('#bulkPackTrackerAmt').textContent(),'$3.00');
  check(width+' scan billed once',scans,1);
  check(width+' automatic price is labeled as an estimate',await page.locator('#bulk-row-0 .scan-price-basis summary').textContent(),'Base-printing estimate');
  const basis=page.locator('#bulk-row-0 .scan-price-basis'),summary=basis.locator('summary');
@@ -133,8 +136,8 @@ for (const width of [320,390,1280]) {
  check(width+' missing base does not acquire premium value',edges[0].market,null);
  check(width+' zero base price remains zero',edges[1].market,0);
  check(width+' holo-only printing still prices automatically',edges[2].market,12);
- check(width+' reverse-only feed needs a finish choice',edges[3].market,null);
- check(width+' reverse-only limitation is explained',edges[3].basis.includes('Only a reverse-holo price is available'),true);
+ check(width+' reverse-only feed prices automatically',edges[3].market,45.26);
+ check(width+' sole finish default is explained',edges[3].basis.includes('only finish returned by the catalogue'),true);
 
 
  const evidence=await page.evaluate(()=>{
@@ -147,6 +150,49 @@ for (const width of [320,390,1280]) {
  check(width+' missing price is not silently zero',evidence.missing.text.includes('not valued at $0'),true);
  check(width+' nonfinite price is unavailable',evidence.invalid.label,'Price details');
  check(width+' evidence text cannot create image markup',evidence.unsafe.images,0);
+
+ scanCatalogue=reverseCatalogue;
+ await page.evaluate(async()=>{
+   _bulkCheckPhoto=async()=>null;compressImage=async()=>'c3ludGhldGlj';window.cardResellScanRequest=fetch;
+   savePortData([]);
+   const item={file:new File(['synthetic-reverse'],'reverse.jpg',{type:'image/jpeg'}),scanUid:'sole-finish-fixture'};
+   window._bulkQueue=[item];window._bulkResults=[await _bulkScanOne(item,'bulk-row-0',false)];
+   document.getElementById('bulkScanOverlay').style.display='flex';_bulkShowSection('processing');
+   document.getElementById('bulkResultsList').innerHTML='<div id="bulk-row-0" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e"></div>';
+   _bulkUpdateRow('bulk-row-0',window._bulkResults[0]);
+ });
+ const reverse=await page.evaluate(()=>window._bulkResults[0]);
+ check(width+' sole finish identifies Lillipup BW52',[reverse.success,reverse.cardName,reverse.cardNumber],[true,'Lillipup','BW52']);
+ check(width+' sole reverse catalogue quote appears immediately',reverse.marketPrice,2.25);
+ check(width+' sole reverse dropdown is already selected',await page.locator('#bulk-row-0 .scan-finish-chip').textContent(),'Reverse Holofoil ▾');
+ check(width+' sole finish is an estimate without a confirmation gate',[reverse.finishEstimated,reverse.finishConfirmed,reverse.finishReviewRequired],[true,false,false]);
+ check(width+' sole finish uses market estimate label',await summary.textContent(),'Market estimate');
+ check(width+' sole finish no longer says choose before pricing',(await page.locator('#bulk-row-0').textContent()).includes('choose that finish if it matches'),false);
+ check(width+' sole finish subtotal includes automatic quote',await page.locator('#bulkPackTrackerAmt').textContent(),'$2.25');
+ check(width+' sole finish is counted as priced',await page.locator('#bulkPackTrackerStatus').textContent(),'1 card · Estimated market value');
+ check(width+' sole finish uses one additional scan',scans,2);
+ await summary.click();
+ check(width+' sole default explains catalogue basis',(await basis.innerText()).includes('only finish returned by the catalogue'),true);
+ check(width+' sole default fits viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ if(shots)await page.screenshot({path:join(shots,'sole-finish-'+width+'.png')});
+ await summary.click();
+ await page.locator('#bulk-row-0 .scan-finish-chip').click();
+ check(width+' sole option is highlighted',await page.locator('[data-finish-key="reverseHolofoil"]').getAttribute('aria-pressed'),'true');
+ await page.locator('[data-finish-cancel]').click();
+ check(width+' opening menu does not confirm estimate',await page.evaluate(()=>window._bulkResults[0].finishConfirmed),false);
+ await page.evaluate(()=>{_bulkSaveToCollection(window._bulkResults,{0:1});document.getElementById('bulkScanOverlay').style.display='none'});
+ await page.reload();
+ const savedReverse=await page.evaluate(()=>loadPortData()[0]);
+ check(width+' sole finish survives Collection save and reload',[savedReverse.card,savedReverse.finishKey,savedReverse.finishBasis,savedReverse.finishConfirmed,savedReverse.currentValue],['Lillipup','reverseHolofoil','sole_available',false,2.25]);
+ check(width+' Collection refresh matches automatic reverse finish',await page.evaluate(()=>_fetchPriceForEntry(loadPortData()[0])),2.25);
+ await page.evaluate(()=>reviewCollectionFinish(loadPortData()[0].id));
+ await page.locator('#scanFinishChoice').selectOption('__other');
+ await page.locator('#scanFinishCustom').fill('Stamped promo');
+ await page.locator('[data-finish-save]').click();
+ const correctedReverse=await page.evaluate(()=>loadPortData()[0]);
+ check(width+' sole default can still be corrected',[correctedReverse.finishKey,correctedReverse.finish,correctedReverse.finishConfirmed,correctedReverse.currentValue],['__other','Stamped promo',true,null]);
+ check(width+' correction clears automatic basis',correctedReverse.finishBasis,'');
+ check(width+' correction needs no new scan',scans,2);
  check(width+' no page errors',errors,[]);
  await page.close();
 }

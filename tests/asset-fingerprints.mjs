@@ -89,6 +89,13 @@ for (const a of assets) {
           existsSync(sourcePath) && bytes.equals(readFileSync(sourcePath)),
           'Keep the source and generated grading asset in sync; rebuild with tools/build-grading-paths.mjs.');
   }
+  // Finish source drift previously omitted live pricing and disclosure rules.
+  if (/^js\/scan-finish\.[a-f0-9]{8}\.js$/.test(a.rel)) {
+    const sourcePath = new URL('../js/scan-finish.js', import.meta.url);
+    check(`${a.rel} matches its rebuild source`,
+          existsSync(sourcePath) && bytes.equals(readFileSync(sourcePath)),
+          'Keep the finish source and generated asset in sync; rebuild with tools/build-scan-finish.mjs.');
+  }
 }
 
 // ── The core bundle specifically: exactly one, and it is live ──────────────
