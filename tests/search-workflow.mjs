@@ -15,7 +15,7 @@ function functions(source,names) {
   return found.map(n=>source.slice(n.start,n.end)).join('\n');
 }
 const dispatcher=functions(core,['_snapSearchReq','_searchReqStillCurrent','_invalidateCardSearch','doSearch','searchPokemon']);
-const modal=functions(ui,['openSearchModal','openCatalog','closeSearchModal']);
+const modal=functions(ui,['openSearchModal','openCatalog','closeSearchModal','_closeCatalogChip']);
 const inputStart=core.indexOf("searchInput.addEventListener('input'");
 const inputEnd=core.indexOf("searchInput.addEventListener('keydown'",inputStart);
 assert.ok(inputStart>0&&inputEnd>inputStart,'shipped input listener located');
