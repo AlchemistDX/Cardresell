@@ -580,6 +580,39 @@ await t.section('upgrade ladder recommends the next plan with catalogue-only gai
   t.check('signed-out view gets no ladder panel', !panelOf(out));
   t.check('every plan card still discloses the saved-report limit', ['Free','Starter','Casual','Pro','Business'].every(n => /500 private AI grade reports/.test(card(h, n).textContent)));
 });
+await t.section('feature requests recommend a plan that supplies the requested benefit', async () => {
+  const catalogue = { ...publicMembershipCatalogue(), purchaseEnabled: true, newSubscriptionAllowed: true };
+  async function recommendation(current, reason, suppliedCatalogue = catalogue) {
+    const h = setup({ suppliedCatalogue, onAccount: async () => ({ ok: true, json: async () => ({
+      state: { subscriptionId: current === 'free' ? null : 'sub_synthetic', snapshot: { plan: current, status: 'active' } },
+      credits: { tier: current }, management: { portal: current !== 'free' } }) }) });
+    await h.window.openPricingModal(reason);
+    return h.elements().find(e => e.tag === 'section' && e.className === 'membership-upgrade')?.textContent || '';
+  }
+  for (const reason of ['calc_gate_compare', 'deal_score_nudge']) {
+    for (const current of ['free', 'starter']) {
+      t.check(`${current} ${reason} recommends Casual rather than equal venue access`,
+        (await recommendation(current, reason)).includes('Casual is your next step'));
+    }
+    t.check(`Casual ${reason} recommends Pro`, (await recommendation('casual', reason)).includes('Pro is your next step'));
+    t.check(`Pro ${reason} does not upsell Business for identical venues`, !(await recommendation('pro', reason)));
+  }
+  const shuffled = { ...catalogue, plans: [...catalogue.plans].reverse() };
+  t.check('catalogue ordering does not select a more expensive venue plan',
+    (await recommendation('free', 'calc_gate_compare', shuffled)).includes('Casual is your next step'));
+  t.check('catalogue ordering does not select Business for first batch grading',
+    (await recommendation('free', 'bulk_grade_gate', shuffled)).includes('Pro is your next step'));
+  const noMoreVenues = { ...catalogue, plans: catalogue.plans.map(p => ({ ...p, marketplaceCount: 2 })) };
+  t.check('no eligible venue benefit produces no misleading fallback recommendation',
+    !(await recommendation('free', 'calc_gate_compare', noMoreVenues)));
+  const noBatch = { ...catalogue, plans: catalogue.plans.map(p => ({ ...p, features: { bulkGrade: false } })) };
+  t.check('unavailable batch grading produces no unrelated upsell', !(await recommendation('free', 'bulk_grade_gate', noBatch)));
+  t.check('already included batch grading produces no unrelated upsell', !(await recommendation('pro', 'bulk_grade_gate')));
+  t.check('free flip limit recommends Starter', (await recommendation('free', 'flips_cap')).includes('Starter is your next step'));
+  t.check('paid flip tracking does not suggest another plan', !(await recommendation('starter', 'flips_cap')));
+  t.check('draft capacity request recommends the next larger capacity',
+    (await recommendation('starter', 'drafts_cap')).includes('Casual is your next step'));
+});
 await t.section('compact plans retain allowances and billing disclosure', async()=>{
  const c={...publicMembershipCatalogue(),purchaseEnabled:true,newSubscriptionAllowed:true};
  const h=setup({initial:null,suppliedCatalogue:c});await h.window.openSubscriptions();

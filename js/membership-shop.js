@@ -3,9 +3,8 @@
   const money = cents => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
   let dialog, content, notice, heading, opener, generation = 0, busy = false, view = 'shop';
   let planControls = [], upgradeReason = null;
-  // 2026-10-09: upgrade ladder. When the plans view opens for a signed-in
-  // account, recommend the next plan up and say exactly what it adds over the
-  // current one, using only catalogue values (no invented benefits).
+  // Match feature requests to a plan that actually adds that capability.
+  // Generic browsing retains the next-plan ladder; explicit targets are honored.
   const PLAN_ORDER = ['free', 'starter', 'casual', 'pro', 'business'];
   const REASON_LEADS = {
     scan_gate: 'Running low on credits?', grade_scan: 'Running low on Grade credits?',
@@ -45,13 +44,22 @@
   function suggestUpgrade(catalogue, current, result) {
     const at = PLAN_ORDER.indexOf(current);
     if (at < 0 || at === PLAN_ORDER.length - 1) return;
-    let target = PLAN_ORDER[at + 1];
-    if (PLAN_ORDER.indexOf(upgradeReason) > at) target = upgradeReason;
     const from = catalogue.plans.find(p => p.id === current);
-    let to = catalogue.plans.find(p => p.id === target);
-    if (upgradeReason === 'bulk_grade_gate' && !from?.features?.bulkGrade) {
-      to = catalogue.plans.find((p, i) => PLAN_ORDER.indexOf(p.id) > at && p.features?.bulkGrade) || to;
+    if (!from) return;
+    const candidates = catalogue.plans.filter(p => PLAN_ORDER.indexOf(p.id) > at)
+      .sort((a, b) => a.monthlyPriceCents - b.monthlyPriceCents || PLAN_ORDER.indexOf(a.id) - PLAN_ORDER.indexOf(b.id));
+    let eligible;
+    if (['calc_gate_compare', 'deal_score_nudge'].includes(upgradeReason)) {
+      eligible = p => p.marketplaceCount > from.marketplaceCount;
+    } else if (upgradeReason === 'bulk_grade_gate') {
+      eligible = p => p.features?.bulkGrade === true && !from.features?.bulkGrade;
+    } else if (upgradeReason === 'drafts_cap') {
+      eligible = p => p.drafts?.activeLimit > from.drafts?.activeLimit;
+    } else if (['flips_cap', 'flips_empty', 'roi_profit_free'].includes(upgradeReason)) {
+      eligible = p => current === 'free' && p.id !== 'free';
     }
+    const target = PLAN_ORDER.indexOf(upgradeReason) > at ? upgradeReason : PLAN_ORDER[at + 1];
+    const to = eligible ? candidates.find(eligible) : catalogue.plans.find(p => p.id === target);
     if (!from || !to) return;
     const control = planControls.find(c => c.id === to.id);
     if (control) {
