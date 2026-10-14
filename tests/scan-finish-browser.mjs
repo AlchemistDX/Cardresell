@@ -52,17 +52,17 @@ for (const width of [320,390,1280]) {
  const initial=await page.evaluate(()=>window._bulkResults[0]);
  check(width+' identifies card',initial.success,true);
  check(width+' automatic estimate is not seller confirmation',initial.finishConfirmed,false);
- check(width+' scan keeps automatic holo estimate',initial.marketPrice,12);
+ check(width+' generic foil signal uses automatic base estimate',initial.marketPrice,3);
  check(width+' finish review is optional',initial.finishReviewRequired,false);
- check(width+' dropdown defaults to estimate',await page.locator('#bulk-row-0 .scan-finish-chip').textContent(),'Holofoil ▾');
- check(width+' subtotal immediately includes price',await page.locator('#bulkScanOverlay').textContent().then(s=>s.includes('$12.00')),true);
+ check(width+' dropdown defaults to estimate',await page.locator('#bulk-row-0 .scan-finish-chip').textContent(),'Normal / non-foil ▾');
+ check(width+' subtotal immediately includes price',await page.locator('#bulkScanOverlay').textContent().then(s=>s.includes('$3.00')),true);
  check(width+' scan billed once',scans,1);
- check(width+' automatic price is labeled as an estimate',await page.locator('#bulk-row-0 .scan-price-basis summary').textContent(),'Market estimate');
+ check(width+' automatic price is labeled as an estimate',await page.locator('#bulk-row-0 .scan-price-basis summary').textContent(),'Base-printing estimate');
  const basis=page.locator('#bulk-row-0 .scan-price-basis'),summary=basis.locator('summary');
  const beforeBasis=await page.evaluate(()=>JSON.stringify(window._bulkResults));
  await summary.focus();await page.keyboard.press('Enter');
  check(width+' price explanation opens by keyboard',await basis.getAttribute('open'),'');
- check(width+' explains guess without blocking price',(await basis.innerText()).includes('automatic guess'),true);
+ check(width+' explains guess without blocking price',(await basis.innerText()).includes('Foil is not confirmed'),true);
  check(width+' does not call estimate a verified sale',(await basis.innerText()).includes('not a verified sale'),true);
  check(width+' explains unchosen condition',(await basis.innerText()).includes('Condition has not been chosen'),true);
  check(width+' does not invent provider timestamp',(await basis.innerText()).includes('Provider update time is not available'),true);
@@ -73,12 +73,20 @@ for (const width of [320,390,1280]) {
  await page.keyboard.press('Enter');
  check(width+' explanation collapses by keyboard',await basis.getAttribute('open'),null);
 
- check(width+' estimate persists without confirmation',await page.evaluate(()=>_scanFinishFields(window._bulkResults[0]).finishKey),'holofoil');
+ check(width+' estimate persists without confirmation',await page.evaluate(()=>_scanFinishFields(window._bulkResults[0]).finishKey),'normal');
+ const savedBase=await page.evaluate(()=>{
+   _bulkSaveToCollection(window._bulkResults,{0:0});
+   const saved=loadPortData()[0];savePortData([]);
+   return {basis:saved.finishBasis,confirmed:saved.finishConfirmed,value:saved.currentValue};
+ });
+ check(width+' Collection preserves base assumption',savedBase.basis,'base_printing');
+ check(width+' Collection does not turn base into confirmation',savedBase.confirmed,false);
+ check(width+' Collection preserves base price',savedBase.value,3);
  check(width+' generic Lookup estimate retained',await page.evaluate(()=>_scanPriceVariantsFromFeed({market:7,variant:'tcgplayer'})[0].market),7);
  await page.locator('#bulk-row-0 .scan-finish-chip').click();
- check(width+' guessed finish highlighted',await page.locator('[data-finish-key="holofoil"]').getAttribute('aria-pressed'),'true');
+ check(width+' guessed finish highlighted',await page.locator('[data-finish-key="normal"]').getAttribute('aria-pressed'),'true');
  await page.locator('[data-finish-cancel]').click();
- check(width+' cancel preserves automatic price',await page.evaluate(()=>window._bulkResults[0].marketPrice),12);
+ check(width+' cancel preserves automatic price',await page.evaluate(()=>window._bulkResults[0].marketPrice),3);
  if(shots)await page.screenshot({path:join(shots,'bulk-finish-'+width+'.png')});
  await page.locator('#bulk-row-0 .scan-finish-chip').click();await page.locator('[data-finish-key="reverseHolofoil"]').click();
  check(width+' one tap closes finish menu',await page.locator('#scanFinishPicker').count(),0);
@@ -114,6 +122,20 @@ for (const width of [320,390,1280]) {
  check(width+' nonfoil hint selects normal',guesses.normal,3);
  check(width+' generic source price is retained',guesses.generic,7);
  check(width+' generic source is not invented finish',guesses.finish,'');
+ const edges=await page.evaluate(()=>{
+   const result=[];
+   for(const prices of [{normal:{market:null},reverseHolofoil:{market:45.26}},{normal:{market:0},reverseHolofoil:{market:45.26}},{holofoil:{market:12}},{reverseHolofoil:{market:45.26}}]){
+     const row={cardType:'pokemon',foilHint:'foil',success:true};_scanApplyFinishReview(row,{variant:Object.keys(prices).at(-1),prices});
+     result.push({market:row.marketPrice,key:row.finishKey,basis:_scanPriceBasisHtml(row)});
+   }
+   return result;
+ });
+ check(width+' missing base does not acquire premium value',edges[0].market,null);
+ check(width+' zero base price remains zero',edges[1].market,0);
+ check(width+' holo-only printing still prices automatically',edges[2].market,12);
+ check(width+' reverse-only feed needs a finish choice',edges[3].market,null);
+ check(width+' reverse-only limitation is explained',edges[3].basis.includes('Only a reverse-holo price is available'),true);
+
 
  const evidence=await page.evaluate(()=>{
    const render=r=>{const d=document.createElement('div');d.innerHTML=_scanPriceBasisHtml({success:true,...r});return {label:d.querySelector('summary').textContent,text:d.textContent,images:d.querySelectorAll('img').length}};
