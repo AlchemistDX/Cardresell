@@ -103,11 +103,14 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  await page.getByRole('button',{name:'Move photo right',exact:true}).click();await ready();
  check('arrow moves photo relative to fixed grid',Number(await page.locator('#binderLeft').inputValue())<Number(beforeMove),true);
  const preview=page.locator('#binderPreview');await preview.scrollIntoViewIfNeeded();
- const bounds=await preview.boundingBox();
  const startMargin=Number(await page.locator('#binderTop').inputValue());
- await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);await page.mouse.down();
- check('old crops cannot be submitted during drag',await page.locator('#binderContinue').isDisabled(),true);
- await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2+12,{steps:3});await page.mouse.up();await ready();
+ await page.locator('#binderSelectAll').click();await preview.scrollIntoViewIfNeeded();
+ const dragBounds=await preview.boundingBox();
+ await page.mouse.move(dragBounds.x+dragBounds.width/2,dragBounds.y+dragBounds.height/2);await page.mouse.down();
+ check('touching the photo preserves reviewed selections',await page.locator('#binderContinue').isDisabled(),false);
+ await page.mouse.move(dragBounds.x+dragBounds.width/2,dragBounds.y+dragBounds.height/2+12,{steps:3});
+ check('old crops cannot be submitted after actual movement',await page.locator('#binderContinue').isDisabled(),true);
+ await page.mouse.up();await ready();
  check('drag changes source crop location',Number(await page.locator('#binderTop').inputValue())<startMargin,true);
  await page.locator('#binderSelectAll').click();await page.locator('#binderContinue').click();
  const moved=await queue();check('adjusted crops use native smaller pixels',moved.every(q=>q.w>=400&&q.w<520),true);
