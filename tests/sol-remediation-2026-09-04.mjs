@@ -131,7 +131,7 @@ console.log('\n[Sol remediation 2026-09-04]');
   const retryRow = index.slice(index.indexOf('async function bulkRetryRow'));
   const retryRowBody = retryRow.slice(0, retryRow.indexOf('\n}\n'));
   check('bulkRetryRow forwards the previous attempt\u2019s scan id',
-        /retryOf: oldResult\.scanId \|\| ''/.test(retryRowBody));
+        /retryOf: replacement \? '' : \(oldResult\.scanId \|\| ''\)/.test(retryRowBody));
 
   // ---- server honours it, with the fraud gates ----
   // Reimplement the shipped gate and prove each condition is load-bearing.
