@@ -16,7 +16,26 @@ try{
 for(const theme of ['light','dark']) for(const viewport of [{width:320,height:740},{width:390,height:844},{width:844,height:390},{width:1280,height:900}]){
  const page=await browser.newPage({viewport,colorScheme:theme,reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',r=>{const u=r.request().url();if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();return r.fulfill({status:503,contentType:'application/json',body:'{"error":"offline_fixture"}'})});
- await page.goto(origin);await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;window.googleUser={uid:'ui-fixture',displayName:'Review'};window._googleIdToken='fixture';document.getElementById('signInNudge').style.display='none';document.getElementById('googleSignInBtn').style.display='none';document.getElementById('googleUserBtn').style.display='flex';document.getElementById('googleName').textContent='Review';document.getElementById('dropList').style.display='none';},theme);
+ await page.goto(origin);
+ await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;window.googleUser=null;updateProUI();document.getElementById('dropList').style.display='none'},theme);
+ check('guest account and membership do not overlap',await page.locator('.hdr').evaluate(h=>{const a=h.querySelector('#googleSignInBtn').getBoundingClientRect(),b=h.querySelector('#getProBtn').getBoundingClientRect();return a.right<=b.left}),true);
+ check('welcome fits guest viewport',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ check('guest offer can be dismissed accessibly',await page.getByRole('button',{name:'Dismiss sign-in offer'}).isVisible(),true);
+ check('welcome guide appears before empty calculator',await page.locator('#welcomeNext').evaluate(e=>e.getBoundingClientRect().top<document.querySelector('#lookupView .main>aside').getBoundingClientRect().top),true);
+ if(shots)await page.screenshot({path:`${shots}/welcome-${theme}-${viewport.width}.png`});
+ await page.evaluate(()=>{window._welcomeSignInOriginal=triggerGoogleSignIn;triggerGoogleSignIn=intent=>{window._welcomeSignInIntent=intent}});
+ await page.getByRole('button',{name:'Scan your cards',exact:true}).click();
+ check('guest scan preserves sign-in intent',await page.evaluate(()=>window._welcomeSignInIntent),'scan');
+ await page.evaluate(()=>{triggerGoogleSignIn=window._welcomeSignInOriginal;window.googleUser={sub:'welcome-fixture'}});
+ await page.getByRole('button',{name:'Scan your cards',exact:true}).click();
+ check('signed-in welcome reaches scan chooser',await page.locator('#bulkModePickerOverlay').isVisible(),true);
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>{window.googleUser=null});
+ await page.getByRole('button',{name:'Dismiss sign-in offer'}).click();
+ check('dismiss hides guest offer',await page.locator('#signInNudge').isVisible(),false);
+ await page.evaluate(()=>updateProUI());
+ check('dismissed guest offer stays dismissed',await page.locator('#signInNudge').isVisible(),false);
+ await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;window.googleUser={uid:'ui-fixture',displayName:'Review'};window._googleIdToken='fixture';document.getElementById('signInNudge').style.display='none';document.getElementById('googleSignInBtn').style.display='none';document.getElementById('googleUserBtn').style.display='flex';document.getElementById('googleName').textContent='Review';document.getElementById('dropList').style.display='none';},theme);
  for(const [tier,label] of Object.entries({free:'Subscriptions',starter:'Starter',casual:'Casual',pro:'Pro',business:'Business'})){
   await page.evaluate(t=>{window._userTier=t;updateTierUI(t);updateProUI()},tier);
   check('membership label '+tier,await page.locator('#headerMembershipLabel').textContent(),label);

@@ -1976,7 +1976,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       if (!wasFired) setTimeout(function() { window.trackEvent('page_view'); }, 200);
     })();
   </script>
-<link rel="stylesheet" href="/assets/brand-ui.fb4b476f.css">
+<link rel="stylesheet" href="/assets/brand-ui.4b2ca146.css">
 <style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
 <link rel="stylesheet" href="/css/grading-paths.f8996d77.css">
 <link rel="stylesheet" href="/assets/scan-finish.68f727d8.css">
@@ -2143,7 +2143,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <section class="search-area" aria-label="Find and scan cards">
   <h1 class="lookup-heading">Find your card</h1>
-  <p class="lookup-intro">Search by name, scan a card, or estimate its grade.</p>
+  <p class="lookup-intro">See its value, compare selling payouts, and choose your next move.</p>
   <div id="searchRow" class="search-row">
     <div class="search-box">
       <span class="search-icon">
@@ -2271,31 +2271,17 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="results-drop" style="display:none"></div>
 
 
-<!-- SIGN-IN OFFER BANNER — shown to guests only -->
-<div id="signInNudge" style="display:none;position:relative;margin:.55rem .75rem .45rem;border-radius:14px;background:linear-gradient(110deg,#1a1200,#2a1d00);border:1.5px solid var(--gold);overflow:hidden;-webkit-tap-highlight-color:transparent">
-  <!-- shimmer line -->
-  <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.5),transparent)"></div>
-  <div style="padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem">
-    <div style="flex:1;min-width:0">
-      <div style="font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-text);margin-bottom:.2rem">🎁 New user offer</div>
-      <div style="font-size:.92rem;font-weight:900;color:#fff;line-height:1.25;margin-bottom:.35rem">Sign in + verify email —<br>get <span style="color:var(--gold-text)">10 ID scans</span> + <span style="color:var(--gold-text)">1 AI Grade free</span></div>
-      <div style="font-size:.67rem;color:rgba(255,255,255,.5)">No card required · Credits never expire</div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex-shrink:0">
-      <a href="/signin" style="padding:.5rem .9rem;background:var(--gold);border:none;border-radius:10px;color:#000;font-weight:900;font-size:.78rem;cursor:pointer;white-space:nowrap;letter-spacing:.01em;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;user-select:none;text-decoration:none;display:inline-block">Sign in free →</a>
-    </div>
-  </div>
-  <button onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}" style="position:absolute;top:.4rem;right:.5rem;width:20px;height:20px;background:none;border:none;color:rgba(255,255,255,.35);font-size:.85rem;cursor:pointer;line-height:1;padding:0">&times;</button>
+<!-- First-visit summary and guest offer; search stays first. -->
+<div id="landingHero" class="welcome-summary">
+  <div class="welcome-kicker">Your cards. Your next move.</div>
+  <h2>Know what you could keep after selling.</h2>
+  <p>Compare estimated fees and payouts across 18 selling venues. Start with eBay + TCGplayer free. <a href="/pricing.html">Compare plans</a>.</p>
+  <div class="welcome-benefits"><span>Free card lookup</span><span>No account needed to search</span><span>Singles &amp; bulk options</span></div>
 </div>
-
-<!-- HERO — job-to-be-done: "Where do I sell this card?" (2026-08-31)
-     Positioning: "see the highest net payout across 15 venues".
-     eBay-friendly kicker — they're a top affiliate partner and often the winning
-     venue for a given card, so we never frame them as the enemy. -->
-<div id="landingHero" style="padding:1rem 1rem .75rem;text-align:center;background:linear-gradient(180deg,rgba(196,122,0,.06),transparent);border-bottom:1px solid rgba(196,122,0,.12)">
-  <div style="font-size:.68rem;color:var(--gold-text);font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.35rem">Sell smarter · 18 selling venues · fees and bulk options</div>
-  <h2 style="font-size:1.35rem;line-height:1.2;font-weight:900;color:var(--text);margin:0 0 .4rem;letter-spacing:-.015em">Find where your card pays you the most — after fees.</h2>
-  <div style="font-size:.78rem;color:var(--text-muted);line-height:1.4;max-width:520px;margin:0 auto">Compare marketplace net payouts and whole-stack buylist offers across 18 selling venues, with fees, shipping, and cash-out rules. <strong style="color:var(--text)">eBay + TCGplayer free</strong>. Choose the venues you use and compare estimated fees before listing. Check Subscriptions for current plan details.</div>
+<div id="signInNudge" class="welcome-signin" style="display:none">
+  <div class="welcome-signin-copy"><strong>Try scanning your collection</strong><span>Sign in and verify your email for 10 ID scans + 1 AI Grade free. No card required.</span></div>
+  <a href="/signin" class="welcome-signin-link">Get started free <span aria-hidden="true">→</span></a>
+  <button type="button" class="welcome-dismiss" aria-label="Dismiss sign-in offer" onclick="document.getElementById('signInNudge').style.display='none';try{sessionStorage.setItem('cs_nudge_dismissed','1')}catch(e){}">&times;</button>
 </div>
 
 <!-- SOCIAL PROOF BAR -->
@@ -2893,50 +2879,17 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <!-- Grading affiliate CTA banner (shown after a scan result, persistent until dismissed) -->
   <!-- Grading CTA banner removed — grading CTA lives only in #scanGradeCTA (post-scan overlay) -->
   <div class="results-area" id="resultsArea">
-    <div class="intro-state" style="text-align:left;padding:1.5rem 1.25rem">
-      <!-- headline -->
-      <div style="font-size:1.08rem;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem">Find where to sell for <span style="color:var(--gold-text)">maximum profit</span></div>
-      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:1.1rem;line-height:1.5">Search supported Pokémon, Magic, Yu-Gi-Oh, Lorcana and One Piece cards — compare estimated fees and payouts on available marketplaces.</div>
-
-      <!-- Feature bullets -->
-      <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1.25rem">
-        <div style="display:flex;align-items:flex-start;gap:.6rem">
-          <span style="font-size:1rem;margin-top:.05rem">💰</span>
-          <div>
-            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Side-by-side payout comparison</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">eBay, TCGplayer, Whatnot &amp; more — after fees</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:.6rem">
-          <span style="font-size:1rem;margin-top:.05rem">📈</span>
-          <div>
-            <div style="font-size:.78rem;font-weight:700;color:var(--text)">eBay sold comps</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">Recent completed sales when eBay serves them — one tap straight to eBay when it doesn't</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:.6rem">
-          <span style="font-size:1rem;margin-top:.05rem">🏅</span>
-          <div>
-            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Grading ROI calculator</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">Is it worth sending to PSA? See the math instantly</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:.6rem">
-          <span style="font-size:1rem;margin-top:.05rem">📦</span>
-          <div>
-            <div style="font-size:.78rem;font-weight:700;color:var(--text)">Track flips &amp; your collection</div>
-            <div style="font-size:.7rem;color:var(--text-muted)">P&amp;L dashboard + portfolio value — free</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Social proof mini row -->
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <div style="padding:.35rem .65rem;background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:99px;font-size:.67rem;color:#4ade80;font-weight:700">✓ Free lookup · paid plans available</div>
-        <div id="introTodayBadge" style="padding:.35rem .65rem;background:rgba(196,122,0,.08);border:1px solid rgba(196,122,0,.2);border-radius:99px;font-size:.67rem;color:var(--gold-text);font-weight:700;display:none">🔍 <span id="introTodayCount">0</span> cards searched today</div>
-        <div style="padding:.35rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;font-size:.67rem;color:var(--text-muted);font-weight:600">No account needed to search</div>
-      </div>
-    </div>
+    <section class="intro-state welcome-next" id="welcomeNext" aria-labelledby="welcomeNextTitle">
+      <div class="welcome-next-heading"><h2 id="welcomeNextTitle">A clear next step for every card.</h2><p>Start with a search above. Your card's price and selling options appear here.</p></div>
+      <ol class="welcome-steps">
+        <li><span class="welcome-step-number" aria-hidden="true">1</span><div><h3>Find its value</h3><p>Match the card and printing, then see available price references.</p></div></li>
+        <li><span class="welcome-step-number" aria-hidden="true">2</span><div><h3>Compare what you keep</h3><p>See estimated payouts after marketplace fees and shipping.</p></div></li>
+        <li><span class="welcome-step-number" aria-hidden="true">3</span><div><h3>Choose your next move</h3><p>Sell a single, group lower-value cards, or save them to Collection.</p></div></li>
+      </ol>
+      <div class="welcome-bulk"><div><strong>Working through a stack or binder?</strong><p>Scan multiple cards and adjust only what needs correcting.</p></div><button type="button" onclick="openScanMenuOnTab('id')">Scan your cards <span aria-hidden="true">→</span></button></div>
+      <p class="welcome-source-note">Price references vary by card. eBay sold comps are available when eBay serves them. <a href="/accuracy.html">How estimates work</a></p>
+      <div id="introTodayBadge" class="welcome-activity" style="display:none"><span id="introTodayCount">0</span> cards searched today</div>
+    </section>
   </div>
 
 </div><!-- /main -->
