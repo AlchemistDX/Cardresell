@@ -306,7 +306,7 @@ assert('the tax disclosure copy is defined once, in the shared vocabulary',
 // helper reads the shared vocabulary, the ranking path obtains its note from
 // the helper, and the literal strings appear nowhere but the vocabulary.
 assert('the tax disclosure helper reads the shared vocabulary',
-  /function venueTaxNote\(pid\)[\s\S]{0,400}FEE_DISCLOSURE\.taxLabel[\s\S]{0,200}FEE_DISCLOSURE\.taxQualifier/.test(src));
+  /function venueTaxNote\(pid, feeItems\)[\s\S]{0,800}FEE_DISCLOSURE\.taxLabel[\s\S]{0,200}FEE_DISCLOSURE\.taxQualifier/.test(src));
 assert('the ranking tile takes its tax note from that helper, not its own copy',
   /taxNote:\s*venueTaxNote\(/.test(src));
 // The copy exists ONCE. Two occurrences of the literal would mean a surface
@@ -320,7 +320,7 @@ assert('Expand shows a fee base row', /Fee base'/.test(src) || /baseLabel:\s*'Fe
 // POSITIVE amount; $0.00 asserted it was zero, and the "(not modeled)"
 // parenthetical did not retract that.
 assert('the unmodelled tax row shows an em dash, not an invented zero',
-  /\$\{FEE_UNKNOWN\}/.test(src) && /const FEE_UNKNOWN = '\\u2014'/.test(src) &&
+  /Number\.isFinite\(r\.taxNote\.amount\) \? fmt\(r\.taxNote\.amount\) : FEE_UNKNOWN/.test(src) && /const FEE_UNKNOWN = '\\u2014'/.test(src) &&
   !/fee-basis">\(not modeled\)<\/span><\/span><span class="fee-val">\$\{fmt\(0\)\}/.test(src));
 assert('Clamp note says payout prices off Market, not High',
   /not the raw High/.test(src) && /highClamped/.test(src));

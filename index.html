@@ -2801,6 +2801,27 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
               </select>
             </div>
             <div>
+              <label for="ebayBuyerTaxRate" class="field-label" style="margin-top:0;display:block">eBay buyer-tax assumption</label>
+              <select id="ebayBuyerTaxRate" aria-describedby="ebayBuyerTaxHint" onchange="calc(); _crRerenderGradingPanel();">
+                <option value="">Not estimated</option>
+                <option value="0">0% assumed tax</option>
+                <option value="5">5% assumed tax</option>
+                <option value="6">6% assumed tax</option>
+                <option value="6.5">6.5% assumed tax</option>
+                <option value="7">7% assumed tax</option>
+                <option value="7.5">7.5% assumed tax</option>
+                <option value="8">8% assumed tax</option>
+                <option value="8.5">8.5% assumed tax</option>
+                <option value="9">9% assumed tax</option>
+                <option value="9.5">9.5% assumed tax</option>
+                <option value="10">10% assumed tax</option>
+                <option value="10.5">10.5% assumed tax</option>
+                <option value="11">11% assumed tax</option>
+                <option value="12">12% assumed tax</option>
+              </select>
+              <div class="field-hint" id="ebayBuyerTaxHint">Optional estimate on item + buyer-paid shipping. Tax enters eBay’s fee base, not your income. Applies to eBay comparisons, grading estimates and draft previews during this visit; resets on reload. Actual buyer tax may differ.</div>
+            </div>
+            <div>
               <div class="field-label" style="margin-top:0">eBay Top Rated Seller</div>
               <select id="ebayTopRated" onchange="calc()">
                 <option value="no">No</option>
@@ -3922,8 +3943,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
-<script defer src="/js/grading-paths.f17a14ef.js"></script>
-<script defer src="/js/core.2a102fb6.js"></script>
+<script defer src="/js/grading-paths.7065375c.js"></script>
+<script defer src="/js/core.312d9ce1.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }
@@ -4004,7 +4025,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/scan-finish.8cbcbdb0.js"></script>
 <script defer src="/js/ui.6250c45a.js"></script>
-<script defer src="/js/selling-plan.e492f1c8.js"></script>
+<script defer src="/js/selling-plan.df207743.js"></script>
 <script defer src="/js/selling-advice.7b8b622b.js"></script>
 <script defer src="/js/collection-drafts.bfb6565e.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>

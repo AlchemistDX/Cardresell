@@ -98,6 +98,16 @@ function dlRows(html) {
   return top;
 }
 
+const taxPreview = renderFeeBlock(100, { ebayBuyerTaxRate: 8 });
+T.check('assumed tax preview discloses rate, fee base and provenance',
+  taxPreview.includes('8% assumption; fee base only') && taxPreview.includes('$108.00')
+  && taxPreview.includes('$8.00') && taxPreview.includes('$85.29')
+  && taxPreview.includes('Tax is not seller income') && taxPreview.includes('current visit'));
+const zeroPreview = renderFeeBlock(100, { ebayBuyerTaxRate: 0 });
+T.check('explicit zero is disclosed rather than presented as unknown tax',
+  zeroPreview.includes('0% assumption; fee base only') && zeroPreview.includes('$0.00')
+  && zeroPreview.includes('$86.35'));
+
 const pricedRows = dlRows(priced);
 T.check('priced: the fee breakdown is a <dl class="review-fees-table">',
   pricedRows !== null && pricedRows.length > 0,

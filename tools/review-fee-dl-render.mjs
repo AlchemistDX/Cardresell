@@ -146,7 +146,7 @@ export function renderFeeBlock(price, profile, pid) {
       H._reviewFeeRow, '');
   }
 
-  const items = H.feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, false);
+  const items = H.feeEbay(price, 0, prof.ebayStore, prof.ebayPromo, false, prof.ebayBuyerTaxRate);
   const fees  = items.reduce((s, f) => s + f.a, 0);
   const c = { price, items, fees, net: price - fees };
   const feeRows = c.items

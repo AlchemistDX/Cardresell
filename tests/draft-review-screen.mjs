@@ -3072,7 +3072,7 @@ try {
     T.check('and the unbound source never reaches the wire',
       JSON.stringify(posted || {}).indexOf('UNBOUND') === -1, JSON.stringify(posted));
     T.check('the fee revision still goes out, so dropping the basis is not dropping the context',
-      posted && posted.pricingContext.feeModelRevision === 1,
+      posted && posted.pricingContext.feeModelRevision === Number(readCoreBundle().source.match(/const FEE_MODEL_REVISION = (\d+);/)[1]),
       JSON.stringify(posted && posted.pricingContext));
 
     // The correlation check. Four clicks, four creates, each arriving inside
