@@ -40,6 +40,7 @@ export async function fixture(uid='operation-owner') {
  async function reset() {
   await kv('DEL',key,listingIndex('production',uid),accountListingsKey('production',connection.accountHash),'ebaylisting:rate:production:'+hash(uid),k.prefix+'deleted:'+connection.accountHash);
   await kv('SET',dk,JSON.stringify(draft));await kv('SET',rk,JSON.stringify(review));await kv('SET',k.connection,JSON.stringify(connection));
+  await kv('SET','userdata:'+uid,JSON.stringify({portfolio:[{id:uid,card:'Charizard',quantity:1}],flips:[],tombstones:{portfolio:{},flips:{}}}));
   Object.assign(state,{item:null,offer:null,fee:'0.35',writes:[],calls:[],before:null,after:null,extraOffers:[],failRead:false});
  }
  async function call(action,options={}) {

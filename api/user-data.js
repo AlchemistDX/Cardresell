@@ -1,4 +1,5 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
+import {copySales, unsoldCopies, validateSaleLinks} from './_copySales.js';
 // /api/user-data — Cross-device sync for Portfolio + Flips
 //
 // GET  /api/user-data                  → { portfolio: [...], flips: [...], tombstones, serverUpdatedAt }
@@ -70,12 +71,14 @@ export default async function handler(req, res) {
     const blob = await kvGet(kvUrl, kvToken, key);
     if (!blob) return res.status(200).json({ portfolio: [], flips: [], tombstones: { portfolio: {}, flips: {} }, serverUpdatedAt: 0 });
     const marks = _compactTombstones(blob.tombstones);
+    const receipts = copySales(blob.copySales, blob.flips);
     return res.status(200).json({
       // Apply tombstones on read as well as write, so a row that predates this
       // change (or was written by an older client) still disappears.
-      portfolio:        _applyTombstones(Array.isArray(blob.portfolio) ? blob.portfolio : [], marks.portfolio),
+      portfolio:        unsoldCopies(_applyTombstones(blob.portfolio, marks.portfolio), receipts),
       flips:            _applyTombstones(Array.isArray(blob.flips)     ? blob.flips     : [], marks.flips),
       tombstones:       marks,
+      copySales:        receipts,
       serverUpdatedAt:  Number(blob.serverUpdatedAt)  || 0,
     });
   }
@@ -98,11 +101,15 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: 'ambiguous_collection_ids', message: 'Cloud records share an ID. Export a backup and resolve the duplicate IDs before syncing. Nothing was discarded.' });
       const marks = _mergeTombstones(existing?.tombstones, body.tombstones);
       const preferIncoming = !existing || clientUpdatedAt >= Number(existing.serverUpdatedAt || 0);
-      const portfolio = _applyTombstones(_mergeById(existing?.portfolio || [], body.portfolio, preferIncoming), marks.portfolio);
+      // Derive receipts before deletions/merging: old clients cannot clear a
+      // sale by omitting its row, stripping its link, or deleting its report.
+      const receipts = copySales(existing?.copySales, [...(existing?.flips || []), ...body.flips]);
+      const portfolio = unsoldCopies(_applyTombstones(_mergeById(existing?.portfolio || [], body.portfolio, preferIncoming), marks.portfolio), receipts);
       const flips = _applyTombstones(_mergeById(existing?.flips || [], body.flips, preferIncoming), marks.flips);
+      validateSaleLinks(receipts, flips);
       if (portfolio.length > MAX_ITEMS || flips.length > MAX_ITEMS)
         return res.status(413).json({ error: 'too_many_items', message: 'The combined collection exceeds the sync limit. Nothing was discarded.' });
-      const payload = { portfolio, flips, tombstones: marks, serverUpdatedAt: Date.now() };
+      const payload = { portfolio, flips, tombstones: marks, copySales: receipts, serverUpdatedAt: Date.now() };
       const serialized = JSON.stringify(payload);
       if (Buffer.byteLength(serialized) > MAX_BLOB_BYTES)
         return res.status(413).json({ error: 'payload_too_large', message: 'Your collection exceeds the cloud sync size limit. It is still saved on this device.' });
@@ -113,7 +120,8 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
-  } catch {
+  } catch (error) {
+    if (error.code === 'copy_sale_conflict') return res.status(error.status).json({error:error.code,message:error.message});
     return res.status(503).json({ error: 'storage_unavailable', message: 'Cloud collection could not be confirmed. Your device data is unchanged. Please retry sync.' });
   }
 }

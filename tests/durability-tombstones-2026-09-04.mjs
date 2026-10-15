@@ -360,14 +360,12 @@ for (const fname of ['savePortData', 'saveFlipsData', 'saveGradingData']) {
 }
 {
   const cms = stripComments(grabFn('confirmMarkSold'));
-  ok('confirmMarkSold bails before deleting the card if the flip did not persist',
-     /if\s*\(\s*!saveFlipsData\([^)]*\)\s*\)\s*\{[^}]*return/.test(cms));
-  // Order matters: the flip must be durable BEFORE the collection row is dropped.
-  const flipGate = cms.search(/!saveFlipsData\(/);
-  const removal  = cms.search(/savePortData\(\s*port\.filter/);
-  ok('the flip-write gate precedes the collection removal',
-     flipGate !== -1 && removal !== -1 && flipGate < removal);
-  ok('confirmMarkSold reports a failed removal too', /_reportStorageFailure\(\)/.test(cms));
+  ok('confirmMarkSold waits for durable recovery before closing its modal',
+     cms.indexOf('await window.CardResellSaleRecovery.commit(') >= 0 &&
+     cms.indexOf('if (!saved.ok) return') < cms.indexOf("classList.remove('open')", cms.indexOf('if (!saved.ok) return')));
+  // Storage fault ordering, interruption and cross-tab replay are executed in
+  // sale-recovery-browser.mjs, including the real shipped core and module.
+
 }
 {
   const g = stripComments(grabFn('saveGradingEntry'));
@@ -389,7 +387,6 @@ for (const [fname, kind] of [
   ['deleteFlip', 'flips'],
   ['deletePort', 'portfolio'],
   ['deletePortEntry', 'portfolio'],
-  ['confirmMarkSold', 'portfolio'],
   ['_ccmRemoveCard', 'portfolio'],
   ['clearCollection', 'portfolio'],
 ]) {
@@ -397,6 +394,8 @@ for (const [fname, kind] of [
   ok(`${fname} records a ${kind} tombstone`,
      new RegExp(`_addTombstones\\(\\s*'${kind}'`).test(body));
 }
+// Mark sold delegates marker persistence to the recovery module. The actual
+// marker and retry after a failed marker write are tested in the browser suite.
 {
   const cc = stripComments(grabFn('clearCollection'));
   ok('clearCollection tombstones flips as well as the portfolio',
@@ -487,13 +486,13 @@ eq('server merge tolerates undefined', S._mergeTombstones(undefined, undefined),
 
 // Server source wiring: the union must be followed by a subtraction.
 ok('server applies tombstones after portfolio union on POST',
-   /portfolio = _applyTombstones\(_mergeById/.test(API_NC));
+   /portfolio = unsoldCopies\(_applyTombstones\(_mergeById/.test(API_NC));
 ok('server applies tombstones after flip union on POST',
    /flips = _applyTombstones\(_mergeById/.test(API_NC));
 ok('server persists tombstones in the stored blob', /tombstones:\s*marks/.test(API_NC));
 ok('server returns tombstones on GET', /tombstones:\s*marks/.test(API_NC));
 ok('server applies tombstones on GET as well as POST',
-   /portfolio:\s*_applyTombstones\(/.test(API_NC));
+   /portfolio:\s*unsoldCopies\(_applyTombstones\(/.test(API_NC));
 ok('server reads client tombstones from the POST body', /body\.tombstones/.test(API_NC));
 ok('server merges client and stored tombstones',
    /_mergeTombstones\(existing\?\.tombstones/.test(API_NC));

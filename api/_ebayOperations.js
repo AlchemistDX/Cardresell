@@ -26,18 +26,19 @@ if (redis.call('GET',KEYS[1]) or '')~=ARGV[1] then return -1 end
 if ARGV[3]~='' and (redis.call('GET',KEYS[4])~=ARGV[3] or redis.call('EXISTS',KEYS[5])==1) then return -2 end
 if ARGV[4]~='' and redis.call('GET',KEYS[6])~=ARGV[4] then return -3 end
 if ARGV[5]~='' and redis.call('GET',KEYS[7])~=ARGV[5] then return -3 end
+if ARGV[6]~='' and redis.call('GET',KEYS[8])~=ARGV[6] then return -3 end
 if redis.call('SISMEMBER',KEYS[2],KEYS[1])==0 and redis.call('SCARD',KEYS[2])>=500 then return -4 end
 if redis.call('SISMEMBER',KEYS[3],KEYS[1])==0 and redis.call('SCARD',KEYS[3])>=2000 then return -4 end
 redis.call('SET',KEYS[1],ARGV[2]);redis.call('SADD',KEYS[2],KEYS[1]);redis.call('SADD',KEYS[3],KEYS[1]);return 1`;
 
 export async function saveListing({kv,environment,uid,key,previous,record,session=null,guards={}}) {
  const k=keys(environment,hash(uid)),account=record.accountHash;
- const result=await kv('EVAL',saveListingScript,7,key,listingIndex(environment,uid),accountListingsKey(environment,account),k.connection,k.prefix+'deleted:'+account,
-  guards.draftKey||key,guards.reviewKey||key,previous||'',JSON.stringify(record),session?.raw||'',guards.draftRaw||'',guards.reviewRaw||'');
+ const result=await kv('EVAL',saveListingScript,8,key,listingIndex(environment,uid),accountListingsKey(environment,account),k.connection,k.prefix+'deleted:'+account,
+  guards.draftKey||key,guards.reviewKey||key,guards.copyKey||key,previous||'',JSON.stringify(record),session?.raw||'',guards.draftRaw||'',guards.reviewRaw||'',guards.copyRaw||'');
  if(Number(result)!==1)throw fail(Number(result)===-4?'The saved listing operation limit was reached.':'The listing, draft or connection changed. Reload the saved operation to recover its current state.',409);
  return record;
 }
-export async function reserveListing(ctx,{review,reviewRaw,draftRaw,draftKey,reviewKey,photos}) {
+export async function reserveListing(ctx,{review,reviewRaw,draftRaw,draftKey,reviewKey,copyKey,copyRaw,photos}) {
  const {kv,environment,uid,session}=ctx,report=review.report,key=listingKey(environment,uid,report.instanceId),previous=await kv('GET',key),old=parseListing(previous,key);
  if(old&&old.state!=='cancelled')throw fail('This physical copy already has a saved listing operation. Open it to continue or recover.',409);
  if(!report.payloadReady||!report.payload||report.expiresAt<=Date.now()||report.draftRev==null||review.accountHash!==session.record.accountHash||review.connectionVersion!==session.record.version)throw fail('Save a fresh, complete eBay review for this connected account first.',409);
@@ -46,7 +47,7 @@ export async function reserveListing(ctx,{review,reviewRaw,draftRaw,draftKey,rev
   selected:report.selected,requirementsFingerprint:report.requirements.fingerprint,photos:photos.map(p=>({photoId:p.photoId,sha256:p.sha256,byteLength:p.byteLength,contentType:p.contentType})),
   price:report.payload.offer.pricingSummary.price.value,offerId:null,listingId:null,operation:null,fees:null,createdAt:now,updatedAt:now,history:[{state:'planned',at:now}],
   note:'Plan saved. No request has been sent to eBay. This copy is reserved for this plan.'};
- return saveListing({...ctx,key,previous,record,guards:{draftKey,draftRaw,reviewKey,reviewRaw}});
+ return saveListing({...ctx,key,previous,record,guards:{draftKey,draftRaw,reviewKey,reviewRaw,copyKey,copyRaw}});
 }
 export function publicListing(r,{id,accountHash}={}) {
  if(!r)return null;

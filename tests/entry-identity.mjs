@@ -44,7 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { harness } from './_assert.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PW = '/home/user/node_modules/playwright/index.js';
+const PW = 'playwright';
 const T = harness('entry-identity');
 
 const MIME = {
@@ -76,8 +76,8 @@ function startHost() {
 }
 
 const { server, port } = await startHost();
-const _pw = (await import(PW)).default;
-const browser = await _pw.chromium.launch();
+const _pw = await import(PW);
+const browser = await _pw.chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
 
 /* One context per scenario = one origin's storage. Two PAGES in one context
    share localStorage, which is what makes the two-tab scenario real rather
@@ -832,6 +832,16 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
     const ALLOWED = [
       'tiers.find(x => x.id === id)',       // venue fee tiers, ids are fixed slugs
     ];
+    // Exact expressions reviewed in their modules: these identify catalogue
+    // cards, subscription plans, camera detections, worker messages and batch
+    // requests. None are a physical Collection/Flips entry lookup.
+    const OTHER_ID_SPACES = {
+      core: ['data.id===canonicalID'],
+      'membership-shop': ['p.id===current','p.id===target','control.id===current','p.id===control.id','p.id===previousId'],
+      'photo-guide': ['previous.id===candidate.id'],
+      ui: ['data.id===id'],
+      'draft-batch': ['data.id!==id'],
+    };
     const bad = [];
     texts.forEach((t, i) => {
       const re = /([A-Za-z_$][\w$]*)\.id\s*(===|!==)\s*([A-Za-z_$][\w$.]*|'[^']*')/g;
@@ -842,6 +852,8 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
         // Enough surrounding source to identify WHICH collection is searched.
         const ctx = t.slice(Math.max(0, m.index - 40), m.index + m[0].length + 2);
         if (ALLOWED.some(a => ctx.includes(a))) continue;
+        const module = new URL(names[i]).pathname.split('/').pop().replace(/\.[a-f0-9]{8}\.js$/, '');
+        if (OTHER_ID_SPACES[module]?.includes(m[0].replace(/\s/g, ''))) continue;
         // Comparing against a string LITERAL is a DOM/element check, not an
         // entry lookup ("t.id === 'market'").
         if (m[3].startsWith("'")) continue;
@@ -1601,7 +1613,7 @@ await T.section('ACCEPTANCE — target and siblings, for the four actions nothin
       set('msShipCost', '');
       set('msGradingCost', '');
       let threw = null;
-      try { window.confirmMarkSold(); } catch (e) { threw = String((e && e.message) || e); }
+      try { await window.confirmMarkSold(); } catch (e) { threw = String((e && e.message) || e); }
       const port = JSON.parse(localStorage.getItem(pk) || '[]');
       const flips = JSON.parse(localStorage.getItem(fk) || '[]');
       out.markSoldSuccess = {

@@ -1,3 +1,4 @@
+import {availableCopy} from './_copySales.js';
 import {verifyTokenFlexible} from './_verifyToken.js';
 import {kvFromEnv} from './_kv.js';
 import {getDraft,draftKey,isDraftId,isSyntheticTestSub} from './_draftStore.js';
@@ -66,11 +67,12 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
     const read=await getDraft(kv,uid,id);if(!read.ok)throw fail('The draft was changed or deleted. This copy stays reserved.',409);
     const dk=draftKey(uid,id),raw=await kv('GET',dk);
     if(!raw||JSON.stringify(JSON.parse(raw))!==JSON.stringify(read.draft)||draftHash&&hash(raw)!==draftHash)throw fail('The draft changed. This copy stays reserved for recovery.',409);
+    const copy=await availableCopy(kv,uid,read.draft.instanceId);
     const reference=await referenceLoader(cfg,session.data.accessToken,read.packet?.category?.id,read.packet?.condition?.conditionId,fetcher);
     const verified=await reviewedPhotos({owner:uid,draftId:id,selected,photos,host});
     const report=buildSubmissionReview({read,owner:uid,environment,selected,reference,...verified});
     if(!report.payloadReady||fingerprint(report.payload)!==payloadHash||report.requirements.fingerprint!==requirementsFingerprint)throw fail('Card details, photos or eBay requirements changed. Save a new review before preparing this listing.',409);
-    return {draftKey:dk,draftRaw:raw};
+    return {draftKey:dk,draftRaw:raw,...copy};
    }
    if(action==='plan') {
     if(body.confirmed!==true||!isDraftId(body.draftId))throw fail('Confirm saving this physical copy’s listing plan.');
