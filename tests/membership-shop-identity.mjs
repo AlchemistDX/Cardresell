@@ -244,6 +244,39 @@ await t.section('separate subscription navigation and seven exact pack selection
         : a.elements().some(x => x.tag === 'article' && x.textContent.startsWith('Current plan' + current[0].toUpperCase() + current.slice(1))));
   }
 });
+await t.section('pack value uses the current account quote and the same credit type', async () => {
+  for (const plan of ['free', 'business']) {
+    const catalogue = { ...publicMembershipCatalogue(plan), purchaseEnabled: true };
+    const h = setup({ suppliedCatalogue: catalogue }); await h.open();
+    t.check(plan + ' packs explain the one-time purchase', /No subscription required/.test(h.message()));
+    const packs = h.controls().filter(b => /^(25|100|500|1,000|10|50) (ID|Grade) credits/.test(b.textContent));
+    t.check(plan + ' all seven packs show a unit rate', packs.length === 7 && packs.every(b => /¢ per (ID|Grade) credit/.test(b.textContent)));
+    const largeId = packs.find(b => b.textContent.startsWith('1,000 ID'));
+    t.check(plan + ' ID unit cost reflects server cents', largeId.textContent.includes(plan === 'free' ? 'About 5.00¢ per ID credit' : 'About 3.75¢ per ID credit'));
+    t.check(plan + ' lowest rate is scoped to each credit type', packs.filter(b => /Lowest price per credit/.test(b.textContent)).length === 2
+      && /Lowest price per credit/.test(largeId.textContent)
+      && /Lowest price per credit/.test(packs.find(b => b.textContent.startsWith('50 Grade')).textContent));
+    t.check(plan + ' member savings match the quote', plan === 'free' ? !packs.some(b => /Member savings/.test(b.textContent))
+      : /Member savings: \$12\.50/.test(largeId.textContent));
+  }
+  const catalogue = { ...publicMembershipCatalogue(), purchaseEnabled: true };
+  // Reordering and changing the quote must move the label away from the largest pack.
+  catalogue.packs = catalogue.packs.map(p => ({ ...p })).reverse();
+  catalogue.packs.find(p => p.packId === 'id_25').amountCents = 50;
+  const h = setup({ suppliedCatalogue: catalogue }); await h.open();
+  t.check('lowest rate follows the actual quote, not pack size or order', h.buttons().filter(b => /Lowest price per credit/.test(b.textContent)).length === 1
+    && h.buttons().find(b => /Lowest price per credit/.test(b.textContent)).textContent.startsWith('25 ID'));
+  for (const equal of [true, false]) {
+    const c = { plans: [], purchaseEnabled: true, packs: [
+      { packId: 'id_25', kind: 'id', credits: equal ? 25 : 0, amountCents: 250 },
+      { packId: 'id_100', kind: 'id', credits: 100, amountCents: 1000 },
+    ] };
+    const s = setup({ suppliedCatalogue: c }); await s.open();
+    t.check(equal ? 'equal rates have no artificial winner' : 'an unknown rate cannot support a lowest-price claim',
+      !s.elements().some(e => e.className === 'membership-pack-value'));
+    if (!equal) t.check('zero credits never display an infinite unit price', !s.buttons().some(b => /Infinity|NaN/.test(b.textContent)));
+  }
+});
 await t.section('association automatically refreshes normal account flow', async () => {
   let associated = false, gets = 0;
   const h = setup({ onAccount: async options => {

@@ -27,9 +27,12 @@
 .membership-plan-current { border-color:var(--gold,#d4af37); }
 .membership-pack-section { margin:26px 0; }
 .membership-packs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.membership-packs button { display:flex; justify-content:space-between; align-items:center; gap:12px; text-align:left; min-height:76px; padding:18px; }
+.membership-packs button { display:flex; justify-content:space-between; align-items:center; gap:12px; text-align:left; min-height:112px; padding:18px; }
+.membership-pack-copy { display:flex; flex-direction:column; align-items:flex-start; gap:7px; min-width:0; }
 .membership-pack-quantity { font-size:.95rem; font-weight:600; }
-.membership-pack-price { font-size:1.2rem; color:var(--gold-text,#e8bd61); font-variant-numeric:tabular-nums; }
+.membership-pack-unit,.membership-pack-saving { font-size:.75rem; line-height:1.4; color:var(--text-muted,#aaa); }
+.membership-pack-value { font-size:.7rem; line-height:1.4; padding:3px 7px; border:1px solid var(--gold,#d4af37); border-radius:6px; color:var(--gold-text,#e8bd61); }
+.membership-pack-price { flex-shrink:0; font-size:1.2rem; color:var(--gold-text,#e8bd61); font-variant-numeric:tabular-nums; }
 .membership-switch { margin:8px 0; }
 .hdr #getProBtn { display:flex!important; }
 /* 2026-10-09: upgrade ladder in the plans view */
