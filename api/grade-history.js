@@ -5,14 +5,24 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 // with the same id are idempotent. No membership/credit debit occurs here.
 export const GRADE_HISTORY_LIMIT = 500;
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
-const SAVE = `
+// Redis script errors do not undo preceding writes. Validate both hash keys
+// before mutating either, so a damaged index cannot cause a partial operation.
+const HASH_PREFLIGHT = `
+for i = 1, 2 do
+  local kind = redis.call('TYPE', KEYS[i]).ok
+  if kind ~= 'none' and kind ~= 'hash' then
+    return redis.error_reply('Invalid saved grade storage type')
+  end
+end
+`;
+const SAVE = HASH_PREFLIGHT + `
 if redis.call('EXISTS', KEYS[3]) == 1 then return -2 end
 if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 1 then return 0 end
 if redis.call('HLEN', KEYS[1]) >= tonumber(ARGV[4]) then return -1 end
 redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
 redis.call('HSET', KEYS[2], ARGV[1], ARGV[3])
 return 1`;
-const REMOVE = `
+const REMOVE = HASH_PREFLIGHT + `
 redis.call('HDEL', KEYS[1], ARGV[1])
 redis.call('HDEL', KEYS[2], ARGV[1])
 redis.call('SET', KEYS[3], '1', 'EX', 7776000)
@@ -51,7 +61,7 @@ async function productionKv(...command) {
   }, body: JSON.stringify(command) });
   if (!response.ok) throw new Error('Storage unavailable');
   const result = await response.json();
-  if (result.error) throw new Error('Storage unavailable');
+  if (!result || result.error || !Object.hasOwn(result, 'result')) throw new Error('Storage unavailable');
   return result.result;
 }
 export function createGradeHistoryHandler({ verify = verifyTokenFlexible, kv = productionKv } = {}) {
@@ -72,15 +82,18 @@ export function createGradeHistoryHandler({ verify = verifyTokenFlexible, kv = p
     try {
       if (req.method === 'GET' && id) {
         const raw = await kv('HGET', reports, id);
-        if (!raw) return res.status(404).json({ error: 'Saved grade not found' });
+        if (raw === null) return res.status(404).json({ error: 'Saved grade not found' });
+        if (typeof raw !== 'string' || !raw) throw new Error('Invalid storage response');
         return res.status(200).json({ report: JSON.parse(raw) });
       }
       if (req.method === 'GET') {
         const rows = await kv('HVALS', summaries);
-        return res.status(200).json({ reports: (rows || []).map(x => JSON.parse(x)).sort((a,b) => b.savedAt - a.savedAt), limit: GRADE_HISTORY_LIMIT });
+        if (!Array.isArray(rows)) throw new Error('Invalid storage response');
+        return res.status(200).json({ reports: rows.map(x => JSON.parse(x)).sort((a,b) => b.savedAt - a.savedAt), limit: GRADE_HISTORY_LIMIT });
       }
       if (req.method === 'DELETE') {
-        await kv('EVAL', REMOVE, 3, reports, summaries, prefix + ':deleted:' + id, id);
+        const removed = await kv('EVAL', REMOVE, 3, reports, summaries, prefix + ':deleted:' + id, id);
+        if (removed !== 1) throw new Error('Delete not acknowledged');
         return res.status(200).json({ deleted: true });
       }
       let data;
@@ -95,6 +108,7 @@ export function createGradeHistoryHandler({ verify = verifyTokenFlexible, kv = p
         id, JSON.stringify({ ...summary, data }), JSON.stringify(summary), GRADE_HISTORY_LIMIT);
       if (result === -1) return res.status(409).json({ error: `Your history has ${GRADE_HISTORY_LIMIT} saved grades. Download and delete an older report to make room.` });
       if (result === -2) return res.status(409).json({ error: 'This report was deleted. It has not been saved again.' });
+      if (result !== 0 && result !== 1) throw new Error('Save not acknowledged');
       return res.status(200).json({ saved: true, id, replayed: result === 0 });
     } catch { return res.status(503).json({ error: 'Grade history is unavailable. Please retry; your current result is still on screen.' }); }
   };

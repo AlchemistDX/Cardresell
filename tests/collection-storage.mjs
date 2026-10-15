@@ -7,7 +7,7 @@ const check=(label,a,b)=>{assert.deepEqual(a,b,label);checks++;console.log('✓ 
 const key=`userdata:${UID}`, originalFetch=globalThis.fetch;
 let fault='';globalThis.fetch=async(input,init)=>{
  const u=String(input);
- if(u.includes('/get/')&&u.includes('userdata')){
+ if(u.includes('/get/')&&(u.includes('userdata')||u.includes('collection'))){
   if(fault==='read-http')return new Response('{}',{status:503});
   if(fault==='read-redis')return Response.json({error:'ERR storage'});
   if(fault==='read-invalid')return Response.json({result:'{broken'});
@@ -41,9 +41,34 @@ try{
  check('duplicate refusal preserves cloud bytes',await redis(['GET',key]),beforeDuplicate);
  check('malformed snapshot rejected',(await call('POST',{portfolio:[]})).code,400);
  check('oversized count rejected without slicing',(await call('POST',{portfolio:Array.from({length:2001},(_,i)=>({id:i})),flips:[]})).code,413);
+ for(const id of ['__proto__','constructor','toString','hasOwnProperty']){
+  await call('POST',snapshot(id));
+  const deletedAt=Date.now()+100;
+  await call('POST',snapshot('',{tombstones:{portfolio:Object.fromEntries([[id,deletedAt]]),flips:{}}}));
+  await call('POST',snapshot(id,{portfolio:[{id,updatedAt:deletedAt-1000}]}));
+  const current=await call('GET');
+  check('opaque ID deletion survives stale upload '+id,current.portfolio.some(x=>x.id===id),false);
+  check('opaque ID marker round-trips '+id,Object.hasOwn(current.tombstones.portfolio,id),true);
+ }
  const marks=Object.fromEntries(Array.from({length:2000},(_,i)=>['x'+i,Date.now()]));
  await call('POST',snapshot('',{tombstones:{portfolio:marks,flips:{}}}));
  check('deletion capacity covers maximum collection',Object.keys((await call('GET')).tombstones.portfolio).length,2000);
+ const legacy=(await import('../api/collection.js')).default;
+ async function old(method,body={},query={}){let code=200,payload;await legacy({method,headers:{authorization:'Bearer '+'x'.repeat(40)},body,query},{setHeader(){},status(n){code=n;return this},json(p){payload=p;return this}});return {code,...payload}}
+ const legacyKey=`collection:${UID}`;
+ check('legacy initial save',(await old('POST',{cardName:'first'})).ok,true);
+ const legacyBefore=await redis(['GET',legacyKey]);
+ for(const f of ['read-http','read-redis','read-invalid','read-missing']){
+  fault=f;check('legacy '+f+' fails closed',(await old('POST',{cardName:'bad'})).code,503);
+  check('legacy '+f+' preserves saved data',await redis(['GET',legacyKey]),legacyBefore);
+ }
+ fault='write';check('legacy write error not acknowledged',(await old('POST',{cardName:'bad'})).code,502);fault='';
+ const concurrent=await Promise.all(['second','third','fourth'].map(cardName=>old('POST',{cardName})));
+ check('legacy concurrent writes acknowledged',concurrent.every(x=>x.ok),true);
+ check('legacy concurrent additions preserved',(await old('GET')).items.map(x=>x.cardName).sort(),['first','fourth','second','third']);
+ const mutations=await Promise.all([old('DELETE',{}, {id:'first|raw_nm'}),old('POST',{cardName:'fifth'})]);
+ check('legacy concurrent delete and add acknowledged',mutations.every(x=>x.ok),true);
+ check('legacy delete and addition preserved',(await old('GET')).items.map(x=>x.cardName).sort(),['fifth','fourth','second','third']);
  console.log(`SUITE COMPLETE: collection-storage.mjs: ${checks} passed, 0 failed`);
 }finally{h.restore()}
 process.exit(0);

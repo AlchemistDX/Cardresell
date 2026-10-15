@@ -53,7 +53,7 @@ globalThis.fetch = async (url, opts = {}) => {
       ok: true, status: 200,
       json: async () => ({
         aud: '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com',
-        email: currentEmail, sub: 'google-sub-not-used',
+        email: currentEmail, sub: 'fixture-'+currentEmail, iss:'https://accounts.google.com', exp:String(Math.floor(Date.now()/1000)+3600), email_verified:true,
       }),
     };
   }
@@ -144,8 +144,8 @@ const kv = KVM.makeKv('https://kv.test', 'test-token');
 
 const OWNER_SUB = 'owner-sub-0001';
 const OTHER_SUB = 'other-sub-0002';
-store.set(`uid_by_email:${OWNER_EMAIL}`, OWNER_SUB);
-store.set(`uid_by_email:${OTHER_EMAIL}`, OTHER_SUB);
+store.set(`firebase_uid_by_google:v1:fixture-${OWNER_EMAIL}`, OWNER_SUB);
+store.set(`firebase_uid_by_google:v1:fixture-${OTHER_EMAIL}`, OTHER_SUB);
 
 function fakeReq({ method = 'POST', body, query, headers } = {}) {
   return {

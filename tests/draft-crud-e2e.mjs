@@ -38,8 +38,8 @@ const seen = [];
 
 function reset() {
   store.clear(); sets.clear(); kvExpiries.clear(); failCommands = new Set(); failKeyPrefix = null; failNextN = 0; seen.length = 0;
-  // The endpoint resolves the Firebase uid by email, never the Google sub.
-  store.set(`uid_by_email:seller@example.com`, SUB);
+  // The endpoint resolves the Firebase uid by verified Google subject, never the Google sub.
+  store.set(`firebase_uid_by_google:v1:google-sub-not-used`, SUB);
 }
 
 // Token verification is a real network call in production. Stub it at the same
@@ -50,7 +50,7 @@ globalThis.fetch = async (url, opts) => {
   if (u.includes('oauth2.googleapis.com/tokeninfo')) {
     return { ok: true, status: 200, json: async () => ({
       aud: '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com',
-      email: TEST_EMAIL, sub: 'google-sub-not-used',
+      email: TEST_EMAIL, sub: 'google-sub-not-used', iss:'https://accounts.google.com', exp:String(Math.floor(Date.now()/1000)+3600), email_verified:true,
     }) };
   }
   if (u.includes('googleapis.com')) return { ok: false, status: 500, json: async () => ({}) };

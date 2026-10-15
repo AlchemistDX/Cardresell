@@ -17,6 +17,7 @@ const FREE_LIMIT = 25;
 const PRO_LIMIT  = 500;
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -34,6 +35,7 @@ export default async function handler(req, res) {
   try {
     const tokenInfo = await verifyTokenFlexible(idToken);
     googleSub = tokenInfo.uid;
+    if (typeof googleSub !== 'string' || !googleSub) throw new Error('Invalid account');
     userEmail = tokenInfo.email || '';
   } catch(e) {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -41,9 +43,10 @@ export default async function handler(req, res) {
 
   const key = `collection:${googleSub}`;
 
+  try {
   // ── GET: list collection ──
   if (req.method === 'GET') {
-    const items = await readCollection(kvUrl, kvToken, key);
+    const {items} = await readCollection(kvUrl, kvToken, key);
     const totalValue = items.reduce((sum, it) => sum + (Number(it.priceCurrent) || 0), 0);
     const totalAtAdd = items.reduce((sum, it) => sum + (Number(it.priceAtAdd)  || 0), 0);
     return res.status(200).json({
@@ -55,6 +58,8 @@ export default async function handler(req, res) {
     });
   }
 
+  for (let attempt = 0; attempt < 4; attempt++) {
+  // Re-read and recompute limits/duplicates after every concurrent-write conflict.
   // ── POST: add card ──
   if (req.method === 'POST') {
     const body = req.body || {};
@@ -65,7 +70,7 @@ export default async function handler(req, res) {
 
     if (!cardName) return res.status(400).json({ error: 'cardName required' });
 
-    const items = await readCollection(kvUrl, kvToken, key);
+    const {items, raw} = await readCollection(kvUrl, kvToken, key);
 
     // Check Pro status for correct cap
     const isPro = await checkProStatus(kvUrl, kvToken, googleSub);
@@ -105,7 +110,7 @@ export default async function handler(req, res) {
 
     items.push(entry);
     try {
-      await writeCollection(kvUrl, kvToken, key, items);
+      if (!await writeCollection(kvUrl, kvToken, key, raw, items)) continue;
     } catch (e) {
       console.error('collection save failed:', e.message);
       return res.status(502).json({ error: 'save_failed', message: 'Could not save your collection. Please retry.' });
@@ -117,14 +122,14 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     const id = req.query?.id || '';
     if (!id) return res.status(400).json({ error: 'id required' });
-    const items = await readCollection(kvUrl, kvToken, key);
+    const {items, raw} = await readCollection(kvUrl, kvToken, key);
     const before = items.length;
     const filtered = items.filter(it => it.id !== id);
     if (filtered.length === before) {
       return res.status(404).json({ error: 'not_found' });
     }
     try {
-      await writeCollection(kvUrl, kvToken, key, filtered);
+      if (!await writeCollection(kvUrl, kvToken, key, raw, filtered)) continue;
     } catch (e) {
       console.error('collection delete failed:', e.message);
       return res.status(502).json({ error: 'save_failed', message: 'Could not remove this card. Please retry.' });
@@ -133,38 +138,44 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+  }
+  return res.status(409).json({ error: 'Collection changed. Please retry.' });
+  } catch {
+    return res.status(503).json({ error: 'Collection storage unavailable. Please retry.' });
+  }
 }
 
 // ── Helpers ──
 async function readCollection(kvUrl, kvToken, key) {
-  try {
-    const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
-    const d = await r.json();
-    if (!d.result) return [];
-    const parsed = typeof d.result === 'string' ? JSON.parse(d.result) : d.result;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch(e) {
-    console.warn('readCollection error:', e.message);
-    return [];
-  }
-}
-
-async function writeCollection(kvUrl, kvToken, key, items) {
-  // Upstash REST: use POST /set/<key> with body containing the JSON string
-  const body = JSON.stringify(items);
-  const r = await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${kvToken}`,
-      'Content-Type': 'text/plain',
-    },
-    body,
+  const r = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${kvToken}` }
   });
-  if (!r.ok) throw new Error(`kv_write_failed:${r.status}`);
+  const d = await r.json();
+  if (!r.ok || !d || d.error || !Object.hasOwn(d, 'result')) throw new Error('Read failed');
+  const raw = d.result;
+  if (raw === null) return {items: [], raw};
+  if (typeof raw !== 'string') throw new Error('Invalid collection');
+  const items = JSON.parse(raw);
+  if (!Array.isArray(items) || items.some(x => !x || typeof x !== 'object' || Array.isArray(x))) throw new Error('Invalid collection');
+  return {items, raw};
 }
 
+const COMPARE_AND_SET = `
+local current = redis.call('GET', KEYS[1])
+if ARGV[1] == 'missing' then
+  if current then return 0 end
+elseif current ~= ARGV[2] then return 0 end
+redis.call('SET', KEYS[1], ARGV[3])
+return 1`;
+async function writeCollection(kvUrl, kvToken, key, raw, items) {
+  const r = await fetch(kvUrl, {
+    method: 'POST', headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(['EVAL', COMPARE_AND_SET, 1, key, raw === null ? 'missing' : 'present', raw ?? '', JSON.stringify(items)])
+  });
+  const d = await r.json();
+  if (!r.ok || !d || d.error || ![0, 1].includes(d.result)) throw new Error('Write failed');
+  return d.result === 1;
+}
 
 async function checkProStatus(kvUrl, kvToken, googleSub) {
   try {

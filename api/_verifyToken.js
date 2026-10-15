@@ -47,13 +47,15 @@ async function verifyFirebaseToken(idToken) {
   const header  = JSON.parse(atob(parts[0].replace(/-/g,'+').replace(/_/g,'/')));
   const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
 
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string') throw new Error('Invalid signing algorithm');
+
   // Basic claims check
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp < now) throw new Error('Token expired');
-  if (payload.iat > now + 300) throw new Error('Token issued in the future');
+  if (!Number.isFinite(payload.exp) || payload.exp <= now) throw new Error('Token expired');
+  if (!Number.isFinite(payload.iat) || payload.iat > now + 300) throw new Error('Token issued in the future');
   if (payload.aud !== FIREBASE_PROJECT_ID) throw new Error('Wrong audience');
   if (payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) throw new Error('Wrong issuer');
-  if (!payload.sub || payload.sub.length === 0) throw new Error('Missing subject');
+  if (typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 128) throw new Error('Missing subject');
 
   // Verify signature using Google's public keys (JWK format).
   const keys = await getGooglePublicKeys();
@@ -109,41 +111,26 @@ async function verifyFirebaseToken(idToken) {
     name:  payload.name  || '',
     emailVerified: payload.email_verified === true || appleVerified || googleVerification?.emailVerified === true,
     provider,
+    googleSubject: provider === 'google.com' && Array.isArray(identities['google.com']) && identities['google.com'].length === 1 && typeof identities['google.com'][0] === 'string' ? identities['google.com'][0] : null,
   };
 }
 
-// Also support old Google tokeninfo as fallback (for existing Google users mid-migration)
-//
-// 2026-08-18: CRITICAL FIX. The old fallback returned info.sub (Google's OAuth
-// `sub`) as `uid`, which does NOT match the Firebase UID we store all user data
-// against. That silently corrupted per-user KV lookups on any request where
-// Firebase JWKS fetch had a transient failure — the same user would appear
-// under two different UIDs (Firebase `fzU...` vs Google numeric `10490...`),
-// causing tier and credit records to look "missing" on that request.
-//
-// New behavior:
-//   1. Try Firebase JWKS verify normally (fast path, ~95% of traffic).
-//   2. If that fails, try the Google tokeninfo fallback — but ONLY use it to
-//      confirm the token is valid. Never return info.sub as uid.
-//   3. Instead, look up the Firebase UID by email via KV mapping
-//      (uid_by_email:{lowercase_email}). This mapping is written on every
-//      successful Firebase verify below, so it's always populated for any
-//      user who has ever signed in successfully.
-//   4. If no UID mapping exists (brand-new user + Firebase completely down),
-//      throw — don't silently fabricate a fake identity.
+// Legacy Google tokens may only resolve through a binding established by a
+// signed Firebase Google session. Email addresses are not account identifiers.
+// Old email mappings are deliberately ignored; legacy clients must sign in
+// through Firebase once to establish this versioned provider-subject binding.
 async function verifyTokenFlexible(idToken) {
   // Try Firebase first
   try {
     const result = await verifyFirebaseToken(idToken);
-    // Best-effort: cache the email→uid mapping for the tokeninfo fallback.
+    // Best-effort: bind the verified Google subject to its Firebase UID.
     // 30-day TTL; refreshed on every request.
-    if (result.email && result.uid) {
+    if (result.emailVerified && result.googleSubject && result.uid) {
       const kvUrl   = process.env.KV_REST_API_URL;
       const kvToken = process.env.KV_REST_API_TOKEN;
       if (kvUrl && kvToken) {
-        const emailLo = result.email.toLowerCase().trim();
         // Fire-and-forget — don't block the request on this write.
-        fetch(`${kvUrl}/setex/${encodeURIComponent(`uid_by_email:${emailLo}`)}/2592000/${encodeURIComponent(result.uid)}`, {
+        fetch(`${kvUrl}/setex/${encodeURIComponent(`firebase_uid_by_google:v1:${result.googleSubject}`)}/2592000/${encodeURIComponent(result.uid)}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${kvToken}` },
         }).catch(() => {});
@@ -152,29 +139,31 @@ async function verifyTokenFlexible(idToken) {
     return result;
   } catch(fbErr) {
     // Fallback: Google tokeninfo (covers legacy Google-only tokens during migration
-    // AND transient Firebase JWKS fetch failures).
+    // when a verified provider binding already exists).
     try {
-      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
       if (!r.ok) throw new Error('Google tokeninfo failed');
       const info = await r.json();
-      if (info.aud !== GOOGLE_OAUTH_CLIENT_ID && info.aud !== FIREBASE_PROJECT_ID)
+      if (info.aud !== GOOGLE_OAUTH_CLIENT_ID)
         throw new Error('Wrong audience');
 
-      const email = (info.email || '').toLowerCase().trim();
-      if (!email) throw new Error('Google tokeninfo missing email; cannot map to Firebase UID');
+      if (!['accounts.google.com', 'https://accounts.google.com'].includes(info.iss) ||
+          typeof info.sub !== 'string' || !info.sub || info.sub.length > 255 ||
+          !Number.isFinite(Number(info.exp)) || Number(info.exp) <= Date.now()/1000 ||
+          ![true, 'true'].includes(info.email_verified)) throw new Error('Invalid Google identity');
 
-      // Look up the Firebase UID by email so we NEVER return the Google sub.
+      // Resolve the stable provider subject; never use an email or return Google sub.
       // This is the fix for the cross-device tier-mismatch bug.
       const kvUrl   = process.env.KV_REST_API_URL;
       const kvToken = process.env.KV_REST_API_TOKEN;
       let firebaseUid = null;
       if (kvUrl && kvToken) {
         try {
-          const lookup = await fetch(`${kvUrl}/get/${encodeURIComponent(`uid_by_email:${email}`)}`, {
+          const lookup = await fetch(`${kvUrl}/get/${encodeURIComponent(`firebase_uid_by_google:v1:${info.sub}`)}`, {
             headers: { Authorization: `Bearer ${kvToken}` },
           });
           const ld = await lookup.json();
-          firebaseUid = ld.result || null;
+          if (lookup.ok && !ld.error && typeof ld.result === 'string' && ld.result.length > 0 && ld.result.length <= 128) firebaseUid = ld.result;
         } catch(kvErr) { /* fall through */ }
       }
 
@@ -182,7 +171,7 @@ async function verifyTokenFlexible(idToken) {
         // No Firebase-UID mapping means this user has never successfully signed
         // in via Firebase on this deployment. We refuse to return the Google sub
         // because it would create split-UID data. Bounce them to re-auth.
-        throw new Error('Firebase UID unknown for this email; please sign in again');
+        throw new Error('Firebase UID unknown for this Google account; please sign in again');
       }
 
       return {

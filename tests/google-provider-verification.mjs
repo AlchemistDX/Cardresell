@@ -3,7 +3,7 @@ const {finish} = completionGuard('google-provider-verification');
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
 import { readGoogleProviderVerification } from '../api/_googleProviderVerification.js';
-import { verifyFirebaseToken } from '../api/_verifyToken.js';
+import { verifyFirebaseToken, verifyTokenFlexible } from '../api/_verifyToken.js';
 import { createMembershipAuthenticator } from '../api/_membershipAuthentication.js';
 
 globalThis.crypto ||= webcrypto;
@@ -92,6 +92,35 @@ await test('provider lookup outage denies membership without leaking details',as
   try{await assert.rejects(()=>createMembershipAuthenticator({onReject:reason=>messages.push(reason)})(jwt()),{code:'authentication_required'});}finally{console.warn=warn;failLookup=false;}
   assert.equal(JSON.stringify(messages).includes('private upstream detail'),false);
   assert.ok(JSON.stringify(messages).includes('email_not_verified_google'));
+});
+for (const change of [{exp:undefined},{exp:'9999999999'},{iat:undefined},{sub:{}},{exp:now}]) {
+  await test('malformed signed claims rejected '+JSON.stringify(change),()=>assert.rejects(()=>verifyFirebaseToken(jwt(change))));
+}
+const priorFetch = globalThis.fetch;
+const bindings = new Map([['uid_by_email:test-only@gmail.com','old-email-owner']]);
+process.env.KV_REST_API_URL='https://identity-kv.test';
+process.env.KV_REST_API_TOKEN='synthetic';
+let googleInfo={aud:'971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com',iss:'https://accounts.google.com',sub:'google-test-subject',exp:String(now+3600),email:'test-only@gmail.com',email_verified:'true'};
+globalThis.fetch=async(url,options)=>{
+ if(url.startsWith('https://identity-kv.test')){
+  const parts=new URL(url).pathname.split('/').slice(1).map(decodeURIComponent);
+  if(parts[0]==='setex'){bindings.set(parts[1],parts[3]);return Response.json({result:'OK'});}
+  return Response.json({result:bindings.get(parts[1])??null});
+ }
+ if(url.startsWith('https://oauth2.googleapis.com/tokeninfo'))return Response.json(googleInfo);
+ return priorFetch(url,options);
+};
+await test('old email binding alone cannot authorize legacy token',()=>assert.rejects(()=>verifyTokenFlexible('legacy-token')));
+await test('unverified password account cannot populate provider binding',async()=>{
+ await verifyTokenFlexible(jwt({email:'test-only@gmail.com',firebase:{sign_in_provider:'password',identities:{email:['test-only@gmail.com']}}}));
+ assert.equal(bindings.size,1);
+});
+await test('verified Firebase Google session establishes stable binding',async()=>{
+ assert.equal((await verifyTokenFlexible(jwt({email_verified:true}))).uid,claims.sub);
+ assert.equal((await verifyTokenFlexible('legacy-token')).uid,claims.sub);
+});
+for(const change of [{sub:'different-subject'},{email_verified:'false'},{iss:'wrong'},{aud:claims.aud},{exp:'bad'},{exp:String(now-1)}])await test('legacy identity rejects '+JSON.stringify(change),async()=>{
+ const saved=googleInfo;googleInfo={...saved,...change};try{await assert.rejects(()=>verifyTokenFlexible('legacy-token'));}finally{googleInfo=saved;}
 });
 console.log(`${passed} passed, 0 failed`);
 

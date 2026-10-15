@@ -91,9 +91,9 @@ for(const [plan,cents] of Object.entries({starter:499,casual:999,pro:1999,busine
 }
 await kv('FLUSHDB');await kv('SET',MEMBERSHIP_LEGACY_FENCE,'1');
 await kv('SET',membershipEnrollmentKey('member'),JSON.stringify({version:'launch-v2',owner:'member',verified:true,plan:'free',freeThrough:0,capabilities:{bulkGrade:false}}));
-await kv('SET','uid_by_email:seller@example.com','member');
+await kv('SET','firebase_uid_by_google:v1:google-sub','member');
 globalThis.fetch=async(url,opts)=>String(url).includes('oauth2.googleapis.com/tokeninfo')
- ? Response.json({aud:'971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com',email:'seller@example.com',sub:'google-sub'})
+ ? Response.json({aud:'971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com',email:'seller@example.com',sub:'google-sub',iss:'https://accounts.google.com',exp:String(Math.floor(Date.now()/1000)+3600),email_verified:true})
  : String(url).includes('googleapis.com') ? new Response('',{status:500}) : redisRest(url,opts);
 const call=async(method,body={},query={},key=randomUUID())=>{
  const res={code:0,setHeader(){},status(n){this.code=n;return this},json(body){this.body=body;return this}};
