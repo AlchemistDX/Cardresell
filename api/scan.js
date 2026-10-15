@@ -1753,10 +1753,8 @@ Respond ONLY with valid JSON, no explanation:
       ...photoContent,
     ] : [...photoContent, { type: 'text', text: prompt }];
 
-    // 2026-08-16: try gpt-5 first (native multimodal, 84.2% MMMU vs
-    // gpt-4o's 72.2% — huge win on card ID / OCR-through-glare). If
-    // it errors (org tier not enabled, unknown-param rejection, etc.)
-    // fall back to gpt-4o so identify never hard-fails on a model change.
+    // Use the selected primary model, with reasoning parameters for all
+    // supported reasoning models and the legacy parameters for the fallback.
     async function callModel(modelId, signal) {
       const isGpt5 = isReasoningModel(modelId);
       const body = {
@@ -1769,7 +1767,7 @@ Respond ONLY with valid JSON, no explanation:
         // vs. "is this a plausible guess?". Grade mode stays at 'low' because the
         // grading prompt is more mechanical (measure ratios, apply thresholds).
         body.reasoning_effort = isGradeMode ? 'low' : 'medium';
-        // GPT-5 reasoning tokens count toward max_completion_tokens.
+        // Reasoning tokens count toward max_completion_tokens.
         // Medium reasoning can eat 2000-4000 tokens before visible output.
         // Give a generous budget so real output isn't truncated / empty.
         body.max_completion_tokens = isDeepGrade ? 5000 : (isGradeMode ? 4000 : 5000);
@@ -1787,9 +1785,9 @@ Respond ONLY with valid JSON, no explanation:
       });
     }
 
-    // Try gpt-5 first, then gpt-4o. Fall through on 3 conditions:
+    // Try the configured primary, then the fallback. Fall through on 3 conditions:
     //   (1) HTTP error on the response
-    //   (2) empty message content (gpt-5 can burn all tokens on reasoning)
+    //   (2) empty message content (reasoning can consume the output budget)
     //   (3) JSON parse failure (model returned prose instead of JSON)
     async function tryModel(modelId) {
       return observeProviderAttempt({ provider: 'openai', operation: 'chat_completion',
