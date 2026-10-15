@@ -3074,6 +3074,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div id="collectionContent">
     <h1 class="workspace-title">Your collection</h1>
     <p id="collectionSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
+    <div id="saleRecoveryNotice" role="status" hidden style="margin:.8rem 0;padding:.8rem;border:1px solid var(--gold);border-radius:10px;font-size:.85rem"></div>
     <button id="collectionSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
     <section class="collection-grade-history" aria-labelledby="collectionGradesTitle">
@@ -3934,9 +3935,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </div>
       </div>
     </div>
-    <div style="font-size:.62rem;color:var(--text-faint);margin:-.3rem 0 .7rem;line-height:1.4">Platform fees, shipping you paid, and grading cost. Leave blank if none.</div>
+    <div style="font-size:.62rem;color:var(--text-faint);margin:-.3rem 0 .7rem;line-height:1.4">Enter 0 when a cost is confirmed as none. Leave unknown costs blank.</div>
 
     <div id="msProfitPreview" style="font-size:.75rem;color:#8d8b82;margin-bottom:.75rem;text-align:center;padding:.5rem;background:#0a0a0a;border-radius:8px;border:1px dashed #1f1f1f">Enter a sold price to see profit</div>
+    <p style="font-size:.75rem;color:var(--text-muted);line-height:1.4">This records the sale in Collection and Flips. End any active marketplace listings separately.</p>
 
     <div style="display:flex;gap:.5rem">
       <button type="button" onclick="document.getElementById('markSoldModal').classList.remove('open')" style="flex:1;padding:.7rem;background:transparent;border:1px solid #333;border-radius:10px;color:#aaa;font-size:.85rem;font-weight:700;cursor:pointer">Cancel</button>
@@ -3950,7 +3952,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
-<script defer src="/js/core.1d175737.js"></script>
+<script defer src="/js/core.9e44c923.js"></script>
+<script defer src="/js/sale-recovery.bcb77f9e.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
 .membership-shop * { box-sizing:border-box; }

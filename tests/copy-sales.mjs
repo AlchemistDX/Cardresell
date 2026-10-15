@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import {completionGuard} from './_complete.mjs';
+import {billingHarness,exact,UID} from './_scanBillingHarness.mjs';
+import {redisCommand as redis} from './_idRedis.mjs';
+import {fixture,kv,env,reference,photoHost} from './_ebayOperationFixture.mjs';
+import {createHandler} from '../api/ebay-listing-operations.js';
+import {saveListingScript} from '../api/_ebayOperations.js';
+const handler=(await import('../api/user-data.js')).default;
+const {finish}=completionGuard('copy-sales'),h=billingHarness();globalThis.__STUB=exact();let checks=0;
+const check=(v,m)=>{assert.ok(v,m);checks++;},key='userdata:'+UID;
+async function call(method,body={}){let code=200,data;await handler({method,headers:{authorization:'Bearer '+'x'.repeat(40)},body},{setHeader(){},status(n){code=n;return this;},json(p){data=p;return this;}});return {code,data};}
+const sale=(id='sale-a',copy='copy-a')=>({id,sourceCollectionId:copy,sellPrice:50,buyPrice:10,costMeta:{buyPrice:'value',fees:'blank',shippingCost:'blank',gradingCost:'zero'},gradingCost:0,location:'Box 2',sku:'seller-sku'});
+const body=(flips=[],portfolio=[])=>({flips,portfolio,clientUpdatedAt:Date.now()+10000});
+try {
+ await redis(['DEL',key]);await call('POST',body([],[{id:'copy-a',card:'Charizard'},{id:'sibling',card:'Blastoise'}]));
+ let r=await call('POST',body([sale()],[{id:'copy-a'},{id:'sibling'}]));
+ check(r.code===200&&r.data.flips.length===1&&r.data.portfolio.length===1&&r.data.portfolio[0].id==='sibling','sale and stock removal share one server CAS');
+ check(r.data.flips[0].costMeta.fees==='blank'&&r.data.flips[0].location==='Box 2','cost uncertainty and copy provenance survive');
+ check(r.data.copySales.entries[0].copyId==='copy-a'&&r.data.copySales.entries[0].saleId==='sale-a','receipt links physical copy and sale');
+ const raw=await redis(['GET',key]);
+ check((await call('POST',body([sale('sale-b')]))).code===409,'a second sale ID cannot reuse a sold copy');
+ check(await redis(['GET',key])===raw,'conflicting sale preserves exact saved bytes');
+ check((await call('POST',body([{id:'sale-a',sellPrice:55}]))).code===409,'sale edit cannot strip its physical-copy link');
+ check((await call('POST',body([sale('sale-a','different-copy')]))).code===409,'sale cannot be reassigned');
+ r=await call('POST',body([{...sale(),sellPrice:55,fees:0,costMeta:{...sale().costMeta,fees:'zero'}}]));
+ check(r.code===200&&r.data.flips[0].sellPrice===55&&r.data.flips[0].costMeta.fees==='zero','same-sale cost and revenue corrections remain supported');
+ r=await call('POST',{...body(),tombstones:{flips:{'sale-a':Date.now()+1000}}});
+ check(r.code===200&&!r.data.flips.length&&r.data.copySales.entries.length===1,'deleting report retains sold-copy receipt');
+ const data=JSON.parse(await redis(['GET',key]));data.tombstones={portfolio:{'copy-a':Date.now()-100*86400000},flips:{}};data.copySales.entries[0].recordedAt=Date.now()-200*86400000;await redis(['SET',key,JSON.stringify(data)]);
+ r=await call('POST',{...body([],[{id:'copy-a',updatedAt:Date.now()+100000}]),copySales:{version:1,entries:[]}});
+ check(r.code===200&&!r.data.portfolio.some(p=>p.id==='copy-a'),'expired tombstone and newer stale row cannot revive sold stock');
+ check(r.data.copySales.entries.length===1,'client cannot clear server receipts');
+ await redis(['DEL',key]);
+ const results=await Promise.all([call('POST',body([sale('one')])),call('POST',body([sale('two')]))]);
+ check(results.filter(r=>r.code===200).length===1&&results.filter(r=>r.code===409).length===1,'concurrent devices have one sale winner');
+ check((await call('GET')).data.flips.length===1,'concurrent loser creates no extra sale');
+ const legacy={portfolio:[{id:'copy-a'}],flips:[sale()],tombstones:{},serverUpdatedAt:1};await redis(['SET',key,JSON.stringify(legacy)]);
+ r=await call('GET');check(!r.data.portfolio.length&&r.data.copySales.entries.length===1,'legacy linked sale immediately excludes copy on read');
+ legacy.flips.push(sale('legacy-duplicate'));await redis(['SET',key,JSON.stringify(legacy)]);
+ check((await call('GET')).code===409,'legacy duplicate sales are surfaced without guessing');
+ check(await redis(['GET',key])===JSON.stringify(legacy),'legacy conflicts remain recoverable');
+ for(const copy of ['0','__proto__','constructor']) {
+  await redis(['DEL',key]);r=await call('POST',body([sale('id-'+copy,copy)],[{id:copy}]));
+  check(r.code===200&&!r.data.portfolio.length&&r.data.copySales.entries[0].copyId===copy,'opaque copy identity survives: '+copy);
+ }
+ await redis(['SET',key,JSON.stringify({...legacy,flips:[],copySales:{version:9,entries:[]}})]);
+ check((await call('POST',body())).code===409,'future receipt schema fails closed');
+ const f=await fixture('sold-copy-listings'),uk='userdata:'+f.uid;
+ await kv('DEL',uk);check((await f.call('plan')).code===409&&!await kv('GET',f.key),'unsynced copy cannot reserve a plan');
+ await f.reset();await kv('SET',uk,JSON.stringify({portfolio:[{id:f.uid}],flips:[sale('already-sold',f.uid)]}));
+ check((await f.call('plan')).code===409&&!f.state.writes.length,'linked sale blocks eBay plan');
+ await f.reset();await kv('SET',uk,JSON.stringify({portfolio:[{id:f.uid}],flips:[],copySales:{version:1,entries:[{copyId:f.uid,saleId:'deleted-report',recordedAt:1}]}}));
+ check((await f.call('plan')).code===409,'deleted sale report still blocks plan');
+ await f.reset();await kv('SET',uk,JSON.stringify({portfolio:[{id:f.uid,quantity:2}],flips:[]}));check((await f.call('plan')).code===409,'quantity lot is not treated as one physical copy');
+ await f.reset();
+ const raced=createHandler({env,verify:async uid=>({uid}),store:async(...args)=>{if(args[0]==='EVAL'&&args[1]===saveListingScript)await kv('SET',uk,JSON.stringify({portfolio:[],flips:[sale('race',f.uid)]}));return kv(...args);},fetcher:f.fetcher,photoHost,referenceLoader:async()=>reference});
+ check((await f.call('plan',{handler:raced})).code===409&&!await kv('GET',f.key),'sale between validation and plan CAS wins atomically');
+ await f.reset();await f.call('plan');await kv('SET',uk,JSON.stringify({portfolio:[],flips:[sale('later',f.uid)]}));
+ check((await f.call('prepare')).code===409&&!f.state.writes.length,'future preparation rechecks sale status');
+ check(JSON.parse(await kv('GET',f.key)).state==='planned','blocked preparation retains plan for owner cancellation');
+ check((await f.call('cancel')).code===200,'sale does not prevent cancellation of unsent plan');
+} finally {h.restore();}
+finish(checks,0);
