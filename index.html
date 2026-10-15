@@ -4054,7 +4054,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/collection-export.95babf8e.js"></script>
 <script defer src="/js/collection-drafts.fe560779.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>
-  <script defer src="/js/binder.21099174.js"></script>
+  <script defer src="/js/binder.ecee3046.js"></script>
 <script defer src="/js/pwa.68032543.js"></script>
 <script type="module" src="/js/auth.922d48e9.js"></script>
 <script>
@@ -4245,8 +4245,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         #binderControls {border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:1rem;min-width:0}
         #binderInput {width:100%;max-width:100%}
         #binderCamera[hidden],#binderAlignment[hidden],#binderPrevious[hidden],#binderPageProgress[hidden] {display:none}
-        #binderCameraStage {position:relative;max-width:500px;margin:auto;background:#000;overflow:hidden}
-        #binderCameraVideo {display:block;width:100%;height:auto}
+        #binderCamera {position:fixed;inset:0;z-index:100100;height:100vh;height:100dvh;background:#080808;display:flex;flex-direction:column;gap:12px;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));overflow:hidden}
+        #binderCameraHint {margin:0;text-align:center;font-size:.9rem;line-height:1.35;color:#fff}
+        #binderCameraStage {position:relative;flex:1;min-height:0;width:100%;background:#000;overflow:hidden}
+        #binderCameraVideo {display:block;width:100%;height:100%;object-fit:contain}
+        #binderCamera .binder-camera-actions {display:flex;justify-content:center;align-items:center;position:relative;min-height:80px;flex-shrink:0}
+        #bulkBinderReview #binderCapture {width:76px;height:76px;min-height:76px;padding:5px;border:3px solid white;border-radius:50%;background:transparent;touch-action:manipulation}
+        #binderCapture span {display:block;width:100%;height:100%;border-radius:50%;background:white}
+        #bulkBinderReview #binderStopCamera {position:absolute;left:0;min-height:48px;padding:.65rem;background:#252525;border-color:#888}
         #binderCameraGrid {position:absolute;display:grid;pointer-events:none;border:2px solid #f5ad27;box-shadow:0 0 0 500px #0006}
         #binderCameraGrid span {border:1px solid #f5ad27aa}
         .binder-actions {display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
@@ -4290,10 +4296,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
         </details>
       </fieldset>
-      <section id="binderCamera" hidden aria-label="Binder camera">
-        <p>Keep the phone parallel to the page. Fit one whole card inside each box, keep every corner visible, and tilt the light away from sleeve glare.</p>
+      <section id="binderCamera" hidden aria-label="Binder camera" aria-describedby="binderCameraHint">
+        <p id="binderCameraHint" role="status">Fit one whole card inside each box. Keep the phone parallel to the page.</p>
         <div id="binderCameraStage"><video id="binderCameraVideo" playsinline autoplay muted></video><div id="binderCameraGrid" aria-hidden="true"></div></div>
-        <div class="binder-actions"><button id="binderCapture" type="button" disabled>Use this photo</button><button id="binderStopCamera" type="button">Cancel camera</button></div>
+        <div class="binder-camera-actions"><button id="binderCapture" type="button" aria-label="Take binder photo" disabled><span aria-hidden="true"></span></button><button id="binderStopCamera" type="button">Cancel</button></div>
       </section>
       <div id="binderAlignment" hidden>
         <strong>Fit the photo to the grid</strong>

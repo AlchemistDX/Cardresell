@@ -3,7 +3,7 @@
   'use strict';
   const el = id => document.getElementById(id);
   let source = null, generation = 0, busy = false;
-  let cameraStream = null, cameraEpoch = 0, cameraActive = false;
+  let cameraStream = null, cameraEpoch = 0, cameraActive = false, cameraCapturing = false;
   let anchor = null, drag = null, adjusting = false, touchMove = false;
   const moves = {left:[-.01,0],right:[.01,0],up:[0,-.01],down:[0,.01]};
   const edges = ['Left','Right','Top','Bottom'];
@@ -106,13 +106,17 @@
     const [cols,rows]=el('binderLayout').value.split(',').map(Number);
     const width=Math.min(video.videoWidth*.8,video.videoHeight*.8*cols*.72/rows);
     const height=width*rows/(cols*.72), w=width/video.videoWidth,h=height/video.videoHeight;
-    grid.style.cssText=`left:${(1-w)*50}%;top:${(1-h)*50}%;width:${w*100}%;height:${h*100}%;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr)`;
+    // The full-screen view contains the entire frame, including letterboxing.
+    // Position the guide on the visible video pixels, not the surrounding stage.
+    const stage=el('binderCameraStage'), scale=Math.min(stage.clientWidth/video.videoWidth,stage.clientHeight/video.videoHeight);
+    const vw=video.videoWidth*scale,vh=video.videoHeight*scale;
+    grid.style.cssText=`left:${(stage.clientWidth-vw*w)/2}px;top:${(stage.clientHeight-vh*h)/2}px;width:${vw*w}px;height:${vh*h}px;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr)`;
     grid.replaceChildren(...Array.from({length:cols*rows},()=>document.createElement('span')));
-    el('binderCapture').disabled=false;
+    el('binderCapture').disabled=cameraCapturing;
     return [(1-w)*50,(1-w)*50,(1-h)*50,(1-h)*50];
   }
   function stopCamera() {
-    ++cameraEpoch; cameraActive=false;
+    ++cameraEpoch; cameraActive=false; cameraCapturing=false;
     cameraStream?.getTracks().forEach(track=>track.stop()); cameraStream=null;
     const video=el('binderCameraVideo'); video.pause(); video.srcObject=null;
     el('binderCamera').hidden=true; el('binderCapture').disabled=true;
@@ -122,6 +126,8 @@
     if(busy || adjusting) return;
     stopCamera(); setTouchMove(false); const version=cameraEpoch; cameraActive=true; updateCount();
     el('binderOpenCamera').disabled=true; el('binderCamera').hidden=false;
+    el('binderCameraHint').textContent='Opening camera…';
+    el('binderStopCamera').focus({preventScroll:true});
     message('Opening camera. Match the page to the pocket guide.');
     try {
       if(!navigator.mediaDevices?.getUserMedia) throw Error('unsupported');
@@ -129,7 +135,8 @@
       if(version!==cameraEpoch) {stream.getTracks().forEach(t=>t.stop());return;}
       cameraStream=stream;const video=el('binderCameraVideo');video.srcObject=stream;
       await video.play(); if(version!==cameraEpoch) return;
-      cameraGuide(); el('binderCamera').scrollIntoView({block:'nearest'});
+      cameraGuide();
+      el('binderCameraHint').textContent='Fit one whole card inside each box. Keep the phone parallel to the page.';
     } catch (_) {
       if(version!==cameraEpoch) return;
       stopCamera();message('Camera unavailable or permission not granted. Choose the original binder photo from your camera roll instead.');
@@ -138,6 +145,7 @@
   async function capturePhoto() {
     const video=el('binderCameraVideo');
     if(!cameraStream || !video.videoWidth || !video.videoHeight || el('binderCapture').disabled) return;
+    cameraCapturing=true;
     el('binderCapture').disabled=true; const version=cameraEpoch, margins=cameraGuide();
     el('binderCapture').disabled=true;
     const canvas=document.createElement('canvas'), scale=sourceScale(video.videoWidth,video.videoHeight);
@@ -151,8 +159,15 @@
       if(!pageQueue.length) {pageQueue=[captured];pageIdx=0;}
       else pageQueue[pageIdx]=captured;
       pageStates[pageIdx]=null;
-      openPage(pageIdx,margins);
-    } catch (_) { if(version===cameraEpoch) {el('binderCapture').disabled=false;message('Could not capture this frame. Try again or choose a camera-roll photo.');} }
+      const reviewEpoch=cameraEpoch;
+      await openPage(pageIdx,margins);
+      if(reviewEpoch===cameraEpoch && pageQueue[pageIdx]===captured && !busy)
+        el('binderOpenCamera').focus({preventScroll:true});
+    } catch (_) { if(version===cameraEpoch) {
+      cameraCapturing=false;el('binderCapture').disabled=false;
+      const detail='Could not capture this frame. Try again, or cancel to choose a camera-roll photo.';
+      el('binderCameraHint').textContent=detail;message(detail);
+    } }
     finally {canvas.width=canvas.height=1;}
   }
   let pockets = [], urls = [];
@@ -510,7 +525,22 @@
 
   el('binderOpenCamera').addEventListener('click',startCamera);
   el('binderCapture').addEventListener('click',capturePhoto);
-  el('binderStopCamera').addEventListener('click',()=>{stopCamera();message('Camera closed. Choose a photo or reopen the camera.');});
+  function cancelCamera() {
+    stopCamera();message('Camera closed. Choose a photo or reopen the camera.');
+    el('binderOpenCamera').focus({preventScroll:true});
+  }
+  el('binderStopCamera').addEventListener('click',cancelCamera);
+  new ResizeObserver(()=>{if(cameraActive)cameraGuide();}).observe(el('binderCameraStage'));
+  // Keep keyboard navigation in the camera; Escape returns to the same review.
+  window.addEventListener('keydown',event=>{
+    if(!cameraActive)return;
+    if(event.key==='Escape') {event.preventDefault();event.stopImmediatePropagation();cancelCamera();}
+    else if(event.key==='Tab') {
+      event.preventDefault();event.stopImmediatePropagation();
+      const capture=el('binderCapture'),cancel=el('binderStopCamera');
+      (capture.disabled || document.activeElement===capture ? cancel : capture).focus({preventScroll:true});
+    }
+  },true);
   el('binderCameraVideo').addEventListener('loadedmetadata',()=>{if(cameraActive) cameraGuide();});
   el('binderCameraVideo').addEventListener('resize',()=>{if(cameraActive) cameraGuide();});
   window.addEventListener('pagehide',()=>{finishAdjustment();stopCamera();});
