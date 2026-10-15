@@ -3034,8 +3034,9 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <div id="draftsView" style="display:none">
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.4rem">
     <h1 class="workspace-title">All drafts</h1>
-    <div style="display:flex;align-items:center;gap:.6rem">
+    <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
       <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
+      <button type="button" id="ebayOperationsBtn" class="draft-more-btn" onclick="CardResellEbayListingOperations.open()">eBay listing operations</button>
       <!-- A draft always starts from a card, so "new draft" routes to the card
            list rather than opening a blank form there is no way to complete. -->
       <button type="button" onclick="switchCollectionSection('cards')" style="padding:.45rem .75rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:9px;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap" title="Choose a card from your collection to start a draft">＋ Choose a card</button>
@@ -4056,7 +4057,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/collection-export.a65335bc.js"></script>
 <script defer src="/js/collection-import.7e472fce.js"></script>
 <script defer src="/js/ebay-connect.6aec6f8b.js"></script>
-<script defer src="/js/ebay-listing-review.655f2209.js"></script>
+<script defer src="/js/ebay-listing-review.792479af.js"></script>
+<script defer src="/js/ebay-listing-operations.3f8e246d.js"></script>
 <script defer src="/js/draft-batch.f880f49f.js"></script>
 <script defer src="/js/collection-drafts.bd7094b4.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>

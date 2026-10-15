@@ -3,6 +3,7 @@ import {getEbayAppToken} from './_ebayAuth.js';
 import {hash,namespace,scripts} from './_ebaySeller.js';
 import {kvFromEnv} from './_kv.js';
 import {accountReviewsKey} from './_ebaySubmission.js';
+import {accountListingsKey} from './_ebayOperations.js';
 
 const publicKeys=new Map();
 export async function verifyNotification(raw,header,{fetcher=fetch,appToken=getEbayAppToken}={}) {
@@ -42,5 +43,9 @@ export async function deleteSellerData(body,kv=kvFromEnv()) {
   // Review records have a separate bounded index and retention window. A
   // checkpoint later replaced under another eBay account is not theirs.
   await kv('EVAL',`local rows=redis.call('SMEMBERS',KEYS[1]);for _,k in ipairs(rows) do local raw=redis.call('GET',k);if raw and cjson.decode(raw).accountHash==ARGV[1] then redis.call('DEL',k) end end;redis.call('DEL',KEYS[1]);return #rows`,1,accountReviewsKey('production',account),account);
+  // Erase eBay payloads/IDs/fees/history, retaining only a CardResell copy hold.
+  // A deletion notice is not evidence that an uncertain listing was ended.
+  // Do not touch a row that was cancelled and replaced for a different account.
+  await kv('EVAL',`local rows=redis.call('SMEMBERS',KEYS[1]);for _,k in ipairs(rows) do local raw=redis.call('GET',k);if raw then local r=cjson.decode(raw);if r.accountHash==ARGV[1] then local state='account_deleted';redis.call('SET',k,cjson.encode({version=1,rev=r.rev+1,state=state,instanceId=r.instanceId,updatedAt=tonumber(ARGV[2])})) end end end;redis.call('DEL',KEYS[1]);return #rows`,1,accountListingsKey('production',account),account,Date.now());
   return connections;
 }
