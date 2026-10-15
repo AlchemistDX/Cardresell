@@ -2,6 +2,7 @@ import {createPublicKey,verify as verifySignature} from 'node:crypto';
 import {getEbayAppToken} from './_ebayAuth.js';
 import {hash,namespace,scripts} from './_ebaySeller.js';
 import {kvFromEnv} from './_kv.js';
+import {accountReviewsKey} from './_ebaySubmission.js';
 
 const publicKeys=new Map();
 export async function verifyNotification(raw,header,{fetcher=fetch,appToken=getEbayAppToken}={}) {
@@ -37,5 +38,9 @@ export async function deleteSellerData(body,kv=kvFromEnv()) {
   if(body?.metadata?.topic!=='MARKETPLACE_ACCOUNT_DELETION'||typeof userId!=='string'||!userId||userId.length>200)throw Error('notification_payload_invalid');
   if(!kv)throw Error('notification_storage_unavailable');
   const prefix=namespace('production'),account=hash(userId);
-  return kv('EVAL',scripts.deleted,2,prefix+'account:'+account,prefix+'deleted:'+account);
+  const connections=await kv('EVAL',scripts.deleted,2,prefix+'account:'+account,prefix+'deleted:'+account);
+  // Review records have a separate bounded index and retention window. A
+  // checkpoint later replaced under another eBay account is not theirs.
+  await kv('EVAL',`local rows=redis.call('SMEMBERS',KEYS[1]);for _,k in ipairs(rows) do local raw=redis.call('GET',k);if raw and cjson.decode(raw).accountHash==ARGV[1] then redis.call('DEL',k) end end;redis.call('DEL',KEYS[1]);return #rows`,1,accountReviewsKey('production',account),account);
+  return connections;
 }
