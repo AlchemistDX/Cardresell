@@ -621,7 +621,7 @@
       node('p', 'One ID scan uses 1 ID credit. Quick Grade uses 1 Grade credit; Deep Grade uses 2. Mix Quick and Deep to fit your collection. Verified Free accounts also receive 10 ID + 1 Grade once, separately from the monthly allowance.', shared);
       node('p', 'Paid plans renew monthly in USD until canceled. Cancel at period end in Billing; paid-through benefits and all issued credits remain yours. Eligible monthly subscriptions can change plans at renewal. New limits begin after the new period is paid; existing imported memberships use their current billing-management path.', shared);
     } else {
-      node('p', 'One-time credit packs. Credits never expire.', content);
+      node('p', 'One-time credit packs. No subscription required. Credits never expire.', content);
       node('p', enabled ? 'Your eligible membership discount is included in these prices.'
         : bound.owner ? 'Base prices shown. Verify your account to check eligible pricing.'
           : 'Base prices shown. Sign in to check eligible pricing.', content);
@@ -630,12 +630,34 @@
       for (const kind of gradeFirst ? ['grade', 'id'] : ['id', 'grade']) {
         const section = node('section', undefined, content); section.className = 'membership-pack-section';
         node('h3', kind === 'id' ? 'ID / Scan Credits' : 'Grade Credits', section);
+        node('p', kind === 'id' ? 'Identify cards from photos. Each ID scan uses 1 ID credit.'
+          : 'Explore photo-based grade estimates. Quick Grade uses 1 Grade credit; Deep Grade uses 2.', section);
         const packs = node('div', undefined, section); packs.className = 'membership-packs';
-        for (const pack of catalogue.packs.filter(p => p.kind === kind)) {
+        const options = catalogue.packs.filter(p => p.kind === kind);
+        const hasUnitPrice = p => Number.isSafeInteger(p.credits) && p.credits > 0
+          && Number.isSafeInteger(p.amountCents) && p.amountCents > 0;
+        const comparable = options.length > 1 && options.every(hasUnitPrice);
+        for (const pack of options) {
           const b = node('button', undefined, packs);
           b.type = 'button'; b.disabled = !!bound.owner && !enabled;
           b.setAttribute('data-pack-id', pack.packId);
-          node('span', `${pack.credits.toLocaleString()} ${kind === 'id' ? 'ID' : 'Grade'} credits`, b).className = 'membership-pack-quantity';
+          const copy = node('span', undefined, b); copy.className = 'membership-pack-copy';
+          node('span', `${pack.credits.toLocaleString()} ${kind === 'id' ? 'ID' : 'Grade'} credits`, copy).className = 'membership-pack-quantity';
+          if (hasUnitPrice(pack)) {
+            const rate = pack.amountCents / pack.credits;
+            node('small', 'About ' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate)
+              + '¢ per ' + (kind === 'id' ? 'ID' : 'Grade') + ' credit', copy).className = 'membership-pack-unit';
+            // Compare only this credit type and this account's server quotes.
+            // Ties share the label; identical unit prices have no winner.
+            if (comparable && options.every(p => p.amountCents / p.credits >= rate)
+              && options.some(p => p.amountCents / p.credits > rate)) {
+              node('small', 'Lowest price per credit', copy).className = 'membership-pack-value';
+            }
+          }
+          if (Number.isSafeInteger(pack.basePriceCents) && Number.isSafeInteger(pack.amountCents)
+            && pack.amountCents > 0 && pack.basePriceCents > pack.amountCents && pack.discountPercent > 0) {
+            node('small', 'Member savings: ' + money(pack.basePriceCents - pack.amountCents), copy).className = 'membership-pack-saving';
+          }
           node('strong', money(pack.amountCents), b).className = 'membership-pack-price';
           b.onclick = () => !bound.owner ? signIn() : purchase('pack', pack.packId, b, bound);
         }

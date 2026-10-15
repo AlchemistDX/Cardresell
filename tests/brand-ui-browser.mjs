@@ -155,9 +155,16 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  await page.evaluate(()=>{openBulkScan();startBinderScan()});
  check('binder review fits viewport',await fit(),true);
  await page.evaluate(()=>closeBulkScan());
- await page.evaluate(()=>openShop('id','ui_test'));await page.waitForFunction(()=>!!document.querySelector('.membership-shop[open]'));
+ // Earlier cases deliberately replace auth identities. Use the public catalogue
+ // for the shop layout, then restore the prior fixture for collection checks.
+ await page.evaluate(()=>{window._shopLayoutUser=window.googleUser;window.googleUser=null;return openShop('id','ui_test')});await page.waitForFunction(()=>!!document.querySelector('.membership-shop[open]'));
  check('shop fits viewport',await fit(),true);
+ check('shop cards do not create internal horizontal overflow',await page.getByRole('dialog',{name:'Shop',exact:true}).evaluate(e=>e.scrollWidth<=e.clientWidth),true);
+ check('every credit pack has a readable unit price',await page.locator('.membership-pack-unit').count(),7);
+ check('lowest-price labels are separate for ID and Grade',await page.locator('.membership-pack-value').count(),2);
+ if(shots)await page.screenshot({path:`${shots}/shop-${theme}-${viewport.width}.png`});
  await page.keyboard.press('Escape');
+ await page.evaluate(()=>{window.googleUser=window._shopLayoutUser;delete window._shopLayoutUser});
  await page.evaluate(()=>{
   localStorage.setItem(getUserKey('portfolio'),JSON.stringify([{id:'layout-one',card:'Pikachu',set:'Base Set',currentValue:4.5,buyPrice:2},{id:'layout-two',card:'Charizard',set:'Obsidian Flames',currentValue:28,buyPrice:20}]));
   switchView('collection');switchCollectionSection('cards');
