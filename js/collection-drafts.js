@@ -3,14 +3,16 @@
 (() => {
   'use strict';
   let owner, rows = [], busy = false, query = '', valueFilter = 'all', message = '';
-  const selected = new Set(), results = new Map(), pending = new Map();
+  const selected = new Set(), results = new Map();
   const account = () => window.googleUser?.uid || window.googleUser?.sub || null;
   const key = p => String(p.id);
   const el = (tag, text, cls) => { const n = document.createElement(tag); if (text) n.textContent = text; if (cls) n.className = cls; return n; };
   function button(text, action) { const b = el('button', text); b.type = 'button'; b.onclick = action; return b; }
   function syncOwner() {
     if (owner === account()) return;
-    owner = account(); selected.clear(); results.clear(); pending.clear(); query = ''; valueFilter = 'all'; message = '';
+    owner = account(); selected.clear(); results.clear(); query = ''; valueFilter = 'all'; message = '';
+    for(const id of window.CardResellDraftBatch?.pending() || []) selected.add(id);
+    batchState();
   }
   function current(id) { const found = _crResolveEntry(loadPortData(), id); return found.ambiguous ? null : found.row; }
   function rowMap(list) { const map = new Map(); for (const p of list) { if (!p) continue; const id = key(p); map.set(id, p.id == null || map.has(id) ? null : p); } return map; }
@@ -19,7 +21,7 @@
     const known = typeof p.currentValue === 'number' && Number.isFinite(p.currentValue) && p.currentValue >= 0;
     const matchesValue = valueFilter === 'all' || (valueFilter === 'under5' && known && p.currentValue < 5)
       || (valueFilter === 'atleast5' && known && p.currentValue >= 5) || (valueFilter === 'missing' && !known);
-    return matchesValue && [p.card,p.set,p.number,p.game,p.grader,p.grade].join(' ').toLowerCase().includes(query.toLowerCase().trim());
+    return matchesValue && [p.card,p.set,p.number,p.game,p.grader,p.grade,p.location,p.sku].join(' ').toLowerCase().includes(query.toLowerCase().trim());
   }
   function paint() {
     syncOwner();
@@ -59,7 +61,7 @@
     const present = new Set(rows.map(key));
     for (const id of selected) if (!present.has(id)) selected.delete(id);
     document.getElementById('collectionDraftTools')?.remove();
-    if (!rows.length) return;
+    if (!rows.length && !window.CardResellDraftBatch?.current() && !window.CardResellDraftBatch?.summary()) return;
     if (!document.getElementById('collectionDraftStyles')) {
       const style = el('style'); style.id = 'collectionDraftStyles';
       style.textContent = `
@@ -97,7 +99,7 @@
     const count = el('div'); count.dataset.count = ''; count.setAttribute('role','status'); heading.append(count); bar.append(heading);
     const filters = el('div','','collection-plan-filters'); filters.setAttribute('role','group'); filters.setAttribute('aria-label','Find Collection cards');
     const searchLabel = el('label','Find cards','collection-plan-search');
-    const search = el('input'); search.type = 'search'; search.placeholder = 'Find cards by name, set, or number'; search.setAttribute('aria-label','Search collection'); search.value = query;
+    const search = el('input'); search.type = 'search'; search.placeholder = 'Name, set, number, location, or SKU'; search.setAttribute('aria-label','Search collection'); search.value = query;
     search.oninput = () => { query = search.value; paint(); }; searchLabel.append(search); filters.append(searchLabel);
     const filterLabel = el('label', 'Saved card value '), filter = el('select');
     filter.dataset.valueFilter = ''; filter.setAttribute('aria-label', 'Filter collection by saved value');
@@ -124,6 +126,7 @@
     bar.append(selection,actions);
     bar.append(el('p', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.','collection-plan-note'));
     const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(status);
+    window.CardResellDraftBatch?.mount(bar);
     document.getElementById('collectionWrap').before(bar);
     const byId = rowMap(rows);
     document.querySelectorAll('#collectionWrap tr.col-row').forEach(tr => {
@@ -134,56 +137,18 @@
     });
     paint();
   }
-  async function prepare() {
-    if (busy) return; syncOwner();
-    if (!owner) { triggerGoogleSignIn('collection'); return; }
-    const ids = [...selected], batchOwner = owner; if (!ids.length) return;
-    const assertOwner = () => { if (account() !== batchOwner) throw Error('Account changed. Select cards from your current collection.'); };
-    busy = true; message = 'Checking draft capacity…'; paint();
-    let succeeded = 0;
-    try {
-      const head = await _bulkDraftHeadroom(); assertOwner();
-      if (!head.known) throw Error('Could not confirm draft capacity. Your selection is preserved; please retry.');
-      if (ids.length > head.bulkLimit) throw Error(head.bulkLimit <= 1 ? 'Select one card, or choose Starter or above for bulk draft preparation.' : `Your plan supports ${head.bulkLimit} cards per action. Select fewer cards or view Subscriptions.`);
-      const cards = currentRows(ids); if (cards.some(p => !p)) throw Error('A selected card changed or has an ambiguous ID. Refresh your collection and select it again.');
-      const eligibility = await fetchSellStamps(cards); assertOwner();
-      if (!eligibility.ok) throw Error('Could not check card details. Your selection is preserved; please retry.');
-      const units = cards.map((card,i) => {
-        const id = key(card), instanceId = 'inst_col_' + id;
-        return {id,card,instanceId,idemKey:pending.get(id)?.idemKey || _crCreateIdemKey('sell-col',id,instanceId),eligible:eligibility.stamps[i]?.eligible === true,reason:eligibility.stamps[i]?.message};
-      });
-      let bulkId;
-      if (ids.length > 1) {
-        const token = await _crIdToken(); assertOwner(); if (!token) throw Error('Sign in again to prepare drafts.');
-        bulkId = crypto.randomUUID();
-        const response = await fetch('/api/drafts?action=batch', {method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({id:bulkId,rows:units.map(({instanceId,idemKey})=>({instanceId,idemKey}))})});
-        const data = await response.json(); assertOwner();
-        if (!response.ok) throw Error(data.error || 'Could not prepare this batch. Please retry.');
-      }
-      let stopped = false;
-      for (const u of units) {
-        assertOwner();
-        if (stopped) { results.set(u.id,{message:'Not attempted. Resolve the earlier save issue, then retry your selection.'}); continue; }
-        if (!current(u.id)) { results.set(u.id,{message:'Card is no longer available in this collection.'}); continue; }
-        if (!u.eligible && !pending.has(u.id)) { results.set(u.id,{message:u.reason || 'Open this card and add missing details before preparing a draft.'}); continue; }
-        const price = Number(u.card.currentValue ?? u.card.buyPrice ?? 0) || 0;
-        const args = pending.get(u.id) || {card:u.card,instanceId:u.instanceId,idemKey:u.idemKey,price:price>0?price:undefined,priceSource:price>0 ? (Number(u.card.currentValue)>0 && _crValueProvenance(u.card)==='comp'?'comp':'seller'):undefined,source:'collection',batch:true,batchOwner,bulkId};
-        pending.set(u.id,args); results.set(u.id,{message:'Preparing draft…'}); paint();
-        const result = await _crCreateDraft(args); assertOwner();
-        if (result.ok) {
-          pending.delete(u.id); selected.delete(u.id); succeeded++;
-          results.set(u.id,{draftId:result.draftId,message:(result.existing || result.replayed ? 'Saved draft recovered.' : 'Draft ready.') + (result.photo?.reason === 'ATTACH_FAILED' ? ' Photo needs attention in the draft.' : '')});
-        } else {
-          const uncertain = !result.status || result.status >= 500;
-          if (!uncertain) pending.delete(u.id);
-          results.set(u.id,{message:result.message || 'Could not prepare this draft. Please retry.'});
-          stopped = uncertain || result.status === 401 || /CAP|BULK|PLAN/.test(result.code || '');
-        }
-        paint();
-      }
-      message = `${succeeded} draft${succeeded===1?'':'s'} ready. ${selected.size ? selected.size+' card(s) still selected; check their results.' : 'Your cards remain in Collection.'}`;
-    } catch (error) { message = error.message || 'Could not prepare drafts. Please retry.'; }
-    finally { busy = false; paint(); }
+  function batchState() {
+    const flow=window.CardResellDraftBatch;if(!flow)return;
+    busy=flow.isBusy();message=flow.summary();
+    for(const row of flow.current()?.rows||[]){results.set(row.id,{message:row.message,draftId:row.draftId});if(row.state==='done')selected.delete(row.id);}
   }
+  function prepare() {
+    if(busy)return;syncOwner();
+    if(!owner){triggerGoogleSignIn('collection');return;}
+    if(selected.size)window.CardResellDraftBatch.open([...selected]);
+  }
+  window.addEventListener('cr:collection-draft-progress',()=>{
+    syncOwner();batchState();paint();const bar=document.getElementById('collectionDraftTools');if(bar)window.CardResellDraftBatch?.mount(bar);
+  });
   window.CardResellCollectionDrafts = {mount};
 })();

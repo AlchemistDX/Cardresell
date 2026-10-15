@@ -767,18 +767,64 @@ try {
     await page.evaluate(() => { bulkSkipPricingAndSave(); closeBulkScan(); switchView('collection'); });
     await page.getByRole('button',{name:'Select visible',exact:true}).click();
     await page.locator('#collectionDraftTools [data-create]').click();
-    await page.waitForFunction(() => !document.querySelector('#collectionDraftTools [data-create]').textContent.includes('Preparing'));
+    await page.locator('[data-batch-confirm]').click();
+    await page.waitForFunction(() => !window.CardResellDraftBatch.isBusy());
+    await page.getByRole('button',{name:'Close batch preparation'}).click();
     eq('Collection selection stores two drafts', (await listDrafts(sub)).total, 2);
     eq('each selected card has an Open draft action', await page.locator('.collection-draft-result button').count(), 2);
     const ids = await page.evaluate(() => loadPortData().map(p => 'inst_col_'+p.id));
     ok('creates use Collection physical identities',posts(wire).every(p=>ids.includes(JSON.parse(p.body).instanceId)));
     await page.getByRole('button',{name:'Select visible',exact:true}).click();
     await page.locator('#collectionDraftTools [data-create]').click();
-    await page.waitForFunction(() => !document.querySelector('#collectionDraftTools [data-create]').textContent.includes('Preparing'));
+    await page.locator('[data-batch-confirm]').click();
+    await page.waitForFunction(() => !window.CardResellDraftBatch.isBusy());
+    await page.getByRole('button',{name:'Close batch preparation'}).click();
     eq('repeat selection adopts both saved drafts', (await listDrafts(sub)).total, 2);
     eq('Collection retains both cards',await page.evaluate(()=>loadPortData().length),2);
     eq('no page errors', errors.join('|'), '');
     await ctx.close();
+  });
+
+  await T.section('G11 — Reviewed Collection batch recovers a committed save after reload', async () => {
+    const sub='u-collection-recovery';
+    const {ctx,page,wire,errors}=await boot({sub});
+    await page.evaluate(()=>{
+      savePortData([{id:'recover1',card:'Pikachu',set:'Base Set',number:'58/102',game:'pokemon',condition:'NM',currentValue:12,buyPrice:2},
+        {id:'recover2',card:'Mew',set:'Wizards Promo',number:'8',game:'pokemon',condition:'LP',currentValue:null,buyPrice:99}]);switchView('collection');
+    });
+    let lost=null;
+    await page.route('**/api/drafts',async route=>{
+      if(route.request().method()==='POST'&&!lost){
+        const req=route.request(),response=await route.fetch();
+        lost={status:response.status(),body:req.postData(),key:(await req.allHeaders())['idempotency-key']};
+        await route.abort('failed');
+      }else await route.fallback();
+    });
+    await page.getByRole('button',{name:'Select visible',exact:true}).click();await page.locator('[data-create]').click();
+    await page.locator('[name=priceMode]').selectOption('fixed');await page.locator('[name=fixedPrice]').fill('6.50');
+    await page.locator('[name=buyerPays]').fill('0');await page.locator('[name=sellerCost]').fill('1.25');
+    await page.locator('[data-batch-confirm]').click();await page.waitForFunction(()=>!window.CardResellDraftBatch.isBusy());
+    eq('the lost response followed a real committed create',lost?.status,201);
+    eq('only the first copy is stored before recovery',(await listDrafts(sub)).total,1);
+    eq('journal keeps the first outcome uncertain',await page.evaluate(()=>CardResellDraftBatch.current().rows[0].state),'uncertain');
+    const token=await tokenFor(sub);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>typeof window.CardResellDraftBatch==='object'&&typeof window.switchView==='function');
+    await page.evaluate(t=>{
+      const user={uid:'dev',email:'will@example.test'};Object.defineProperty(window,'googleUser',{configurable:true,get:()=>user,set:()=>{}});
+      window._crIdToken=async()=>t;switchView('collection');
+    },token);
+    await page.getByRole('button',{name:'Resume saved batch',exact:true}).click();await page.locator('[data-batch-resume]').click();await page.waitForFunction(()=>!window.CardResellDraftBatch.isBusy());
+    const saved=await listDrafts(sub);eq('recovery leaves exactly one draft per physical copy',saved.total,2);
+    const replay=posts(wire).find(p=>JSON.parse(p.body).instanceId==='inst_col_recover1');
+    eq('reload uses the exact original body',replay?.body,lost.body);eq('reload uses the exact original idempotency key',replay?.key,lost.key);
+    ok('each stored draft retains the approved asking price',saved.rows.every(r=>r.summary?.price===6.5),JSON.stringify(saved.rows));
+    for(const row of saved.rows){const response=await fetch(`${B}/api/drafts?id=${row.draftId}`,{headers:{Authorization:'Bearer '+token}});const result=await response.json();
+      eq('real packet stores the shared buyer shipping charge',result.packet?.shipping?.buyerPays?.amount,0);
+      eq('real packet stores the shared estimated postage',result.packet?.shipping?.sellerCost?.amount,1.25);
+    }
+    ok('all recovered outcomes are confirmed',await page.evaluate(()=>CardResellDraftBatch.current().rows.every(r=>r.state==='done')));
+    eq('no page errors',errors.join('|'),'');await ctx.close();
   });
 
 } finally {
