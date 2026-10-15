@@ -161,7 +161,8 @@ try {
       'a caller error and a configuration error must not report as the same thing');
   }
 
-  // ── POST stays open ──
+  // Seller connections now store encrypted eBay tokens. A challenge token
+  // still does not authorize POST: unsigned notifications must not erase data.
   for (const tok of [undefined, 'a-replacement-token-fixture']) {
     if (tok === undefined) delete process.env.EBAY_VERIFICATION_TOKEN;
     else process.env.EBAY_VERIFICATION_TOKEN = tok;
@@ -171,9 +172,9 @@ try {
       body: { metadata: { topic: 'MARKETPLACE_ACCOUNT_DELETION' },
               notification: { notificationId: 'n-1', eventDate: '2026-09-09T00:00:00Z' } },
     }, res);
-    T.check(`a deletion notification is acknowledged with the token ${tok ? 'set' : 'unset'}`,
-      res.code === 200 && res.body && res.body.received === true,
-      'our misconfiguration must not become a compliance failure');
+    T.check(`an unsigned deletion is refused with the challenge token ${tok ? 'set' : 'unset'}`,
+      res.code === 412 && res.body && !res.body.received,
+      'only a verified eBay signature can authorize seller-data deletion');
   }
 } finally {
   if (saved === undefined) delete process.env.EBAY_VERIFICATION_TOKEN;

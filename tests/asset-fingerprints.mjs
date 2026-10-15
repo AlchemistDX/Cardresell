@@ -53,6 +53,16 @@ if (assets.length > 0) {
         'a duplicated reference means the same bundle is loaded twice');
 }
 
+for (const name of ['collection-import','collection-export','ebay-connect']) {
+  const matches=assets.filter(a=>a.base===name&&a.ext==='js');
+  check(`${name} is loaded by the real entry document`,matches.length===1);
+  if(matches.length===1) {
+    const sourcePath=new URL(`../js/${name}.js`,import.meta.url);
+    check(`${name} deployed asset matches its maintained source`,
+      existsSync(matches[0].path)&&readFileSync(matches[0].path).equals(readFileSync(sourcePath)));
+  }
+}
+
 // ── Existence, then fingerprint, for every referenced asset ────────────────
 for (const a of assets) {
   const exists = existsSync(a.path);

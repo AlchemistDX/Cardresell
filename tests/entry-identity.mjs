@@ -1586,7 +1586,8 @@ await T.section('ACCEPTANCE — target and siblings, for the four actions nothin
       const fk = window.getUserKey('flips');
       localStorage.setItem(pk, JSON.stringify([
         { id: TARGET, card: 'Charizard', set: 'Base Set', number: '4',
-          currentValue: 200, buyPrice: 50, img: 'https://example.test/charizard.png' },
+          currentValue: 200, buyPrice: 50, img: 'https://example.test/charizard.png',
+          importKey:'csv1:sold-fixture:1:0',location:'Box A',sku:'000123' },
         { id: SIB,    card: 'Blastoise', set: 'Base Set', number: '2',
           currentValue: 120, buyPrice: 40 },
       ]));
@@ -1618,6 +1619,8 @@ await T.section('ACCEPTANCE — target and siblings, for the four actions nothin
         flipIdIsUuid: flips.length === 1
           && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(flips[0].id)),
         flipCarriedImage: flips.length === 1 && flips[0].img === 'https://example.test/charizard.png',
+        flipCarriedInventory: flips.length === 1 && flips[0].sourceCollectionId === String(TARGET)
+          && flips[0].importKey === 'csv1:sold-fixture:1:0' && flips[0].location === 'Box A' && flips[0].sku === '000123',
       };
     }
 
@@ -1658,6 +1661,8 @@ await T.section('ACCEPTANCE — target and siblings, for the four actions nothin
     M.flipHasOwnId === true && M.flipIdIsUuid === true, JSON.stringify(M));
   T.check('and the flip carries the collection row\u2019s image rather than losing it',
     M.flipCarriedImage === true, JSON.stringify(M));
+  T.check('a sale retains physical inventory identity, import history, location and SKU',
+    M.flipCarriedInventory === true, JSON.stringify(M));
 
   await ctx.close();
 });
