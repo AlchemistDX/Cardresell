@@ -45,7 +45,7 @@ These checks do not certify a real seller import, real eBay authorization or nat
 ## Remaining connected-selling milestones
 
 1. Demonstrate a real seller connection and account setup with the configured application.
-2. Draft-to-eBay payload mapping with current category/aspect/condition requirements, seller-approved photos, prices, policies and location. Return all blocking validation before writes.
+2. Draft-to-eBay payload mapping and recoverable submission review are implemented in the subsequent milestone documented in `ebay-submission-review-20261015.md`. Current metadata and seller-setting validation are covered by isolated tests; live account validation remains blocked. This review does not enable publication.
 3. Publish/edit/end lifecycle together: durable per-copy SKU and offer mapping, explicit seller consent, version checks, idempotent operations and reconciliation after lost responses. The eBay Inventory API requires API-created listings to be revised through that API; shipping a publish button alone would leave an incomplete seller workflow.
 4. Import sales using fulfillment permissions with seller reauthorization, durable order/line-item identities, cancellation/refund handling and preservation of actual-versus-unknown expenses. Reserve/remove the correct physical copy without duplicating sales.
 5. Measure the complete import → prepare → list → sell → profit workflow on a small real seller batch before claiming it saves sellers time or supports automated cross-listing.
