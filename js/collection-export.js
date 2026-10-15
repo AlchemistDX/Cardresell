@@ -28,13 +28,13 @@
     }
     const rows = [['Card','Set','Cost Basis','Current Value','Unrealized P/L','P/L %','Finish','Finish confirmed',
       'Collection ID','Game','Card Number','Set Code','Condition','Grader','Grade','Certificate','Quantity',
-      'Added Date','Value Source','Last Refreshed','Value Status','Currency','Profit Basis']];
+      'Added Date','Value Source','Last Refreshed','Value Status','Currency','Profit Basis','Storage Location','Source SKU']];
     for (const p of cards) {
       const cost = amount(p.buyPrice), value = amount(p.currentValue);
       const gain = cost !== null && value !== null ? value - cost : null;
       const percentage = cost > 0 && gain !== null ? gain / cost * 100 : null;
       const source = p.valueSource === 'comp' ? 'Provider-derived saved estimate'
-        : p.valueSource === 'seller' ? 'Seller-entered estimate' : 'Source not recorded';
+        : p.valueSource === 'seller' ? 'Seller-entered estimate' : p.valueSource === 'import' ? 'Imported estimate' : 'Source not recorded';
       const status = [value === null ? 'Current value missing or invalid' : 'Saved estimate',
         ...(cost === null ? ['Cost basis missing or invalid'] : []),
         ...(p.finishReviewRequired && !p.finishConfirmed ? ['Finish needs review'] : [])].join('; ');
@@ -42,7 +42,7 @@
         p.finish || '',p.finishReviewRequired ? (p.finishConfirmed ? 'Yes' : 'No') : '',p.id ?? '',
         p.game || p.cardType || '',p.number || '',p.setCode || '',p.condition || '',p.grader || '',p.grade ?? '',
         p.cert || '',1,p.addedDate || '',value === null ? '' : source,p.lastRefreshed || '',status,'USD',
-        'Unrealized estimate before selling fees, shipping, grading and other expenses']);
+        'Unrealized estimate before selling fees, shipping, grading and other expenses',p.location||'',p.sku||'']);
     }
     const csv = rows.map(row => row.map(cell).join(',')).join('\r\n');
     const link = document.createElement('a');

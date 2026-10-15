@@ -37,6 +37,8 @@ t.check('explicit zero is retained with no divide by zero',rows[3]['Cost Basis']
 t.check('legacy and invalid values remain unknown',rows[4]['Current Value']===''&&rows[5]['Cost Basis']===''&&rows[5]['Current Value']==='');
 t.check('source and scope distinguish estimates from realized profits',rows[0]['Value Source']==='Provider-derived saved estimate'&&rows[6]['Value Source']==='Seller-entered estimate'&&rows.every(r=>r['Profit Basis'].includes('before selling fees')&&r.Currency==='USD'));
 t.check('export does not modify inventory',JSON.stringify(cards)===original);
+cards[0].location='Box A / 02';cards[0].sku='000123';cards[0].valueSource='import';context.window.exportCollection(['copy-1']);
+t.check('imported location, source SKU and estimate provenance export',output()[0]['Storage Location']==='Box A / 02'&&output()[0]['Source SKU']==='000123'&&output()[0]['Value Source']==='Imported estimate');
 context.window.exportCollection(['copy-1','copy-1','copy-3']);rows=output();
 t.check('selected export contains exactly chosen physical copies',rows.length===2&&rows[0]['Collection ID']==='copy-1'&&rows[1]['Collection ID']==='copy-3'&&downloads.at(-1).name==='cardsell_collection_selected.csv');
 cards[0].currentValue=11;context.window.exportCollection(['copy-1']);t.check('selected export reads the latest saved value',output()[0]['Current Value']==='11.00');

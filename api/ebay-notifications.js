@@ -1,9 +1,12 @@
 // /api/ebay-notifications — eBay Marketplace Account Deletion/Closure Notifications
 // GET  ?challenge_code=xxx  → responds with SHA-256 hash to verify endpoint ownership
-// POST (JSON body)          → acknowledges deletion notification with 200 OK
+// POST (raw JSON body) → verify eBay signature, erase seller tokens, then ACK.
 
 import { createHash } from 'crypto';
 import { cleanCredential } from './_ebayAuth.js';
+import {verifyNotification,readNotificationBody,deleteSellerData} from './_ebayDeletion.js';
+
+export const config={api:{bodyParser:false}};
 
 // This token must match exactly what you enter in the eBay portal
 // cleanCredential() strips stray quotes, real whitespace, and LITERAL \n / \r
@@ -42,7 +45,7 @@ export default async function handler(req, res) {
   // ── GET: eBay challenge verification ──
   if (req.method === 'GET') {
     const challengeCode = req.query?.challenge_code;
-    if (!challengeCode) {
+    if (typeof challengeCode !== 'string' || !challengeCode || challengeCode.length > 1024) {
       return res.status(400).json({ error: 'challenge_code required' });
     }
 
@@ -68,25 +71,20 @@ export default async function handler(req, res) {
     return res.status(200).json({ challengeResponse });
   }
 
-  // ── POST: eBay sends account deletion notification ──
-  // Deliberately NOT gated on the token. POST does not use it, and refusing a
-  // deletion notification because of our own misconfiguration would turn a
-  // configuration defect into a compliance failure. The challenge fails closed;
-  // the acknowledgement stays open.
+  // The challenge token does not authenticate notifications. Verify the
+  // signed raw bytes before deleting anything; storage failure requests retry.
   if (req.method === 'POST') {
-    const body = req.body || {};
-
-    // Log for audit trail (no user data stored — CardResell doesn't store eBay user data)
-    console.log('EBAY_DELETION_NOTIFICATION:', JSON.stringify({
-      topic:          body?.metadata?.topic,
-      notificationId: body?.notification?.notificationId,
-      eventDate:      body?.notification?.eventDate,
-      // Not logging userId/username — we don't store this data
-    }));
-
-    // CardResell does not store any eBay user personal data.
-    // We acknowledge the notification immediately with 200 OK as required.
-    return res.status(200).json({ received: true });
+    res.setHeader('Cache-Control','no-store');
+    if(!req.headers?.['x-ebay-signature'])return res.status(412).json({error:'Invalid notification signature'});
+    let raw,body;
+    try{raw=await readNotificationBody(req);body=JSON.parse(raw.toString('utf8'));}
+    catch{return res.status(400).json({error:'Invalid notification body'});}
+    try{
+      if(!await verifyNotification(raw,req.headers['x-ebay-signature']))return res.status(412).json({error:'Invalid notification signature'});
+      if(body?.metadata?.topic!=='MARKETPLACE_ACCOUNT_DELETION'||typeof body?.notification?.data?.userId!=='string'||!body.notification.data.userId||body.notification.data.userId.length>200)return res.status(400).json({error:'Invalid deletion notification'});
+      await deleteSellerData(body);
+      return res.status(200).json({received:true});
+    }catch{return res.status(503).json({error:'Notification could not be completed. Retry required.'});}
   }
 
   return res.status(405).end();
