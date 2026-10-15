@@ -31,6 +31,59 @@ for(let i=0;i<GRADE_HISTORY_LIMIT-1;i++)await redisCommand(['HSET','ai_grades:{c
 const capped=await Promise.all(Array.from({length:6},()=>call('POST','cap',{id:randomUUID(),data})));
 check('atomic cap admits exactly remaining slot',capped.filter(x=>x.status===200).length,1);
 check('cap refuses excess explicitly',capped.filter(x=>x.status===409).length,5);
+// Redis scripts are isolated, but an error does not roll back earlier writes.
+const damagedId=randomUUID(), bobReports='ai_grades:{bob}:reports', bobSummaries='ai_grades:{bob}:summaries';
+await redisCommand(['SET',bobSummaries,'wrong-type-fixture']);
+check('damaged summary index refuses save',(await call('POST','bob',{id:damagedId,data})).status,503);
+check('failed save leaves no orphan report',await redisCommand(['HEXISTS',bobReports,damagedId]),0);
+await redisCommand(['DEL',bobSummaries]);
+check('save succeeds after storage repair',(await call('POST','bob',{id:damagedId,data})).status,200);
+const originalReport=await redisCommand(['HGET',bobReports,damagedId]);
+await redisCommand(['DEL',bobSummaries]);await redisCommand(['SET',bobSummaries,'wrong-type-fixture']);
+check('damaged summary index refuses delete',(await call('DELETE','bob',{}, {id:damagedId})).status,503);
+check('failed delete preserves original report',await redisCommand(['HGET',bobReports,damagedId]),originalReport);
+check('failed delete does not create tombstone',await redisCommand(['EXISTS','ai_grades:{bob}:deleted:'+damagedId]),0);
+await redisCommand(['DEL',bobReports,bobSummaries]);
+for (const malformed of [undefined, null, 2, '1']) {
+ const bad=createGradeHistoryHandler({verify:async()=>({uid:'alice'}),kv:async()=>malformed});
+ for(const method of ['GET','POST','DELETE']){
+  let status;await bad({method,headers:{authorization:'Bearer alice'},body:method==='GET'?{}:{id:randomUUID(),data},query:{}},{setHeader(){},status(n){status=n;return this},json(){}});
+  check(method+' refuses malformed storage acknowledgement '+String(malformed),status,503);
+ }
+}
+// Exercise the actual public-share handler against a synthetic storage boundary.
+{
+ const priorFetch=globalThis.fetch, priorUrl=process.env.KV_REST_API_URL, priorToken=process.env.KV_REST_API_TOKEN;
+ process.env.KV_REST_API_URL='https://grade-share-storage.test';process.env.KV_REST_API_TOKEN='synthetic';
+ const share=(await import('../api/grade-share.js')).default;
+ let response={result:'OK'},httpStatus=200,commands=[],collisions=0;
+ globalThis.fetch=async(url,options)=>{
+  if(options?.body){const cmd=JSON.parse(options.body);commands.push(cmd);if(collisions-->0)return Response.json({result:null});}
+  return Response.json(response,{status:httpStatus});
+ };
+ async function shareCall(method,body={data:{psa_estimate:8,card_name:'Test'}},query={id:'test'}){
+  let status=200,payload;const res={setHeader(){return this},status(n){status=n;return this},json(x){payload=x;return this},send(x){payload=x;return this}};
+  await share({method,body,query,headers:{}},res);return {status,payload};
+ }
+ try{
+  for(const malformed of [{},{error:'ERR storage'},{result:undefined},{result:7}]){
+   response=malformed;check('public share refuses malformed acknowledgement '+JSON.stringify(malformed),(await shareCall('POST')).status,503);
+  }
+  response={result:'OK'};httpStatus=503;check('public share refuses HTTP failure',(await shareCall('POST')).status,503);httpStatus=200;
+  response={};check('public share read failure is not missing link',(await shareCall('GET')).status,503);
+  response={result:null};check('public share explicit absence is 404',(await shareCall('GET')).status,404);
+  response={result:'OK'};collisions=1;commands=[];
+  check('public share retries a collision',(await shareCall('POST')).status,200);
+  check('public share used two atomic reservations',commands.length,2);
+  check('public share reserves with NX',commands.every(c=>c[0]==='SET'&&c[5]==='NX'),true);
+  collisions=5;check('public share exhausted collisions fails honestly',(await shareCall('POST')).status,503);
+  check('public share rejects impossible grade',(await shareCall('POST',{data:{psa_estimate:99}})).status,400);
+ }finally{
+  globalThis.fetch=priorFetch;
+  if(priorUrl===undefined)delete process.env.KV_REST_API_URL;else process.env.KV_REST_API_URL=priorUrl;
+  if(priorToken===undefined)delete process.env.KV_REST_API_TOKEN;else process.env.KV_REST_API_TOKEN=priorToken;
+ }
+}
 const root=resolve(new URL('../',import.meta.url).pathname);
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://local');

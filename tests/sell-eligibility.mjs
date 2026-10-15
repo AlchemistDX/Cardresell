@@ -391,7 +391,8 @@ console.log('\nthe HTTP endpoint preserves every reason, including for malformed
     const u = String(url);
     if (u.includes('oauth2.googleapis.com/tokeninfo')) {
       return { ok: true, json: async () => ({
-        aud: 'cardresell-e0329', email: 'seller@example.com',
+        aud: '971593505703-6feq3nn7p9580krori6r157rfm5tp88l.apps.googleusercontent.com', email: 'seller@example.com',
+        sub:'test-google-sub',iss:'https://accounts.google.com',exp:String(Math.floor(Date.now()/1000)+3600),
         email_verified: true, name: 'Seller',
       }) };
     }

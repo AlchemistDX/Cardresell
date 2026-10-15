@@ -111,7 +111,7 @@ check(
 check(
   'KV write failures are surfaced instead of returning false success',
   userDataApi.includes('kv_write_failed') && userDataApi.includes('kv_write_unconfirmed') &&
-    collectionApi.includes('kv_write_failed:')
+    collectionApi.includes("![0, 1].includes(d.result)")
 );
 check(
   'legacy unauthenticated Stripe redirect endpoints are removed',

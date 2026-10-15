@@ -6,10 +6,10 @@ import {harness} from './_assert.mjs';
 import {billingHarness,PAID_KEY,freeKey} from './_scanBillingHarness.mjs';
 const {check,done}=harness('billing-release-browser');
 const ROOT=resolve(new URL('..',import.meta.url).pathname),ORIGIN='https://billing-release.test';
-const EVIDENCE='/home/user/workspace/billing-release-browser-evidence';
+const EVIDENCE='/tmp/cardresell-billing-release-browser-evidence';
 mkdirSync(EVIDENCE,{recursive:true});
-const {chromium,devices}=(await import('/home/user/node_modules/playwright/index.js')).default;
-const browser=await chromium.launch();
+const {chromium,devices}=await import('playwright');
+const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
 try {
  for(const mode of ['cancel','no-selection','success','lost-after-commit','rejected']){
   const h=billingHarness({bucket:'free',balance:4});

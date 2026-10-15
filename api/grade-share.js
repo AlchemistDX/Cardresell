@@ -19,7 +19,7 @@ const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 function nanoid(len = 10) {
   let out = '';
-  for (let i = 0; i < len; i++) out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+  for (let i = 0; i < len; i++) out += ALPHABET[require('node:crypto').randomInt(ALPHABET.length)];
   return out;
 }
 
@@ -28,17 +28,19 @@ async function kvGet(key) {
   const r = await fetch(`${KV_URL}/get/${encodeURIComponent(key)}`, {
     headers: { Authorization: `Bearer ${KV_TOKEN}` },
   });
-  if (!r.ok) return null;
-  const j = await r.json().catch(() => null);
-  if (!j || j.result == null) return null;
-  try { return JSON.parse(j.result); } catch { return null; }
+  const j = await r.json();
+  if (!r.ok || !j || j.error || !Object.hasOwn(j, 'result')) throw new Error('Storage unavailable');
+  return j.result === null ? null : JSON.parse(j.result);
 }
 async function kvSetEx(key, val, ttlSec) {
-  await fetch(`${KV_URL}/set/${encodeURIComponent(key)}?EX=${ttlSec}`, {
+  const r = await fetch(KV_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(val),
+    body: JSON.stringify(['SET', key, JSON.stringify(val), 'EX', ttlSec, 'NX']),
   });
+  const j = await r.json();
+  if (!r.ok || !j || j.error || !Object.hasOwn(j, 'result') || !['OK', null].includes(j.result)) throw new Error('Storage unavailable');
+  return j.result === 'OK';
 }
 
 // ─── Optional auth (best-effort attach ownerSub) ────────────────────────
@@ -46,11 +48,12 @@ let _verifyTokenFlexible = null;
 async function tryVerify(req) {
   try {
     if (!_verifyTokenFlexible) {
-      const mod = require('./_verifyToken.js');
+      const mod = await import('./_verifyToken.js');
       _verifyTokenFlexible = mod.verifyTokenFlexible || mod.default || null;
     }
     if (!_verifyTokenFlexible) return null;
-    return await _verifyTokenFlexible(req);
+    const token = String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+    return token ? await _verifyTokenFlexible(token) : null;
   } catch { return null; }
 }
 
@@ -359,6 +362,7 @@ function renderPage({ id, share, host }) {
 
 // ─── Handler ─────────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
+  try {
   // ─── GET: render share page or serve OG image ──────────────────────
   if (req.method === 'GET') {
     const id = String(req.query?.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
@@ -422,7 +426,7 @@ module.exports = async function handler(req, res) {
     }
     const body = req.body || {};
     const data = body.data;
-    if (!data || typeof data !== 'object' || !data.psa_estimate) {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Number.isFinite(Number(data.psa_estimate)) || Number(data.psa_estimate) < 1 || Number(data.psa_estimate) > 10) {
       res.status(400).json({ error: 'missing_grade_data' });
       return;
     }
@@ -431,7 +435,7 @@ module.exports = async function handler(req, res) {
     let ownerSub = null;
     try {
       const verified = await tryVerify(req);
-      ownerSub = verified?.googleSub || verified?.sub || null;
+      ownerSub = verified?.uid || null;
     } catch {}
 
     // Cap image at ~600KB base64 (~450KB jpeg)
@@ -455,21 +459,12 @@ module.exports = async function handler(req, res) {
       ownerSub,
     };
 
-    // Collision-avoid loop (nano-id has extremely low collision odds, but be safe)
-    let id, attempts = 0;
-    do {
+    let id, saved = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
       id = nanoid(10);
-      attempts++;
-      const exists = await kvGet(`grade_share:${id}`);
-      if (!exists) break;
-    } while (attempts < 5);
-
-    if (attempts >= 5) {
-      res.status(500).json({ error: 'id_collision' });
-      return;
+      if (await kvSetEx(`grade_share:${id}`, record, 60 * 60 * 24 * 90)) { saved = true; break; }
     }
-
-    await kvSetEx(`grade_share:${id}`, record, 60 * 60 * 24 * 90); // 90 days
+    if (!saved) return res.status(503).json({ error: 'Could not create a share. Please retry.' });
 
     const host = req.headers?.host || 'www.cardresell.org';
     res.status(200).json({
@@ -480,4 +475,8 @@ module.exports = async function handler(req, res) {
   }
 
   res.status(405).setHeader('Allow', 'GET, POST').json({ error: 'method_not_allowed' });
+  } catch {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(503).json({ error: 'Grade sharing is unavailable. Please retry.' });
+  }
 };

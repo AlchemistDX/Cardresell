@@ -529,6 +529,30 @@ ok('server GET returns an empty tombstone shape for a brand-new user',
 }
 
 /* ═══════════════════════════════════════════════════════════ */
+const recordDeletion = new Function('id', `
+  let saved;
+  const loadTombstones = () => ({portfolio:{},flips:{}});
+  const _saveTombstones = marks => {saved=marks;return true;};
+  ${grabFn('_addTombstones')}
+  _addTombstones('portfolio',[id]);
+  return saved;
+`);
+for (const id of ['__proto__','constructor','toString','hasOwnProperty']) {
+  const saved=recordDeletion(id);
+  ok('local deletion records own marker for '+id, Object.hasOwn(saved.portfolio,id) && typeof saved.portfolio[id]==='number');
+}
+
+// Imported identifiers are opaque strings, including JavaScript property names.
+for (const [label, module] of [['client', C], ['server', S]]) {
+  for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    const marks = {portfolio: Object.fromEntries([[id,T0]]), flips: {}};
+    const merged = module._mergeTombstones({}, marks);
+    eq(label+' preserves deletion marker for '+id, Object.entries(merged.portfolio), [[id,T0]]);
+    eq(label+' does not resurrect '+id, module._applyTombstones([{id,updatedAt:T0-1}], merged.portfolio), []);
+    eq(label+' compaction retains opaque '+id, Object.entries(module._compactTombstones(marks,T0).portfolio), [[id,T0]]);
+  }
+}
+
 console.log(`\n${pass} passed, ${fails.length} failed`);
 if (fails.length) {
   console.log('\nFAILURES:');

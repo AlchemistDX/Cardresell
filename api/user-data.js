@@ -134,7 +134,9 @@ export function _mergeTombstones(a, b) {
       if (!m || typeof m !== 'object') continue;
       for (const id of Object.keys(m)) {
         const at = Number(m[id]) || 0;
-        if (at > (out[kind][id] || 0)) out[kind][id] = at;
+        if (at > (Object.hasOwn(out[kind], id) ? out[kind][id] : 0)) {
+          Object.defineProperty(out[kind], id, {value: at, enumerable: true, writable: true, configurable: true});
+        }
       }
     }
   }
@@ -155,7 +157,7 @@ export function _compactTombstones(t, nowMs) {
       entries.sort((x, y) => y[1] - x[1]);
       entries = entries.slice(0, MAX_TOMBSTONES);
     }
-    for (const [id, at] of entries) out[kind][id] = at;
+    for (const [id, at] of entries) Object.defineProperty(out[kind], id, {value: at, enumerable: true, writable: true, configurable: true});
   }
   return out;
 }
