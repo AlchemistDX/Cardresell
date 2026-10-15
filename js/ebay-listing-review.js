@@ -96,6 +96,7 @@
     data.reviewRev=r.record.rev;data.saved=r.record;showReport(r.report);status.textContent='Review saved. No eBay listing was created or changed.';
    })));
    actions.append(button('Reload saved review',()=>run(load)));
+   if(window.CardResellEbayListingOperations)actions.append(button('Listing plan and recovery',()=>{dialog.close();window.CardResellEbayListingOperations.open({draftId});}));
   }
   async function run(fn) {
    if(state.busy||!valid())return;state.busy=true;error.textContent='';content.inert=true;for(const b of actions.querySelectorAll('button'))b.disabled=true;
