@@ -75,6 +75,11 @@ export function inventoryConflicts(account,device){
  const ah=history(account),bh=history(device);
  return inventoryFields.filter(key=>{try{chooseField(account,device,key,ah[key],bh[key],true);return false;}catch(e){if(e.code!=='inventory_edit_conflict')throw e;return true;}});
 }
+export function anchorInventory(row,id){
+ const fields={...history(row)};
+ for(const key of inventoryFields)if(!fields[key])fields[key]=nextRevision(row,key,undefined,id);
+ const out={...row,inventoryEdits:{version:1,fields}};history(out);return out;
+}
 export function resolveInventoryEdit(account,device,choice,id,now){
  if(!account||!device||account.id==null||device.id==null||String(account.id)!==String(device.id)||!['account','device'].includes(choice)||[account,device].some(r=>r.quantity!=null&&Number(r.quantity)!==1))fail('Review one physical copy and choose the details to keep.');
  const ah=history(account),bh=history(device),out={...account},fields={};let conflicts=0;

@@ -16,12 +16,12 @@
  function confirmed(j,receipt){
   if(receipt?.version!==1||!same(receipt.request,j.request)||!Number.isFinite(receipt.createdAt)||!same(receipt.result,api().resolveInventoryEdit(j.request.expected,j.request.candidate,j.request.choice,j.request.resolutionId,receipt.createdAt)))fail('The account response could not be confirmed. Resume the saved choice to check again.');
  }
- const paused=()=>{if(!pending())return false;_collectionSyncNotice('A inventory choice needs recovery. Open Review inventory sync and resume the saved choice.');return true;};
+ const paused=()=>{if(!pending())return false;_collectionSyncNotice('An inventory choice needs recovery. Open Review inventory sync and resume the saved choice.');return true;};
  let dialog,body,status,viewOwner='',cloud=null,busy=false,generation=0;
  function message(text){if(status)status.textContent=text;}
  function backup(){
   if(viewOwner!==owner()){message('Account changed. Reopen this review before downloading.');return;}
-  const local={};for(const suffix of ['portfolio','flips','tombstones','copy_sales_v1','sale_recovery_v1','sale_conflict_v1','inventory_conflict_v1']){
+  const local={};for(const suffix of ['portfolio','flips','tombstones','copy_sales_v1','sale_recovery_v1','sale_conflict_v1','inventory_conflict_v1','inventory_restore_v1']){
    const raw=localStorage.getItem(getUserKey(suffix));try{local[suffix]=raw===null?null:JSON.parse(raw);}catch{local[suffix]={unreadableRaw:raw};}
   }
   const data={format:'cardresell-inventory-recovery',version:1,exportedAt:new Date().toISOString(),local,account:cloud};

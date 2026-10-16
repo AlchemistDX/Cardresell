@@ -1,0 +1,76 @@
+// Pure backup validation and preview rules, shared with the browser. A backup
+// is user-supplied data; no saved operation, token, sale or deletion is replayed.
+import {mergeInventoryEdit} from './_inventoryEdits.js';
+const MAX_BYTES=4_000_000;
+const object=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+export const recoveryIdOK=v=>typeof v==='string'&&/^ir_[a-f0-9-]{36}$/.test(v);
+export function recoveryError(message,status=400,code='inventory_recovery_invalid'){return Object.assign(Error(message),{status,code});}
+const fail=message=>{throw recoveryError(message);};
+const identifier=v=>typeof v==='string'&&v.trim().length>0&&v.length<=1024||typeof v==='number'&&Number.isFinite(v);
+export function recoveryRows(value,label){
+ if(!Array.isArray(value)||value.length>2000||value.some(r=>!object(r)||!identifier(r.id))||new Set(value.map(r=>String(r.id))).size!==value.length)fail(label+' has unreadable records or missing/duplicate IDs. Nothing was changed.');return value;
+}
+function safeTree(value,depth=0){
+ if(depth>16)fail('A backup record is nested too deeply.');
+ if(value&&typeof value==='object')for(const key of Object.keys(value)){
+  if(['__proto__','constructor','prototype'].includes(key))fail('The backup contains an unsupported record key.');safeTree(value[key],depth+1);
+ }
+}
+export function recoveryCopies(value){
+ const rows=recoveryRows(value,'Backup inventory');
+ for(const row of rows){
+  if(typeof row.card!=='string'||!row.card.trim()||row.card.length>180||row.quantity!=null&&!(row.quantity===1||row.quantity==='1'))fail('Recover individual physical copies with a card name and quantity 1.');
+  if(['set','game','cardType','grader','cert','condition','finish','location','sku','addedDate','valueSource','rarity'].some(k=>row[k]!=null&&typeof row[k]!=='string')||['number','grade'].some(k=>row[k]!=null&&typeof row[k]!=='string'&&!(typeof row[k]==='number'&&Number.isFinite(row[k]))))fail('A backup copy has unsupported card details. Review that record before recovering it.');
+  if(['buyPrice','currentValue'].some(k=>row[k]!=null&&(typeof row[k]!=='number'||!Number.isFinite(row[k])||row[k]<0)))fail('A backup contains an invalid purchase cost or saved value.');
+  if(new TextEncoder().encode(JSON.stringify(row)).byteLength>300000)fail('A backup copy exceeds the 300 KB recovery limit.');
+  safeTree(row);mergeInventoryEdit(row,row);
+ }return rows;
+}
+export function backupRetired(...sources){
+ const retired=new Set(),copies=new Map(),sales=new Map();
+ function add(copyId,saleId){
+  if(!identifier(copyId)||!identifier(saleId))fail('A saved sale link cannot be read. Recovery stopped to preserve sold copies.');
+  copyId=String(copyId);saleId=String(saleId);
+  if(copies.has(copyId)&&copies.get(copyId)!==saleId||sales.has(saleId)&&sales.get(saleId)!==copyId)fail('Saved sale links disagree. Download a backup and review those sales before recovering inventory.');
+  copies.set(copyId,saleId);sales.set(saleId,copyId);retired.add(copyId);
+ }
+ for(const source of sources){
+  if(source==null)continue;if(!object(source))fail('A saved inventory snapshot cannot be read.');
+  for(const row of recoveryRows(source.flips??[],'Sales history'))if(row.sourceCollectionId!=null)add(row.sourceCollectionId,row.id);
+  const ledger=source.copySales??source.copy_sales_v1;
+  if(ledger!=null){
+   if(!object(ledger)||ledger.version!==1||!Array.isArray(ledger.entries)||ledger.entries.length>10000)fail('Sold-copy history is unreadable or unsupported. Recovery stopped to preserve it.');
+   for(const r of ledger.entries){if(!object(r)||!Number.isFinite(r.recordedAt)||r.recordedAt<=0)fail('A sold-copy receipt is unreadable.');add(r.copyId,r.saleId);}
+  }
+  const marks=source.tombstones;
+  if(marks!=null){
+   if(!object(marks))fail('Deletion history cannot be read.');
+   for(const kind of ['portfolio','flips'])if(marks[kind]!=null&&(!object(marks[kind])||Object.values(marks[kind]).some(t=>!Number.isFinite(t)||t<=0)))fail('Deletion history is unreadable. Recovery stopped to preserve it.');
+   Object.keys(marks.portfolio||{}).forEach(id=>retired.add(id));
+  }
+  const pending=source.sale_recovery_v1;
+  if(pending!=null){if(!object(pending)||pending.version!==1||!identifier(pending.copy?.id)||!identifier(pending.sale?.id)||String(pending.sale.sourceCollectionId)!==String(pending.copy.id))fail('A saved sale in this backup needs recovery first.');retired.add(String(pending.copy.id));}
+ }
+ return retired;
+}
+export function readRecoveryBackup(text){
+ if(typeof text!=='string'||new TextEncoder().encode(text).byteLength>MAX_BYTES)fail('Choose a CardResell JSON backup smaller than 4 MB.');
+ let backup;try{backup=JSON.parse(text);}catch{fail('This file is not readable JSON. Choose a CardResell recovery backup.');}
+ if(!object(backup)||backup.version!==1||!['cardresell-inventory-recovery','cardresell-sale-recovery'].includes(backup.format)||!object(backup.local)||backup.account!=null&&!object(backup.account))fail('Choose a supported version-1 CardResell recovery backup. CSV imports are available separately.');
+ // Inspect both histories even when only one inventory snapshot is selected.
+ backupRetired(backup.local,backup.account);return backup;
+}
+export function planRecovery(backup,source,local,account){
+ if(!['local','account'].includes(source)||!object(backup[source]))fail('Choose which saved inventory snapshot to review.');
+ const rows=recoveryCopies(backup[source].portfolio??[]),existing=new Set([...recoveryRows(local.portfolio,'Device inventory'),...recoveryRows(account.portfolio,'Account inventory')].map(r=>String(r.id))),retired=backupRetired(backup.local,backup.account,local,account);
+ const adding=[],skipped=[];for(const row of rows){const id=String(row.id);if(retired.has(id))skipped.push({row,reason:'Sold, deleted or awaiting sale recovery'});else if(existing.has(id))skipped.push({row,reason:'Already saved on this device or account'});else adding.push(row);}
+ if(new Set([...existing,...adding.map(r=>String(r.id))]).size>2000)fail('The combined inventory would exceed 2,000 copies. Recover a smaller backup.');
+ return {adding,skipped,total:rows.length};
+}
+export function normalizeRecoveryRequest(body){
+ if(!object(body)||body.action!=='recover_inventory'||!recoveryIdOK(body.recoveryId))fail('Review a backup and confirm the missing inventory to recover.');
+ const request={action:'recover_inventory',recoveryId:body.recoveryId,copies:recoveryCopies(body.copies)};
+ if(!request.copies.length||request.copies.length>500)fail('Recover between 1 and 500 missing copies per backup.');
+ if(new TextEncoder().encode(JSON.stringify(request)).byteLength>800000)throw recoveryError('The selected inventory exceeds the 800 KB recovery limit. Use a smaller backup.',413);
+ return request;
+}

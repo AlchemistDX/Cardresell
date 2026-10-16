@@ -2970,6 +2970,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
       <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
       <button class="fl-sub-btn" onclick="CardResellInventoryConflicts.open()">Review inventory sync</button>
+      <button class="fl-sub-btn" onclick="CardResellInventoryRecovery.open()">Recover inventory</button>
       <button class="fl-sub-btn" id="flipReportToggle" aria-expanded="false" aria-controls="flipReportPanel" onclick="toggleFlipReport()">Sales report</button>
       <button class="fl-sub-btn" onclick="exportFlips()">⬇ Export CSV</button>
       <button class="fl-add-btn" onclick="openAddFlip('flip')">+ Log a Flip</button>
@@ -3081,6 +3082,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div id="saleRecoveryNotice" role="status" hidden style="margin:.8rem 0;padding:.8rem;border:1px solid var(--gold);border-radius:10px;font-size:.85rem"></div>
     <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
       <button class="fl-sub-btn" onclick="CardResellInventoryConflicts.open()">Review inventory sync</button>
+      <button class="fl-sub-btn" onclick="CardResellInventoryRecovery.open()">Recover inventory</button>
     <button id="collectionSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
     <section class="collection-grade-history" aria-labelledby="collectionGradesTitle">
@@ -3966,8 +3968,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
 <script defer src="/js/sale-corrections.ba658815.js"></script>
-<script defer src="/js/inventory-edits.0883ac71.js"></script>
-<script defer src="/js/core.1696ad0f.js"></script>
+<script defer src="/js/inventory-edits.827690a8.js"></script>
+<script defer src="/js/core.aa7ef89b.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
@@ -4099,6 +4101,20 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .inventory-details-copies { max-height:200px; overflow:auto; padding-left:1.4rem; margin:.25rem 0; font-size:.8rem; line-height:1.7; }
 #inventoryDetailsDialog :is(input,button):focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
 
+#inventoryRecoveryDialog { margin:auto; box-sizing:border-box; width:min(820px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); padding:1.2rem; border:1px solid var(--border); border-radius:14px; color:var(--text); background:var(--bg); overflow:auto; overflow-wrap:anywhere; }
+#inventoryRecoveryDialog::backdrop { background:rgba(0,0,0,.72); }
+#inventoryRecoveryDialog h2 { margin:0 0 .8rem; }
+#inventoryRecoveryDialog p { font-size:.85rem; line-height:1.5; }
+#inventoryRecoveryDialog button { min-height:44px; margin:.25rem .5rem .25rem 0; white-space:normal; }
+.inventory-recovery-body { display:grid; gap:1rem; margin-top:1rem; }
+.inventory-recovery-body label { display:grid; gap:.5rem; font-size:.85rem; font-weight:600; }
+.inventory-recovery-body input[type=file] { min-width:0; width:100%; font:inherit; }
+.inventory-recovery-body .inventory-recovery-check { display:flex; align-items:center; min-height:44px; margin:.5rem 0; font-weight:500; }
+.inventory-recovery-check input { flex-shrink:0; width:22px; height:22px; accent-color:var(--gold); }
+.inventory-recovery-copies { max-height:260px; overflow:auto; padding-left:1.4rem; font-size:.8rem; line-height:1.7; }
+#inventoryRecoveryDialog :is(input,button,summary):focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+
+
 
 #flipReportPanel { margin-bottom:1rem; padding:1rem; box-sizing:border-box; overflow-wrap:anywhere; }
 #flipReportPanel h3 { margin:0 0 .6rem; }
@@ -4118,15 +4134,17 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .flip-report-totals dd { margin:.35rem 0; font-size:1.1rem; font-weight:700; }
 </style>
 <script defer src="/js/flip-report.c7f8d720.js"></script>
-<script defer src="/js/sale-conflicts.6faf9a96.js"></script>
+<script defer src="/js/sale-conflicts.6c578b03.js"></script>
 <script defer src="/js/collection-export.a65335bc.js"></script>
 <script defer src="/js/collection-import.7e472fce.js"></script>
 <script defer src="/js/ebay-connect.6aec6f8b.js"></script>
 <script defer src="/js/ebay-listing-review.792479af.js"></script>
 <script defer src="/js/ebay-listing-operations.3f8e246d.js"></script>
 <script defer src="/js/draft-batch.f880f49f.js"></script>
-<script defer src="/js/inventory-details.c7a5198d.js"></script>
-<script defer src="/js/inventory-conflicts.a913a4c5.js"></script>
+<script defer src="/js/inventory-details.131ba49f.js"></script>
+<script defer src="/js/inventory-conflicts.7920eb2e.js"></script>
+<script defer src="/js/inventory-recovery-policy.f80ab0a5.js"></script>
+<script defer src="/js/inventory-recovery.2785fe04.js"></script>
 <script defer src="/js/collection-drafts.dd327a15.js"></script>
 <script defer src="/js/grade-history.6100a33d.js"></script>
   <script defer src="/js/binder.ecee3046.js"></script>

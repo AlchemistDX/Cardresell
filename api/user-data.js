@@ -4,6 +4,8 @@ import {mergeSaleCorrection} from './_saleCorrections.js';
 import {resolutionRequest,resolutionHistory,prepareResolution} from './_saleResolution.js';
 import {mergeInventoryEdit,inventoryNotDeleted} from './_inventoryEdits.js';
 import {inventoryRequest,inventoryHistory,prepareInventoryResolution} from './_inventoryResolution.js';
+import {normalizeRecoveryRequest} from './_inventoryRecoveryPolicy.js';
+import {recoveryHistory,prepareInventoryRecovery} from './_inventoryRecovery.js';
 // /api/user-data — Cross-device sync for Portfolio + Flips
 //
 // GET  /api/user-data                  → { portfolio: [...], flips: [...], tombstones, serverUpdatedAt }
@@ -85,6 +87,7 @@ export default async function handler(req, res) {
       copySales:        receipts,
       saleResolutions:  resolutionHistory(blob),
       inventoryResolutions: inventoryHistory(blob),
+      inventoryRecoveries: recoveryHistory(blob),
       serverUpdatedAt:  Number(blob.serverUpdatedAt)  || 0,
     });
   }
@@ -92,6 +95,20 @@ export default async function handler(req, res) {
   // ── POST: push snapshot ──
   if (req.method === 'POST') {
     const body = req.body || {};
+    if(body.action==='recover_inventory') {
+      const request=normalizeRecoveryRequest(body);
+      for(let attempt=0;attempt<4;attempt++) {
+        const stored=await kvGet(kvUrl,kvToken,key),existing=stored||{portfolio:[],flips:[],tombstones:{portfolio:{},flips:{}}};
+        const receipts=copySales(existing.copySales,existing.flips);validateSaleLinks(receipts,existing.flips);
+        const prepared=prepareInventoryRecovery(existing,request);
+        if(prepared.replay)return res.status(200).json({ok:true,recovery:prepared.receipt,replayed:true,...recoverySnapshot(existing)});
+        const payload={...existing,portfolio:prepared.portfolio,copySales:receipts,inventoryRecoveries:[...recoveryHistory(existing),prepared.receipt],serverUpdatedAt:Date.now()};
+        const serialized=JSON.stringify(payload);
+        if(Buffer.byteLength(serialized)>MAX_BLOB_BYTES)return res.status(413).json({error:'inventory_recovery_conflict',message:'The account storage limit would be exceeded. No copies were added. Use a smaller backup.'});
+        if(await kvSet(kvUrl,kvToken,key,serialized,stored?RAW_RECORDS.get(stored):null))return res.status(200).json({ok:true,recovery:prepared.receipt,replayed:false,...recoverySnapshot(payload)});
+      }
+      return res.status(409).json({error:'sync_conflict',message:'Another device is updating your account. Resume this recovery to retry the same request.'});
+    }
     if(body.action==='resolve_inventory') {
       const request=inventoryRequest(body);
       for(let attempt=0;attempt<4;attempt++) {
@@ -153,7 +170,7 @@ export default async function handler(req, res) {
       validateSaleLinks(receipts, flips);
       if (portfolio.length > MAX_ITEMS || flips.length > MAX_ITEMS)
         return res.status(413).json({ error: 'too_many_items', message: 'The combined collection exceeds the sync limit. Nothing was discarded.' });
-      const payload = { portfolio, flips, tombstones: marks, copySales: receipts, serverUpdatedAt: Date.now(), ...(existing?.saleResolutions ? {saleResolutions:resolutionHistory(existing)} : {}), ...(existing?.inventoryResolutions ? {inventoryResolutions:inventoryHistory(existing)} : {}) };
+      const payload = { portfolio, flips, tombstones: marks, copySales: receipts, serverUpdatedAt: Date.now(), ...(existing?.saleResolutions ? {saleResolutions:resolutionHistory(existing)} : {}), ...(existing?.inventoryResolutions ? {inventoryResolutions:inventoryHistory(existing)} : {}), ...(existing?.inventoryRecoveries ? {inventoryRecoveries:recoveryHistory(existing)} : {}) };
       const serialized = JSON.stringify(payload);
       if (Buffer.byteLength(serialized) > MAX_BLOB_BYTES)
         return res.status(413).json({ error: 'payload_too_large', message: 'Your collection exceeds the cloud sync size limit. It is still saved on this device.' });
@@ -165,9 +182,16 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    if (['copy_sale_conflict','sale_correction_conflict','sale_resolution_conflict','inventory_edit_conflict','inventory_resolution_conflict'].includes(error.code)) return res.status(error.status).json({error:error.code,message:error.message});
+    if (['copy_sale_conflict','sale_correction_conflict','sale_resolution_conflict','inventory_edit_conflict','inventory_resolution_conflict','inventory_recovery_invalid','inventory_recovery_conflict'].includes(error.code)) return res.status(error.status).json({error:error.code,message:error.message});
     return res.status(503).json({ error: 'storage_unavailable', message: 'Cloud collection could not be confirmed. Your device data is unchanged. Please retry sync.' });
   }
+}
+
+// A replay returns today's visible account, never the original recovered rows.
+// Later sales, edits and deletions therefore survive a lost acknowledgement.
+function recoverySnapshot(blob){
+  const marks=_compactTombstones(blob.tombstones),receipts=copySales(blob.copySales,blob.flips);
+  return {portfolio:unsoldCopies(_applyTombstones(inventoryNotDeleted(blob.portfolio,marks.portfolio),marks.portfolio),receipts),flips:_applyTombstones(blob.flips,marks.flips),tombstones:marks,copySales:receipts,inventoryRecoveries:recoveryHistory(blob),serverUpdatedAt:Number(blob.serverUpdatedAt)||0};
 }
 
 // Union two arrays of {id, ...} rows by id. Later wins on conflict.
