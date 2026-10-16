@@ -144,13 +144,18 @@
   }
   async function start(reviewed,form) {
     if(busy||!reviewed)return;const who=reviewed.owner;let settings;
+    // Closing the review withdraws approval while preflight is in progress.
+    // Once the journal is saved, closing progress still leaves work recoverable.
+    const reviewDialog=dialog;
+    const assertReview=()=>{assertOwner(who);if(preview!==reviewed||!reviewDialog?.open)throw Error('Batch preparation cancelled. Your selected cards are unchanged.');};
     try{settings=parseSettings(form);}catch(e){note=e.message;emit();return;}
     busy=true;runOwner=who;pause=false;note='Checking draft capacity…';emit();form.querySelectorAll('input,select').forEach(e=>e.disabled=true);dialog.querySelector('[data-batch-confirm]').disabled=true;
     try{await locked(who,async()=>{
       load(true);if(readError)throw Error(readError);if(active(job))throw Error('An unfinished batch is already saved. Close this window and resume it first.');
       await capacity(reviewed.rows.length,who);
+      assertReview();
       const cards=reviewed.rows.map(row=>{const found=_crResolveEntry(loadPortData(),row.id);if(!found.row||found.ambiguous||JSON.stringify(clean(found.row))!==JSON.stringify(row.card))throw Error('A card changed after this preview. Close it and review your selection again.');return found.row;});
-      const eligibility=await fetchSellStamps(cards);assertOwner(who);if(!eligibility.ok)throw Error('Could not check card details. Your selection is preserved; please retry.');
+      const eligibility=await fetchSellStamps(cards);assertReview();if(!eligibility.ok)throw Error('Could not check card details. Your selection is preserved; please retry.');
       const id=crypto.randomUUID(),next={version:1,owner:who,id,createdAt:Date.now(),settings,rows:[]};
       for(let i=0;i<cards.length;i++){
         const card=clean(cards[i]),rowId=reviewed.rows[i].id,instanceId='inst_col_'+rowId,idemKey=_crCreateIdemKey('sell-col',rowId,instanceId);
@@ -161,7 +166,7 @@
         const photo=_scanPhotoSnapshot(cards[i],instanceId);
         next.rows.push({id:rowId,instanceId,idemKey,card,sourceHash:await digest(JSON.stringify(card)),photoHash:photo?await digest(photo.dataUrl):null,payload,state:earlier?'uncertain':blocked?'blocked':'queued',message:blocked?(card.finishReviewRequired&&!card.finishConfirmed?'Check the finish on this card before preparing a draft.':eligibility.stamps[i]?.message||'Add the missing card details.'):'Not attempted yet.'});
       }
-      assertOwner(who);save(next);preview=null;showProgress();emit();await run(next,who);
+      assertReview();save(next);preview=null;showProgress();emit();await run(next,who);
     });}catch(e){if(account()===who){note=e.message||'Could not prepare this batch. Resume its saved progress.';emit();}}
     finally{busy=false;runOwner=null;if(account()===who){form.querySelectorAll('input,select').forEach(e=>e.disabled=false);dialog?.querySelector('[data-batch-confirm]')?.removeAttribute('disabled');emit();}else{load(true);emit();}}
   }
@@ -194,9 +199,9 @@
   }
   function open(ids=[]) {
     load();if(!owner){triggerGoogleSignIn('collection');return;}if(busy){showProgress();return;}
-    if(readError){const who=owner,d=makeDialog('Saved batch needs review');d.append(node('p',readError),button('View drafts',()=>{d.close();switchView('drafts');}),button('Clear unreadable recovery record',async()=>{
+    if(readError){const who=owner,unreadableRaw=raw,d=makeDialog('Saved batch needs review');d.append(node('p',readError),button('View drafts',()=>{d.close();switchView('drafts');}),button('Clear unreadable recovery record',async()=>{
       if(!confirm('This only clears the unreadable recovery record in this browser. Saved drafts remain on your account. Have you checked your saved drafts?'))return;
-      try{await locked(who,async()=>{assertOwner(who);localStorage.removeItem(key(who));load(true);});d.close();emit();}catch(e){d.append(node('p',e.message));}
+      try{await locked(who,async()=>{assertOwner(who);if(localStorage.getItem(key(who))!==unreadableRaw)throw Error('The saved batch changed in another tab. No recovery record was cleared. Close and reopen its progress.');localStorage.removeItem(key(who));load(true);});d.close();emit();}catch(e){d.append(node('p',e.message));}
     }));return;}
     if(active(job)||!ids.length){preview=null;showProgress();return;}
     try{review(ids);}catch(e){note=e.message;emit();}
