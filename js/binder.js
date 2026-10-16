@@ -102,18 +102,23 @@
   }
   function cameraGuide() {
     const video=el('binderCameraVideo'), grid=el('binderCameraGrid');
-    if(!video.videoWidth || !video.videoHeight) return null;
+    const stage=el('binderCameraStage');
+    if(!video.videoWidth || !video.videoHeight || !stage.clientWidth || !stage.clientHeight) return null;
     const [cols,rows]=el('binderLayout').value.split(',').map(Number);
-    const width=Math.min(video.videoWidth*.8,video.videoHeight*.8*cols*.72/rows);
-    const height=width*rows/(cols*.72), w=width/video.videoWidth,h=height/video.videoHeight;
-    // The full-screen view contains the entire frame, including letterboxing.
-    // Position the guide on the visible video pixels, not the surrounding stage.
-    const stage=el('binderCameraStage'), scale=Math.min(stage.clientWidth/video.videoWidth,stage.clientHeight/video.videoHeight);
-    const vw=video.videoWidth*scale,vh=video.videoHeight*scale;
-    grid.style.cssText=`left:${(stage.clientWidth-vw*w)/2}px;top:${(stage.clientHeight-vh*h)/2}px;width:${vw*w}px;height:${vh*h}px;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr)`;
+    // Fit a page-shaped view to the available screen, with a little room at
+    // the card edges. A square camera feed must not shrink a portrait guide.
+    const aspect=cols*.72/rows, inset=.03;
+    const width=Math.min(stage.clientWidth,stage.clientHeight*aspect), height=width/aspect;
+    const left=(stage.clientWidth-width)/2, top=(stage.clientHeight-height)/2;
+    video.style.cssText=`left:${left}px;top:${top}px;width:${width}px;height:${height}px`;
+    grid.style.cssText=`left:${left+width*inset}px;top:${top+height*inset}px;width:${width*(1-2*inset)}px;height:${height*(1-2*inset)}px;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr)`;
     grid.replaceChildren(...Array.from({length:cols*rows},()=>document.createElement('span')));
     el('binderCapture').disabled=cameraCapturing;
-    return [(1-w)*50,(1-w)*50,(1-h)*50,(1-h)*50];
+    // object-fit:cover crops the sensor frame to this view. Capture those same
+    // native pixels; keeping the full sensor image would shift the review grid.
+    const scale=Math.max(width/video.videoWidth,height/video.videoHeight);
+    const sw=width/scale, sh=height/scale;
+    return {sx:(video.videoWidth-sw)/2,sy:(video.videoHeight-sh)/2,sw,sh,margins:Array(4).fill(inset*100)};
   }
   function stopCamera() {
     ++cameraEpoch; cameraActive=false; cameraCapturing=false;
@@ -146,12 +151,13 @@
     const video=el('binderCameraVideo');
     if(!cameraStream || !video.videoWidth || !video.videoHeight || el('binderCapture').disabled) return;
     cameraCapturing=true;
-    el('binderCapture').disabled=true; const version=cameraEpoch, margins=cameraGuide();
+    el('binderCapture').disabled=true; const version=cameraEpoch, frame=cameraGuide();
     el('binderCapture').disabled=true;
-    const canvas=document.createElement('canvas'), scale=sourceScale(video.videoWidth,video.videoHeight);
-    canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
+    if(!frame) {cameraCapturing=false;return;}
+    const canvas=document.createElement('canvas'), scale=sourceScale(frame.sw,frame.sh);
+    canvas.width=Math.round(frame.sw*scale);canvas.height=Math.round(frame.sh*scale);
     try {
-      canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+      canvas.getContext('2d').drawImage(video,frame.sx,frame.sy,frame.sw,frame.sh,0,0,canvas.width,canvas.height);
       const jpeg=await blob(canvas); if(version!==cameraEpoch) return;
       const captured=new File([jpeg],'binder-camera.jpg',{type:'image/jpeg'});
       // A retake replaces this page, keeping the rest of the reviewed batch.
@@ -160,7 +166,7 @@
       else pageQueue[pageIdx]=captured;
       pageStates[pageIdx]=null;
       const reviewEpoch=cameraEpoch;
-      await openPage(pageIdx,margins);
+      await openPage(pageIdx,frame.margins);
       if(reviewEpoch===cameraEpoch && pageQueue[pageIdx]===captured && !busy)
         el('binderOpenCamera').focus({preventScroll:true});
     } catch (_) { if(version===cameraEpoch) {
