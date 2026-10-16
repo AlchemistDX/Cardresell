@@ -3,6 +3,20 @@
   'use strict';
   const el = id => document.getElementById(id);
   let source = null, generation = 0, busy = false;
+  // These JPEGs already have a bounded size and quality. Preserve their bytes
+  // at scan handoff instead of downsampling and encoding the pocket twice.
+  const preparedPockets = new WeakSet();
+  async function scanImage(file) {
+    if (!file || !preparedPockets.has(file) || file.type !== 'image/jpeg' || file.size > 2 * 1024 * 1024) return null;
+    try {
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || null);
+        reader.onerror = reader.onabort = () => reject(new Error('Could not read pocket'));
+        reader.readAsDataURL(file);
+      });
+    } catch (_) { return null; } // Ordinary bulk compression remains the fallback.
+  }
   let cameraStream = null, cameraEpoch = 0, cameraActive = false, cameraCapturing = false;
   let anchor = null, drag = null, adjusting = false, touchMove = false;
   const moves = {left:[-.01,0],right:[.01,0],up:[0,-.01],down:[0,.01]};
@@ -261,7 +275,7 @@
     result.looksEmpty = result.energy < EMPTY_ENERGY;
     return result;
   }
-  window.CardResellBinder = { pocketStats, sourceScale, EMPTY_ENERGY, MAX_SOURCE_AREA, POCKET_PAD, SMALL_POCKET_EDGE, minPocketEdge: MIN_POCKET_EDGE };
+  window.CardResellBinder = { scanImage, pocketStats, sourceScale, EMPTY_ENERGY, MAX_SOURCE_AREA, POCKET_PAD, SMALL_POCKET_EDGE, minPocketEdge: MIN_POCKET_EDGE };
   // 2026-10-10: auto-fit the grid to the cards. A real page photographed on
   // a couch (IMG_4652) did not fill the frame, so the default full-photo grid
   // cut across 2-4 cards per pocket. Find the band of columns and rows dense
@@ -426,6 +440,7 @@
         const jpeg = await blob(canvas); canvas.width = canvas.height = 1;
         if(version !== generation) return;
         const file = new File([jpeg],`binder-${multiPage() ? `page-${pageIdx+1}-` : ''}row-${row+1}-col-${col+1}.jpg`,{type:'image/jpeg'});
+        preparedPockets.add(file);
         const url = URL.createObjectURL(file); urls.push(url);
         const selected=restored?.selection.length===grid.crops.length ? restored.selection[pockets.length] : !stats.looksEmpty;
         const pocket = {file, selected, looksEmpty:!!stats.looksEmpty, stats}; pockets.push(pocket);
