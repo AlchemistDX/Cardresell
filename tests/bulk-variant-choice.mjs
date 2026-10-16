@@ -33,7 +33,7 @@ ok(/data\.foil_hint === 'foil' \|\| data\.foil_hint === 'non_foil'/.test(src), '
 // Definite miss: no useless same-photo retry.
 ok(/result\.definiteMiss = true;/.test(src), 'miss marks definiteMiss');
 ok(/\(result\.photoRejected \|\| result\.definiteMiss\) \? '' :/.test(src), 'retry hidden on definite miss');
-ok(src.includes('The same photo gives the same result.'), 'miss hint explains');
+ok(src.includes('No ID credit was used. Find the card by name, or take a closer photo with its name and number readable.'), 'miss hint offers free catalogue recovery or a clearer photo');
 // A new batch never starts on the previous batch's "Done!".
 {const i=src.indexOf("'Scanning 0 of ' + total + '…'"),w=src.indexOf('async function worker()');
  ok(i>0&&i<w&&w-i<600,'progress label reset before workers start');}
