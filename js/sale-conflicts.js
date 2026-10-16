@@ -21,7 +21,7 @@
  function message(text){if(status)status.textContent=text;}
  function backup(){
   if(viewOwner!==owner()){message('Account changed. Reopen this review before downloading.');return;}
-  const local={};for(const suffix of ['portfolio','flips','tombstones','copy_sales_v1','sale_recovery_v1','sale_conflict_v1','inventory_conflict_v1']){
+  const local={};for(const suffix of ['portfolio','flips','tombstones','copy_sales_v1','sale_recovery_v1','sale_conflict_v1','inventory_conflict_v1','inventory_restore_v1']){
    const raw=localStorage.getItem(getUserKey(suffix));try{local[suffix]=raw===null?null:JSON.parse(raw);}catch{local[suffix]={unreadableRaw:raw};}
   }
   const data={format:'cardresell-sale-recovery',version:1,exportedAt:new Date().toISOString(),local,account:cloud};

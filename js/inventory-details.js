@@ -15,6 +15,7 @@
  function ready(){
   if(read('sale_recovery_v1',null)!==null)fail('Finish the saved sale in Collection before editing inventory details.');
   if(window.CardResellInventoryConflicts?.pending())fail('Open Review inventory sync and finish the saved choice before editing.');
+  if(window.CardResellInventoryRecovery?.pending())fail('Open Recover inventory and finish the saved recovery before editing.');
  }
  let dialog,body,status,save,cancel,form,viewOwner,original=[],dirty,inputs,confirm,busy=false;
  const message=text=>{status.textContent=text;};
