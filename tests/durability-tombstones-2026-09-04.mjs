@@ -416,8 +416,8 @@ for (const [fname, kind] of [
    ═══════════════════════════════════════════════════════════ */
 {
   const pull = stripComments(grabFn('_pullUserData'));
-  ok('pull applies tombstones to the merged portfolio',
-     /_applyTombstones\(\s*_unionById\(\s*remotePort/.test(pull));
+  ok('pull removes tombstoned copies before protected inventory merge',
+     /const available=rows=>CardResellSaleRecovery\.availableRowsStrict\(_applyTombstones\(CardResellInventoryEdits\.inventoryNotDeleted\(rows,marks\.portfolio\),marks\.portfolio\)/.test(pull) && /CardResellInventoryEdits\.mergeInventory\(available\(remotePort\),available\(localPort\)\)/.test(pull));
   ok('pull applies tombstones to the merged flips',
      /_applyTombstones\(\s*CardResellSaleCorrections\.mergeSales\(\s*remoteFlips,\s*localFlips\),\s*marks\.flips\)/.test(pull));
   ok('pull merges the server tombstones with local ones', /_mergeTombstones\(/.test(pull));
@@ -484,9 +484,9 @@ eq('server merge tolerates undefined', S._mergeTombstones(undefined, undefined),
   ok('server compaction caps the mark count', Object.keys(c.portfolio).length === 2000);
 }
 
-// Server source wiring: the union must be followed by a subtraction.
-ok('server applies tombstones after portfolio union on POST',
-   /portfolio = unsoldCopies\(_applyTombstones\(_mergeById/.test(API_NC));
+// Retired copies are subtracted before protected details are compared.
+ok('server applies deletion and sold-copy filters before portfolio merge',
+   /available=rows=>unsoldCopies\(_applyTombstones\(inventoryNotDeleted\(rows,marks\.portfolio\),marks\.portfolio\),receipts\)/.test(API_NC) && /portfolio = _mergeById\(available\(existing\?\.portfolio \|\| \[\]\), available\(body\.portfolio\)/.test(API_NC));
 ok('server applies tombstones after flip union on POST',
    /flips = _applyTombstones\(_mergeById/.test(API_NC));
 ok('server persists tombstones in the stored blob', /tombstones:\s*marks/.test(API_NC));

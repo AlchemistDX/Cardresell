@@ -2,6 +2,8 @@ import { verifyTokenFlexible } from './_verifyToken.js';
 import {copySales, unsoldCopies, validateSaleLinks} from './_copySales.js';
 import {mergeSaleCorrection} from './_saleCorrections.js';
 import {resolutionRequest,resolutionHistory,prepareResolution} from './_saleResolution.js';
+import {mergeInventoryEdit,inventoryNotDeleted} from './_inventoryEdits.js';
+import {inventoryRequest,inventoryHistory,prepareInventoryResolution} from './_inventoryResolution.js';
 // /api/user-data — Cross-device sync for Portfolio + Flips
 //
 // GET  /api/user-data                  → { portfolio: [...], flips: [...], tombstones, serverUpdatedAt }
@@ -77,11 +79,12 @@ export default async function handler(req, res) {
     return res.status(200).json({
       // Apply tombstones on read as well as write, so a row that predates this
       // change (or was written by an older client) still disappears.
-      portfolio:        unsoldCopies(_applyTombstones(blob.portfolio, marks.portfolio), receipts),
+      portfolio:        unsoldCopies(_applyTombstones(inventoryNotDeleted(Array.isArray(blob.portfolio)?blob.portfolio:[],marks.portfolio), marks.portfolio), receipts),
       flips:            _applyTombstones(Array.isArray(blob.flips)     ? blob.flips     : [], marks.flips),
       tombstones:       marks,
       copySales:        receipts,
       saleResolutions:  resolutionHistory(blob),
+      inventoryResolutions: inventoryHistory(blob),
       serverUpdatedAt:  Number(blob.serverUpdatedAt)  || 0,
     });
   }
@@ -89,6 +92,22 @@ export default async function handler(req, res) {
   // ── POST: push snapshot ──
   if (req.method === 'POST') {
     const body = req.body || {};
+    if(body.action==='resolve_inventory') {
+      const request=inventoryRequest(body);
+      for(let attempt=0;attempt<4;attempt++) {
+        const existing=await kvGet(kvUrl,kvToken,key);
+        if(!existing||duplicateIds(existing.flips)||duplicateIds(existing.portfolio))return res.status(409).json({error:'inventory_resolution_conflict',message:'Account records changed or share an ID. Download a backup and refresh the review.'});
+        const marks=_compactTombstones(existing.tombstones),receipts=copySales(existing.copySales,existing.flips);
+        const visible=unsoldCopies(_applyTombstones(inventoryNotDeleted(existing.portfolio,marks.portfolio),marks.portfolio),receipts);
+        const {receipt,replay}=prepareInventoryResolution(existing,request,visible);
+        if(replay)return res.status(200).json({ok:true,resolution:receipt,replayed:true});
+        const portfolio=existing.portfolio.map(r=>r&&r.id!=null&&String(r.id)===String(request.expected.id)?receipt.result:r);
+        const payload={...existing,portfolio,copySales:receipts,inventoryResolutions:[...inventoryHistory(existing),receipt],serverUpdatedAt:Date.now()},serialized=JSON.stringify(payload);
+        if(Buffer.byteLength(serialized)>MAX_BLOB_BYTES)return res.status(413).json({error:'payload_too_large',message:'The choice and its backup exceed account storage. Both versions are unchanged.'});
+        if(await kvSet(kvUrl,kvToken,key,serialized,RAW_RECORDS.get(existing)))return res.status(200).json({ok:true,resolution:receipt,replayed:false});
+      }
+      return res.status(409).json({error:'sync_conflict',message:'Another device is updating your account. Resume this saved choice to retry.'});
+    }
     if (body.action === 'resolve_sale') {
       const request=resolutionRequest(body);
       for(let attempt=0;attempt<4;attempt++) {
@@ -126,12 +145,15 @@ export default async function handler(req, res) {
       // Derive receipts before deletions/merging: old clients cannot clear a
       // sale by omitting its row, stripping its link, or deleting its report.
       const receipts = copySales(existing?.copySales, [...(existing?.flips || []), ...body.flips]);
-      const portfolio = unsoldCopies(_applyTombstones(_mergeById(existing?.portfolio || [], body.portfolio, preferIncoming), marks.portfolio), receipts);
+      // Retired copies never compete with an inventory edit. A sale/delete wins
+      // even when an older device has divergent details for that same copy.
+      const available=rows=>unsoldCopies(_applyTombstones(inventoryNotDeleted(rows,marks.portfolio),marks.portfolio),receipts);
+      const portfolio = _mergeById(available(existing?.portfolio || []), available(body.portfolio), preferIncoming);
       const flips = _applyTombstones(_mergeById(existing?.flips || [], body.flips, preferIncoming, true), marks.flips);
       validateSaleLinks(receipts, flips);
       if (portfolio.length > MAX_ITEMS || flips.length > MAX_ITEMS)
         return res.status(413).json({ error: 'too_many_items', message: 'The combined collection exceeds the sync limit. Nothing was discarded.' });
-      const payload = { portfolio, flips, tombstones: marks, copySales: receipts, serverUpdatedAt: Date.now(), ...(existing?.saleResolutions ? {saleResolutions:resolutionHistory(existing)} : {}) };
+      const payload = { portfolio, flips, tombstones: marks, copySales: receipts, serverUpdatedAt: Date.now(), ...(existing?.saleResolutions ? {saleResolutions:resolutionHistory(existing)} : {}), ...(existing?.inventoryResolutions ? {inventoryResolutions:inventoryHistory(existing)} : {}) };
       const serialized = JSON.stringify(payload);
       if (Buffer.byteLength(serialized) > MAX_BLOB_BYTES)
         return res.status(413).json({ error: 'payload_too_large', message: 'Your collection exceeds the cloud sync size limit. It is still saved on this device.' });
@@ -143,7 +165,7 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    if (['copy_sale_conflict','sale_correction_conflict','sale_resolution_conflict'].includes(error.code)) return res.status(error.status).json({error:error.code,message:error.message});
+    if (['copy_sale_conflict','sale_correction_conflict','sale_resolution_conflict','inventory_edit_conflict','inventory_resolution_conflict'].includes(error.code)) return res.status(error.status).json({error:error.code,message:error.message});
     return res.status(503).json({ error: 'storage_unavailable', message: 'Cloud collection could not be confirmed. Your device data is unchanged. Please retry sync.' });
   }
 }
@@ -151,11 +173,11 @@ export default async function handler(req, res) {
 // Union two arrays of {id, ...} rows by id. Later wins on conflict.
 function _mergeById(a, b, preferIncoming = true, sales = false) {
   const map = new Map();
-  for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), sales ? mergeSaleCorrection(row,row) : row);
+  for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), sales ? mergeSaleCorrection(row,row) : mergeInventoryEdit(row,row));
   for (const row of (b || [])) if (row && row.id != null) {
     const previous=map.get(String(row.id));
     if(sales)map.set(String(row.id),mergeSaleCorrection(previous||row,row,preferIncoming));
-    else if(preferIncoming||!previous)map.set(String(row.id),row);
+    else map.set(String(row.id),mergeInventoryEdit(previous||row,row,preferIncoming));
   }
   return Array.from(map.values());
 }
