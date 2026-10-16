@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {completionGuard} from './_complete.mjs';
+import {billingHarness,exact,UID} from './_scanBillingHarness.mjs';
+import {redisCommand as redis} from './_idRedis.mjs';
+import {correctSale,mergeSales} from '../api/_saleCorrections.js';
+const handler=(await import('../api/user-data.js')).default;
+const {finish}=completionGuard('sale-reconciliation'),h=billingHarness();globalThis.__STUB=exact();let count=0;
+const check=(v,m)=>{assert.ok(v,m);count++;},key='userdata:'+UID;
+const original={id:'original-sale',sourceCollectionId:'copy-1',card:'Test card',date:'2026-10-01',sellPrice:150,buyPrice:100,fees:10,shippingCost:5,gradingCost:0,costMeta:{buyPrice:'value',fees:'value',shippingCost:'value',gradingCost:'zero'}};
+const edit=(row,refund,note='')=>correctSale(row,{...row,refundAmount:refund,otherExpenses:3,expenseNote:note,costMeta:{...row.costMeta,refundAmount:refund?'value':'zero',otherExpenses:'value'}},'sc_'+randomUUID());
+async function call(flips,extra={}){let status=200,data;await handler({method:flips?'POST':'GET',headers:{authorization:'Bearer '+'x'.repeat(40)},body:flips?{portfolio:[],flips,clientUpdatedAt:Date.now()+10000,...extra}:undefined},{setHeader(){},status(n){status=n;return this;},json(p){data=p;return this;}});return {status,data};}
+try {
+ await redis(['DEL',key]);check((await call([original])).status===200,'original linked sale saved');
+ const first=edit(original,20,'Return postage'),second=edit(first,25),fork=edit(original,30);
+ let r=await call([second]);check(r.status===200&&r.data.flips[0].refundAmount===25,'multiple offline corrections survive one sync');
+ check(r.data.copySales.entries[0].copyId==='copy-1'&&r.data.copySales.entries[0].saleId===original.id,'refund preserves sold-copy identity');
+ r=await call([original]);check(r.status===200&&r.data.flips[0].refundAmount===25,'newer stale-device snapshot cannot erase refunds');
+ r=await call([first]);check(r.status===200&&r.data.flips[0].accountingRevision.id===second.accountingRevision.id,'older revision cannot replace a descendant');
+ const saved=await redis(['GET',key]);r=await call([fork]);check(r.status===409&&r.data.error==='sale_correction_conflict','conflicting device correction is explicit');
+ check(await redis(['GET',key])===saved,'conflict leaves exact cloud bytes untouched');
+ check(mergeSales([second],[original])[0].refundAmount===25,'browser pull accepts protected cloud correction over baseline');
+ check(mergeSales([first],[second])[0].refundAmount===25,'browser pull preserves newer unsynced correction');
+ let conflict=false;try{mergeSales([second],[fork]);}catch(e){conflict=e.code==='sale_correction_conflict';}check(conflict,'browser pull detects concurrent edits');
+ let duplicate=false;try{mergeSales([],[{id:1},{id:'1'}]);}catch(e){duplicate=e.code==='sale_correction_conflict';}check(duplicate,'sync response cannot collapse ambiguous local IDs');
+ check((await call([{...second,refundAmount:99}])).status===409,'same revision with different money is rejected');
+ check((await call([{...original,fees:7}])).status===409,'unversioned changed amounts cannot overwrite corrected sale');
+ check((await call([{...second,accountingRevision:{...second.accountingRevision,version:2}}])).status===409,'future correction schema fails closed');
+ check((await call([{...second,accountingRevision:{...second.accountingRevision,ancestors:[second.accountingRevision.id]}}])).status===409,'cyclic revision history rejected');
+ await redis(['DEL',key]);await call([original]);
+ const outcomes=await Promise.all([call([edit(original,10)]),call([edit(original,15)])]);
+ check(outcomes.filter(x=>x.status===200).length===1&&outcomes.filter(x=>x.status===409).length===1,'real Redis CAS gives conflicting devices one winner');
+ r=await call();check([10,15].includes(r.data.flips[0].refundAmount)&&r.data.flips.length===1,'winner saved once with original sale ID');
+ const accepted=r.data.flips[0];await call([accepted],{tombstones:{flips:{[original.id]:Date.now()+1000}}});
+ r=await call();check(!r.data.flips.length&&r.data.copySales.entries.length===1,'deleting corrected report does not restock refunded copy');
+ const root=edit(original,0);let chain=root;for(let i=0;i<100;i++)chain=edit(chain,i);
+ let bounded=false;try{edit(chain,1);}catch(e){bounded=e.code==='sale_correction_conflict';}check(bounded,'history cap preserves previous record instead of truncating proof');
+ const sparse=await call([{id:'uncorrected',sellPrice:1}]);check(sparse.status===200,'unrelated legacy sales remain supported');
+} finally {h.restore();}
+finish(count,0);

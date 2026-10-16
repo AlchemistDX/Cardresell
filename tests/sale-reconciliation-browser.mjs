@@ -1,0 +1,81 @@
+// Refunds, expense corrections, reloads and protected sync through shipped UI.
+import {chromium} from 'playwright';
+import {createServer} from 'node:http';
+import {readFileSync,mkdirSync} from 'node:fs';
+import {resolve,extname} from 'node:path';
+import assert from 'node:assert/strict';
+import {completionGuard} from './_complete.mjs';
+const {finish}=completionGuard('sale-reconciliation-browser');
+const root=resolve(new URL('..',import.meta.url).pathname);
+const server=createServer((req,res)=>{const path=resolve(root,'.'+decodeURIComponent(req.url.split('?')[0]==='/'?'/index.html':req.url.split('?')[0]));if(!path.startsWith(root+'/')){res.writeHead(403).end();return;}try{res.setHeader('Content-Type',({'.js':'application/javascript','.css':'text/css','.html':'text/html'})[extname(path)]||'application/octet-stream');res.end(readFileSync(path));}catch{res.writeHead(404).end();}});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const base='http://127.0.0.1:'+server.address().port;
+const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});let count=0;
+const check=(v,m)=>{assert.ok(v,m);count++;};
+
+mkdirSync('/tmp/cardresell-reconciliation-shots',{recursive:true});
+try { for(const width of [390,1280]) {
+ const ctx=await browser.newContext({viewport:{width,height:1100}});
+ await ctx.route('**/*',r=>r.request().url().startsWith(base)&&!r.request().url().includes('/api/')?r.continue():r.abort());
+ const page=await ctx.newPage();await page.goto(base,{waitUntil:'load'});
+ const setup=()=>{window.googleUser={sub:'reconciliation-owner'};window._googleIdToken=null;document.querySelectorAll('.view').forEach(e=>e.style.display='none');document.getElementById('flipsView').style.display='block';renderFlipsView();};
+ await page.evaluate(setup);
+ await page.evaluate(()=>{window.baseSale={id:'sale-1',sourceCollectionId:'copy-1',card:'Refunded card',date:'2026-10-01',sellPrice:150,buyPrice:100,fees:10,shippingCost:5,gradingCost:0,profit:999,costMeta:{buyPrice:'value',fees:'value',shippingCost:'value',gradingCost:'zero'}};saveFlipsData([baseSale]);renderFlipsView();});
+ await page.locator('#flipReportToggle').click();
+ check((await page.locator('#flipReportPanel [role=status]').textContent()).includes('0 complete'),'historical refunds are unknown, not invented zero');
+ check((await page.locator('#pnlTotalProfit').textContent()).includes('35.00'),'dashboard recomputes instead of trusting cached profit');
+ check((await page.locator('#pnlTotalProfitLabel').textContent()).includes('provisional'),'dashboard marks unreviewed adjustments provisional');
+ const open=async()=>{await page.locator('#flipReportPanel summary').click();await page.getByRole('button',{name:'Correct sale',exact:true}).click();};
+ await open();check(await page.getByLabel('Edit refunds',{exact:true}).inputValue()==='','unknown refund stays blank');
+ await page.getByLabel('Edit refunds',{exact:true}).fill('20');await page.getByLabel('Edit other expenses',{exact:true}).fill('3');await page.getByLabel('Expense note',{exact:true}).fill('=postage, "return"');
+ await page.getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>loadFlipsData()[0].refundAmount===20);
+ let saved=await page.evaluate(()=>loadFlipsData()[0]);
+ check(saved.profit===12&&saved.sellPrice===150,'partial refund changes profit once and preserves original proceeds');
+ check(saved.sourceCollectionId==='copy-1'&&saved.accountingRevision.version===1,'corrected sale keeps physical identity and revision');
+ check((await page.locator('#pnlTotalProfit').textContent()).includes('12.00'),'dashboard matches report profit after correction');
+ check((await page.locator('.flip-report-totals').textContent()).includes('Refunds$20.00'),'refund subtotal displayed');
+ await page.evaluate(()=>openFlipDetail('sale-1'));
+ check((await page.locator('#fdmProfit').textContent()).includes('12.00'),'sale detail matches corrected profit');
+ check((await page.locator('#fdmExpenses').textContent()).includes('refunds $20.00'),'sale detail discloses refund deduction');
+ await page.evaluate(()=>document.getElementById('flipDetailModal').classList.remove('open'));
+ const d=page.waitForEvent('download');await page.getByRole('button',{name:'Export report CSV',exact:true}).click();const csv=readFileSync(await (await d).path(),'utf8');
+ check(csv.includes('"Refunds","Other Expenses","Expense Note"'),'export includes adjustment fields');
+ check(csv.includes(`"20.00","3.00","'=postage, ""return"""`),'CSV preserves amounts and neutralizes note formula');
+ await page.reload({waitUntil:'load'});await page.evaluate(setup);await page.locator('#flipReportToggle').click();
+ check(await page.evaluate(()=>loadFlipsData()[0].profit)===12,'refund survives actual reload');
+ await open();await page.getByLabel('Edit refunds',{exact:true}).fill('150');await page.getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>loadFlipsData()[0].refundAmount===150);
+ check(await page.evaluate(()=>_flipNetOf(loadFlipsData()[0]).net)===-118,'full refund produces loss with costs retained');
+ check((await page.locator('#pnlTotalProfit').textContent()).includes('−$118.00'),'headline retains loss sign');
+ check((await page.locator('#flipLogWrap').textContent()).includes('−$118.00'),'table retains loss sign');
+ check(await page.evaluate(()=>_flipNetOf(loadFlipsData()[0]).basis)===118,'refund reduces proceeds rather than inflating ROI cost basis');
+ await open();await page.getByLabel('Edit refunds',{exact:true}).fill('0');await page.getByLabel('Edit other expenses',{exact:true}).fill('');await page.getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>loadFlipsData()[0].costMeta.otherExpenses==='blank');
+ check((await page.locator('#flipReportPanel [role=status]').textContent()).includes('0 complete'),'cleared expense removes sale from complete totals');
+ await open();await page.getByLabel('Edit other expenses',{exact:true}).fill('0');
+ await page.screenshot({path:'/tmp/cardresell-reconciliation-shots/edit-'+width+'.png'});
+ const box=await page.locator('.flip-report-editor').boundingBox();check(box.x>=0&&box.x+box.width<=width+1,'correction form fits viewport');
+ await page.getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>loadFlipsData()[0].costMeta.otherExpenses==='zero');
+ check(await page.evaluate(()=>loadFlipsData()[0].profit)===35,'confirmed zeros restore original net without duplicate adjustments');
+ // Exercise actual sync callbacks with a stale baseline and a divergent correction.
+ const sync=await page.evaluate(async()=>{
+  const current=loadFlipsData()[0],original=JSON.parse(current.accountingRevision.base),nativeFetch=fetch;
+  const baseline={id:current.id,sourceCollectionId:'copy-1'};for(const [key,exists,value] of original[0])if(exists)baseline[key]=value;baseline.costMeta=Object.fromEntries(original[1].filter(([,v])=>v!==null));
+  const conflicting=CardResellSaleCorrections.correctSale(baseline,{...baseline,refundAmount:8},'sc_'+crypto.randomUUID());
+  let notices=[];window._collectionSyncNotice=m=>notices.push(m);window._googleIdToken='test-token';
+  window.fetch=async()=>Response.json({portfolio:[],flips:[baseline],tombstones:{}});await _pullUserData();_cancelUserDataSync();
+  const afterStale=loadFlipsData()[0];window.fetch=async()=>Response.json({portfolio:[],flips:[conflicting],tombstones:{}});await _pullUserData();_cancelUserDataSync();
+  const afterConflict=loadFlipsData()[0];window.fetch=nativeFetch;_googleIdToken=null;return {current,afterStale,afterConflict,notices};
+ });
+ check(JSON.stringify(sync.afterStale)===JSON.stringify(sync.current),'real pull cannot overwrite local correction with stale baseline');
+ check(JSON.stringify(sync.afterConflict)===JSON.stringify(sync.current)&&sync.notices.some(t=>t.includes('corrections differ')),'conflicting pull preserves local amounts and explains sync pause');
+ // Creation paths carry the same fields and clear them for the next sale.
+ await page.evaluate(()=>{savePortData([{id:'next-copy',card:'Next',buyPrice:10}]);openMarkSoldModal('next-copy');});
+ await page.locator('#msSellPrice').fill('50');await page.locator('#msFees').fill('5');await page.locator('#msShipCost').fill('2');await page.locator('#msGradingCost').fill('0');await page.locator('#msRefundAmount').fill('4');await page.locator('#msOtherExpenses').fill('1');
+ check((await page.locator('#msProfitPreview').textContent()).includes('$28.00'),'mark-sold preview deducts new amounts');
+ await page.evaluate(()=>confirmMarkSold());check(await page.evaluate(()=>loadFlipsData().find(f=>f.sourceCollectionId==='next-copy').profit)===28,'recoverable mark-sold records refunds and expenses');
+ await page.evaluate(()=>{openAddFlip('flip');for(const [id,v] of Object.entries({mCardName:'Manual sale',mBuyPrice:'10',mSellPrice:'30',mFees:'2',mShipCost:'1',mGradingCost:'0',mRefundAmount:'3',mOtherExpenses:'4'}))document.getElementById(id).value=v;saveFlipEntry();});
+ check(await page.evaluate(()=>loadFlipsData().find(f=>f.card==='Manual sale').profit)===10,'manual sale records both new amounts');
+ check(await page.evaluate(()=>{openAddFlip('flip');return document.getElementById('mRefundAmount').value===''&&document.getElementById('mOtherExpenses').value==='';}),'new sale clears previous refund and expense inputs');
+ await page.evaluate(()=>closeFlipModal());
+ await ctx.close();
+}}finally{await browser.close();await new Promise(r=>server.close(r));}
+finish(count,0);

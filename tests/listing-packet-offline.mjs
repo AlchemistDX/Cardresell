@@ -968,7 +968,7 @@ check('the cert field is hidden and cleared when the card is not graded',
       /if \(certInput\) certInput\.value = '';/.test(coreForCert));
 check('closing the modal clears the cert field',
       /if \(certField\) certField\.style\.display = 'none';/.test(coreForCert) &&
-      /'mGradingCost','mCertNumber'/.test(coreForCert));
+      /function clearModal\(\)\s*\{[\s\S]*?'mCertNumber'\]\.forEach\(id => \{[\s\S]*?if \(el\) el\.value = '';/.test(coreForCert));
 
 // ── Platform neutrality is behavioural, not just a key-name check (#5) ──
 // The end goal is a cross-venue seller hub, so identity must not shift when

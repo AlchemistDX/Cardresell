@@ -3594,11 +3594,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         </select>
       </div>
       <div class="modal-field modal-full" id="mCostsField">
-        <label>Costs ($) <span style="font-weight:400;opacity:.6">— optional, subtracted from profit</span></label>
+        <label>Costs ($) <span style="font-weight:400;opacity:.6">— blank means unknown; 0 confirms none</span></label>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem">
           <input type="number" id="mFees" placeholder="Fees" step="0.01" min="0" aria-label="Platform fees in dollars" />
           <input type="number" id="mShipCost" placeholder="Shipping" step="0.01" min="0" aria-label="Shipping cost in dollars" />
           <input type="number" id="mGradingCost" placeholder="Grading" step="0.01" min="0" aria-label="Grading cost in dollars" />
+          <input type="number" id="mRefundAmount" placeholder="Refunds" step="0.01" min="0" aria-label="Refunded amount in dollars" />
+          <input type="number" id="mOtherExpenses" placeholder="Other expenses" step="0.01" min="0" aria-label="Other expenses in dollars" />
         </div>
       </div>
       <div class="modal-field">
@@ -3813,7 +3815,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div style="flex:1;min-width:0">
         <div id="fdmName" style="font-weight:900;font-size:1.05rem;line-height:1.15;margin-bottom:.15rem;word-break:break-word">—</div>
         <div id="fdmSet" style="font-size:.72rem;color:var(--text-muted);margin-bottom:.35rem">—</div>
-        <div id="fdmGradeChip" style="display:none;margin-bottom:.35rem"><span id="fdmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold-text);letter-spacing:.02em"></span></div>
+        <p id="fdmExpenses" style="font-size:.75rem;color:var(--text-muted);line-height:1.5"></p>
+    <div id="fdmGradeChip" style="display:none;margin-bottom:.35rem"><span id="fdmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold-text);letter-spacing:.02em"></span></div>
         <div id="fdmProfit" style="font-size:1.3rem;font-weight:800;line-height:1.1">+$0.00</div>
         <div id="fdmRoi" style="font-size:.72rem;margin-top:.15rem;font-weight:700">—</div>
       </div>
@@ -3937,6 +3940,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div style="font-size:.62rem;color:var(--text-faint);margin:-.3rem 0 .7rem;line-height:1.4">Enter 0 when a cost is confirmed as none. Leave unknown costs blank.</div>
 
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <label style="font-size:.75rem">Refunds ($)<input id="msRefundAmount" type="number" min="0" step="0.01" placeholder="Unknown" inputmode="decimal" style="width:100%;box-sizing:border-box;min-width:0"></label>
+      <label style="font-size:.75rem">Other expenses ($)<input id="msOtherExpenses" type="number" min="0" step="0.01" placeholder="Unknown" inputmode="decimal" style="width:100%;box-sizing:border-box;min-width:0"></label>
+    </div>
     <div id="msProfitPreview" style="font-size:.75rem;color:#8d8b82;margin-bottom:.75rem;text-align:center;padding:.5rem;background:#0a0a0a;border-radius:8px;border:1px dashed #1f1f1f">Enter a sold price to see profit</div>
     <p style="font-size:.75rem;color:var(--text-muted);line-height:1.4">This records the sale in Collection and Flips. End any active marketplace listings separately.</p>
 
@@ -3952,7 +3959,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
-<script defer src="/js/core.9e44c923.js"></script>
+<script defer src="/js/sale-corrections.d8a98da8.js"></script>
+<script defer src="/js/core.438f3c7c.js"></script>
 <script defer src="/js/sale-recovery.bcb77f9e.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
@@ -4050,13 +4058,14 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .flip-report-editor p { flex-basis:100%; }
 .flip-report-editor label { display:flex; flex-direction:column; gap:.3rem; max-width:100%; }
 .flip-report-editor input { width:140px; max-width:100%; padding:.5rem; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:6px; }
+.flip-report-editor textarea { width:280px; max-width:100%; box-sizing:border-box; padding:.5rem; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:6px; resize:vertical; }
 .flip-report-controls label { display:flex; flex:1 1 140px; flex-direction:column; gap:.25rem; min-width:0; }
 .flip-report-controls input { padding:.5rem; width:100%; box-sizing:border-box; max-width:100%; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:6px; }
 .flip-report-totals { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:.8rem; }
 .flip-report-totals dt { font-size:.78rem; }
 .flip-report-totals dd { margin:.35rem 0; font-size:1.1rem; font-weight:700; }
 </style>
-<script defer src="/js/flip-report.d0ede863.js"></script>
+<script defer src="/js/flip-report.c7f8d720.js"></script>
 <script defer src="/js/collection-export.a65335bc.js"></script>
 <script defer src="/js/collection-import.7e472fce.js"></script>
 <script defer src="/js/ebay-connect.6aec6f8b.js"></script>

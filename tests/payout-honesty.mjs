@@ -164,18 +164,18 @@ check('all four states are distinguishable from one another',
 
 // The distinction the removed `hasCosts` boolean could not draw.
 {
-  const allZero  = { buyPrice: 'zero',  fees: 'zero',  shippingCost: 'zero',  gradingCost: 'zero'  };
-  const oneEntered = { buyPrice: 'value', fees: 'blank', shippingCost: 'blank', gradingCost: 'blank' };
-  const allBlank = { buyPrice: 'blank', fees: 'blank', shippingCost: 'blank', gradingCost: 'blank' };
-  const a = _flipCompleteness({ costMeta: allZero });
-  const b = _flipCompleteness({ costMeta: oneEntered });
+  const allZero  = { buyPrice: 'zero',  fees: 'zero',  shippingCost: 'zero',  gradingCost: 'zero', refundAmount:'zero', otherExpenses:'zero' };
+  const oneEntered = { buyPrice: 'value', fees: 'blank', shippingCost: 'blank', gradingCost: 'blank', refundAmount:'blank', otherExpenses:'blank' };
+  const allBlank = { buyPrice: 'blank', fees: 'blank', shippingCost: 'blank', gradingCost: 'blank', refundAmount:'blank', otherExpenses:'blank' };
+  const a = _flipCompleteness({buyPrice:0,fees:0,shippingCost:0,gradingCost:0,refundAmount:0,otherExpenses:0,costMeta:allZero});
+  const b = _flipCompleteness({buyPrice:1,costMeta:oneEntered});
   const c = _flipCompleteness({ costMeta: allBlank });
   check('all costs explicitly zero => complete, not provisional',
     a.reason === 'complete' && a.provisional === false && a.missing.length === 0);
   check('one entered while others unknown => provisional, and names the unknowns',
-    b.provisional === true && b.missing.length === 3 && b.missing.includes('fees'));
-  check('all blank => provisional, and names all four',
-    c.provisional === true && c.missing.length === 4);
+    b.provisional === true && b.missing.length === 5 && b.missing.includes('fees'));
+  check('all blank => provisional, and names all six',
+    c.provisional === true && c.missing.length === 6);
   check('the three cases are NOT collapsed into one verdict (what hasCosts could not do)',
     new Set([a.reason, b.reason].map(String)).size === 2 &&
     a.missing.length !== b.missing.length && b.missing.length !== c.missing.length);
@@ -196,8 +196,8 @@ check('all four states are distinguishable from one another',
 // Completeness must travel with the arithmetic, and must not move the numbers.
 {
   const r = _flipNetOf({
-    sellPrice: 150, buyPrice: 100, fees: 20, shippingCost: 5, gradingCost: 25,
-    costMeta: { buyPrice: 'value', fees: 'value', shippingCost: 'value', gradingCost: 'value' },
+    sellPrice:150,buyPrice:100,fees:20,shippingCost:5,gradingCost:25,refundAmount:0,otherExpenses:0,
+    costMeta: { buyPrice: 'value', fees: 'value', shippingCost: 'value', gradingCost:'value',refundAmount:'zero',otherExpenses:'zero' },
   });
   check('net arithmetic is unchanged by this work (150-100-20-5-25 = 0)', r.net === 0);
   check('basis arithmetic is unchanged (100+20+5+25 = 150)', r.basis === 150);

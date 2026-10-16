@@ -841,6 +841,7 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
       'photo-guide': ['previous.id===candidate.id'],
       ui: ['data.id===id'],
       'draft-batch': ['data.id!==id'],
+      'sale-corrections': ['ar.id===br.id'], // immutable correction revisions, not physical-copy IDs
     };
     const bad = [];
     texts.forEach((t, i) => {
