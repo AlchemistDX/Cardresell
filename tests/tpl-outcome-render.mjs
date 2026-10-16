@@ -635,6 +635,7 @@ try {
 
   const sessionCtx = await browser.newContext();
   const sp = await sessionCtx.newPage();
+  await sp.clock.install();
   const sessionErrors = [];
   sp.on('pageerror', e => sessionErrors.push(String(e && e.message || e)));
 
@@ -672,12 +673,22 @@ try {
   };
   mark('page load, before the seller touches anything');
 
-  /** Type like a person: per-keystroke delay, then a pause past the debounce. */
-  async function typeCard(text, { delay = 70, pause = 700 } = {}) {
+  // Advance application time explicitly between native keyboard events. Host
+  // scheduling may take >180ms under load even when Playwright delay is 70ms;
+  // that is a real pause to the app, not a failed debounce. This fixture must
+  // actually hold the claimed interval while exercising the shipped listener.
+  async function typeFragment(text, { delay = 70, pause = 700 } = {}) {
+    await sp.clock.pauseAt(await sp.evaluate(() => Date.now() + 1000));
+    try {
+      for (const key of text) { await sp.keyboard.type(key); await sp.clock.runFor(delay); }
+      await sp.clock.runFor(pause);
+    } finally { await sp.clock.resume(); }
+    await sp.waitForTimeout(pause); // settle mocked network and rendering
+  }
+  async function typeCard(text, options = {}) {
     await sp.click('#searchInput');
     await sp.fill('#searchInput', '');
-    await sp.type('#searchInput', text, { delay });
-    await sp.waitForTimeout(pause);
+    await typeFragment(text, options);
   }
 
   /** Click the first result, the way a seller picks a printing. */
@@ -698,10 +709,8 @@ try {
   // A correction mid-word: the seller pauses, then keeps typing. Two debounce
   // windows, one card.
   await sp.fill('#searchInput', '');
-  await sp.type('#searchInput', 'blastois', { delay: 70 });
-  await sp.waitForTimeout(400);            // past the 180 ms debounce
-  await sp.type('#searchInput', 'e', { delay: 70 });
-  await sp.waitForTimeout(700);
+  await typeFragment('blastois', { pause: 400 }); // past the 180ms debounce
+  await typeFragment('e');
   mark('typed "blastois", paused, then finished it — one card, two pauses');
 
   const picked2 = await pickFirst();

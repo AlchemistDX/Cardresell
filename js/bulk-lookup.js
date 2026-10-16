@@ -125,6 +125,7 @@
       const yours = node('div','',compare); node('p','Your photo',yours); picture(row.objectUrl || row.imageDataUrl,'Your card',yours);
       const reference = node('div','',compare); node('p','Catalogue printing',reference); picture(card.imageUrl,'Selected catalogue printing',reference);
       node('p','Check the artwork, set and number against your card. You can set its condition and finish in the batch.',confirm);
+      if (card.cardType === 'mtg') node('p','We’ll also try to recover other cards from this set. No extra scan credits.',confirm);
       const actions = node('div','',confirm,{class:'lookup-actions'});
       node('button','Back to results',actions,{type:'button'}).onclick=()=>{confirm.hidden=true;searchView.hidden=false;submit.focus()};
       const use = node('button','Use this printing',actions,{type:'button',class:'lookup-primary'});
@@ -140,6 +141,10 @@
         window._bulkUpdateRow?.(row.rowId,row);
         window._bulkRefreshResultSummary?.();
         window._bulkDetectDuplicates?.();
+        // A page with zero Magic matches has no trusted set for name rescue.
+        // The seller's confirmed printing supplies that first set explicitly.
+        if (row.cardType === 'mtg' && typeof window._bulkTextRescueMisses === 'function')
+          window._bulkTextRescueMisses().catch(() => {});
       };
       use.focus();
     }
@@ -196,5 +201,5 @@
     s.watch=setInterval(()=>{if (!current(s)) close()},250);
     dialog.showModal(); name.focus();
   }
-  window.CardResellBulkLookup = {open,close};
+  window.CardResellBulkLookup = {open,close,isEditing:row=>active?.row===row};
 })();
