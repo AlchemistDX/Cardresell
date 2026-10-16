@@ -44,11 +44,12 @@
  function write(key,value) {
   if(!_lsWrite(key,JSON.stringify(value)))fail(storageFailureMessage()+' The sale can be resumed from Collection.');
  }
+ function availableRowsStrict(data,extra,flips) {
+  const sold=new Set(receipts(extra,flips).entries.map(r=>r.copyId));
+  return data.filter(r=>!sold.has(String(r?.id)));
+ }
  function availableRows(data,extra) {
-  try {
-   const sold=new Set(receipts(extra).entries.map(r=>r.copyId));
-   return data.filter(r=>!sold.has(String(r?.id)));
-  } catch { return data; } // Preserve visible records; commit refuses the conflict.
+  try {return availableRowsStrict(data,extra);} catch { return data; } // Preserve visible records; commit refuses the conflict.
  }
  function acceptCloud(result) {
   const r=receipts(result.copySales,[...rows('flips'),...(result.flips||[])]);
@@ -109,6 +110,6 @@
   if(!error){const button=document.createElement('button');button.type='button';button.className='fl-sub-btn';button.textContent=busy?'Saving…':'Resume saved sale';button.disabled=busy;
    button.onclick=async()=>{busy=true;render();const result=await commit();busy=false;render();if(result.ok)showToast('Sale saved. Review its costs in Flips.','success');};node.append(button);}
  }
- window.CardResellSaleRecovery={commit,availableRows,acceptCloud,render};
+ window.CardResellSaleRecovery={commit,availableRows,availableRowsStrict,acceptCloud,render};
  window.addEventListener('storage',render);setInterval(render,1000);render();
 })();
