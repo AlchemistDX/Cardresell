@@ -130,6 +130,9 @@ async function boot({ sub, collection = [] } = {}) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  // External scripts/fonts are not part of the draft lifecycle fixture. Abort
+  // them immediately so an offline proxy cannot hold DOMContentLoaded open.
+  await page.route('**/*', route => new URL(route.request().url()).origin === B ? route.continue() : route.abort());
   await page.addInitScript((rows) => {
     try { localStorage.setItem('cardsell_portfolio', JSON.stringify(rows)); } catch (_) {}
   }, collection);
