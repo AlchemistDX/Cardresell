@@ -132,7 +132,14 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  check('camera fills the viewport without scrolling',await page.locator('#binderCamera').evaluate(e=>{const r=e.getBoundingClientRect();return r.top===0&&r.left===0&&Math.abs(r.width-innerWidth)<1&&Math.abs(r.height-innerHeight)<1&&e.scrollHeight<=e.clientHeight}),true);
  check('shutter stays visible at the bottom of the screen',await page.locator('#binderCapture').evaluate(e=>{const r=e.getBoundingClientRect();return r.width>=72&&r.height>=72&&r.bottom<=innerHeight&&r.top>=innerHeight-110}),true);
  check('shutter says take photo rather than confirm a photo',await page.locator('#binderCapture').getAttribute('aria-label'),'Take binder photo');
- check('guide aligns with the contained video frame',await page.evaluate(()=>{const s=document.getElementById('binderCameraStage'),v=document.getElementById('binderCameraVideo'),g=document.getElementById('binderCameraGrid');const scale=Math.min(s.clientWidth/v.videoWidth,s.clientHeight/v.videoHeight);return Math.abs(g.getBoundingClientRect().width-v.videoWidth*.8*scale)<2&&Math.abs(parseFloat(g.style.left)-(s.clientWidth-g.getBoundingClientRect().width)/2)<2}),true);
+ const checkCameraSize=async label=>check(label,await page.evaluate(()=>{
+   const s=document.getElementById('binderCameraStage').getBoundingClientRect(),v=document.getElementById('binderCameraVideo').getBoundingClientRect(),g=document.getElementById('binderCameraGrid').getBoundingClientRect();
+   const [cols,rows]=document.getElementById('binderLayout').value.split(',').map(Number);
+   return g.width>=v.width*.93&&g.height>=v.height*.93&&g.left>=v.left&&g.right<=v.right&&g.top>=v.top&&g.bottom<=v.bottom
+     &&(g.width>=s.width*.93||g.height>=s.height*.93)&&Math.abs(g.width/g.height/cols*rows-.72)<.002
+     &&v.left>=s.left-.5&&v.right<=s.right+.5&&v.top>=s.top-.5&&v.bottom<=s.bottom+.5;
+ }),true);
+ await checkCameraSize('guide uses the available screen and keeps card proportions');
  await page.keyboard.press('Tab');
  check('camera keyboard focus reaches the shutter',await page.locator('#binderCapture').evaluate(e=>document.activeElement===e),true);
  await page.keyboard.press('Tab');
@@ -153,7 +160,7 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  check('camera capture reaches nine-pocket review',await page.locator('.binder-pocket').count(),9);
  check('capture releases camera track',await page.evaluate(()=>testMedia.getTracks().every(t=>t.readyState==='ended')),true);
  check('capture returns keyboard focus to review',await page.locator('#binderOpenCamera').evaluate(e=>document.activeElement===e),true);
- check('guide fit is retained after capture',Math.abs(Number(await page.locator('#binderLeft').inputValue())-10)<.1,true);
+ check('guide edge room is retained after capture',Math.abs(Number(await page.locator('#binderLeft').inputValue())-3)<.1,true);
  await page.locator('#binderSelectAll').click();
  check('captured page quotes nine credits',await page.locator('#binderContinue').textContent(),'Review 9 cards · 9 ID credits');
  await page.evaluate(()=>Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:()=>new Promise(resolve=>window.escapeCamera=resolve)}));
@@ -170,6 +177,59 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  await page.evaluate(()=>Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{throw new DOMException('Denied','NotAllowedError')}}));
  await page.locator('#binderOpenCamera').click();await page.waitForFunction(()=>document.getElementById('binderCamera').hidden);
  check('permission denial leaves upload available',(await page.locator('#binderStatus').textContent()).includes('camera roll'),true);
+ // The reported iPhone feed is square. Exercise every pocket layout with
+ // square, landscape and portrait sensors. Compare actual captured JPEG
+ // pixels with coordinates under the visible guide, not a copied crop helper.
+ for(const [layout,width,height] of [['3,3',3000,3000],['3,4',4032,3024],['4,3',2160,3840],['4,4',3000,3000],['2,2',3200,2400]]) {
+   await page.selectOption('#binderLayout',layout);await ready();
+   await page.evaluate(({width,height})=>{
+     window.cameraScene=document.createElement('canvas');
+     window.paintCameraScene=(w,h)=>{
+       cameraScene.width=w;cameraScene.height=h;const x=cameraScene.getContext('2d');
+       const red=x.createLinearGradient(0,0,w,0);red.addColorStop(0,'rgb(0,0,96)');red.addColorStop(1,'rgb(255,0,96)');x.fillStyle=red;x.fillRect(0,0,w,h);
+       x.globalCompositeOperation='lighter';const green=x.createLinearGradient(0,0,0,h);green.addColorStop(0,'black');green.addColorStop(1,'rgb(0,255,0)');x.fillStyle=green;x.fillRect(0,0,w,h);
+       window.sceneMedia?.getVideoTracks()[0].requestFrame();
+     };
+     paintCameraScene(width,height);window.sceneMedia=cameraScene.captureStream(0);sceneMedia.getVideoTracks()[0].requestFrame();
+     Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>sceneMedia});
+   },{width,height});
+   await page.locator('#binderOpenCamera').click();await page.waitForFunction(()=>!document.getElementById('binderCapture').disabled);
+   await checkCameraSize(`${layout} guide fills the frame for ${width}x${height} sensor`);
+   if(layout==='3,3') {
+     for(const size of [{width:viewport.height,height:viewport.width},{width:390,height:650},{width:320,height:568},viewport]){
+       await page.setViewportSize(size);await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+       await checkCameraSize('rotation refits the live guide without clipping');
+       if(size.height>size.width)check('portrait guide stays wide with browser chrome and controls visible',await page.evaluate(()=>{
+         const g=document.getElementById('binderCameraGrid').getBoundingClientRect(),c=document.getElementById('binderCapture').getBoundingClientRect(),cancel=document.getElementById('binderStopCamera').getBoundingClientRect();
+         return g.width>=innerWidth*.8&&c.bottom<=innerHeight&&cancel.bottom<=innerHeight&&cancel.right<c.left;
+       }),true);
+     }
+     for(const [w,h] of [[3200,2400],[width,height]]){
+       await page.evaluate(([w,h])=>paintCameraScene(w,h),[w,h]);
+       await page.waitForFunction(([w,h])=>{const v=document.getElementById('binderCameraVideo');return v.videoWidth===w&&v.videoHeight===h},[w,h]);
+       await checkCameraSize('sensor size changes keep the guide large and aligned');
+     }
+     if(process.env.CR_SHOT_DIR)await page.screenshot({path:process.env.CR_SHOT_DIR+'/binder-square-camera-'+viewport.width+'.png'});
+   }
+   const expected=await page.evaluate(()=>{
+     const video=document.getElementById('binderCameraVideo'),v=video.getBoundingClientRect(),g=document.getElementById('binderCameraGrid').getBoundingClientRect();
+     const [cols,rows]=document.getElementById('binderLayout').value.split(',').map(Number),scale=Math.max(v.width/video.videoWidth,v.height/video.videoHeight);
+     return Array.from({length:cols*rows},(_,i)=>{
+       const x=(g.left+g.width*(i%cols+.5)/cols-v.left-v.width/2)/scale+video.videoWidth/2;
+       const y=(g.top+g.height*(Math.floor(i/cols)+.5)/rows-v.top-v.height/2)/scale+video.videoHeight/2;
+       return [255*x/video.videoWidth,255*y/video.videoHeight,96];
+     });
+   });
+   await page.locator('#binderCapture').click();await page.waitForFunction(()=>document.getElementById('binderCamera').hidden&&!document.getElementById('binderControls').disabled);
+   const crops=await page.evaluate(async()=>Promise.all([...document.querySelectorAll('.binder-pocket img')].map(async img=>{
+     await img.decode();const c=document.createElement('canvas');c.width=c.height=1;const x=c.getContext('2d');x.drawImage(img,Math.floor(img.naturalWidth/2),Math.floor(img.naturalHeight/2),1,1,0,0,1,1);
+     return {pixel:[...x.getImageData(0,0,1,1).data].slice(0,3),width:img.naturalWidth,height:img.naturalHeight};
+   })));
+   check(`${layout} capture preserves every visible pocket`,crops.length,expected.length);
+   check(`${layout} JPEG pixels match the displayed guide`,crops.every((crop,i)=>crop.pixel.every((value,ch)=>Math.abs(value-expected[i][ch])<=5)),true);
+   check(`${layout} crops retain readable native resolution`,crops.every(c=>Math.min(c.width,c.height)>=400&&c.width<=width&&c.height<=height),true);
+   check(`${layout} capture releases camera`,await page.evaluate(()=>sceneMedia.getTracks().every(t=>t.readyState==='ended')),true);
+ }
  await page.evaluate(()=>closeBulkScan());
  check('no provider calls before confirmation',api,[]);check('no browser errors',errors,[]);
  await page.close();
