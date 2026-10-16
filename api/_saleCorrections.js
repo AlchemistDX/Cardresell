@@ -1,7 +1,7 @@
 // Shared by the user-data handler and the generated browser asset.
 // A revision chain proves descent; timestamps do not resolve accounting conflicts.
 const fields=['sellPrice','buyPrice','fees','shippingCost','gradingCost','refundAmount','otherExpenses','date','expenseNote'];
-function fail(message='Sale corrections differ between devices. Export your sales on each device before resolving the conflict. Sync is paused to preserve both versions.') {
+function fail(message='Sale corrections differ between devices. Open Review sale sync to compare both versions. Sync is paused to preserve your records.') {
   const error=new Error(message);error.code='sale_correction_conflict';error.status=409;throw error;
 }
 export function saleSnapshot(row) {
@@ -18,6 +18,22 @@ export function correctSale(previous,next,id) {
   if(old?.ancestors.length>=100)fail('This sale has reached its correction history limit. Export a backup before making more corrections.');
   const updated={...next,accountingRevision:{version:1,id,ancestors:old?[...old.ancestors,old.id]:[],base:old?old.base:saleSnapshot(previous)}};
   revision(updated);return updated;
+}
+// An explicit choice becomes a child of the exact reviewed cloud version.
+// Other unreviewed branches continue to conflict; a choice is not a blanket
+// permission to discard future edits from another device.
+export function resolveSaleCorrection(account,device,choice,id,now) {
+  if(!account||!device||account.id==null||device.id==null||String(account.id)!==String(device.id)||!['account','device'].includes(choice))fail('The sale choice is invalid. Review both versions again.');
+  if(String(account.sourceCollectionId??'')!==String(device.sourceCollectionId??''))fail('These records refer to different physical copies. Download a backup before resolving their identities.');
+  revision(account);revision(device);
+  let conflict=false;
+  try{mergeSaleCorrection(account,device);}catch(e){if(e.code!=='sale_correction_conflict')throw e;conflict=true;}
+  if(!conflict)fail('These sale versions no longer conflict. Refresh the review before making a choice.');
+  const selected=choice==='account'?account:device, next={...account,updatedAt:now};
+  for(const key of fields){if(Object.hasOwn(selected,key))next[key]=selected[key];else delete next[key];}
+  if(Object.hasOwn(selected,'costMeta'))next.costMeta=selected.costMeta;else delete next.costMeta;
+  delete next.profit; // Reports recompute from the chosen accounting inputs.
+  return correctSale(account,next,id);
 }
 export function mergeSaleCorrection(a,b,preferIncoming=true) {
   const ar=revision(a),br=revision(b);

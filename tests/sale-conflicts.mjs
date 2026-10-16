@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {completionGuard} from './_complete.mjs';
+import {billingHarness,exact,UID} from './_scanBillingHarness.mjs';
+import {redisCommand as redis} from './_idRedis.mjs';
+import {correctSale,mergeSaleCorrection} from '../api/_saleCorrections.js';
+const handler=(await import('../api/user-data.js')).default;
+const {finish}=completionGuard('sale-conflicts'),h=billingHarness();globalThis.__STUB=exact();let count=0;
+const check=(v,m)=>{assert.ok(v,m);count++;},key='userdata:'+UID;
+const root={id:7,sourceCollectionId:'sold-copy',card:'Original',date:'2026-10-01',sellPrice:100,buyPrice:40,fees:10,shippingCost:5,gradingCost:0,refundAmount:0,otherExpenses:0,costMeta:{buyPrice:'value',fees:'value',shippingCost:'value',gradingCost:'zero',refundAmount:'zero',otherExpenses:'zero'}};
+const edit=(row,refund)=>correctSale(row,{...row,refundAmount:refund,costMeta:{...row.costMeta,refundAmount:refund?'value':'zero'}},'sc_'+randomUUID());
+const account=edit(root,5),device={...edit(root,20),id:'7',card:'Device metadata'},request=(choice='device')=>({action:'resolve_sale',choice,expected:account,candidate:device,resolutionId:'sc_'+randomUUID()});
+async function call(body,auth=true,method=body?'POST':'GET'){let status=200,data;await handler({method,headers:auth?{authorization:'Bearer '+'x'.repeat(40)}:{},body},{setHeader(){},status(n){status=n;return this;},json(p){data=p;return this;},end(){}});return {status,data};}
+async function seed(){await redis(['DEL',key]);return call({portfolio:[{id:'unrelated',card:'Keep'}],flips:[account],clientUpdatedAt:Date.now()});}
+try{
+ await seed();const req=request();let r=await call(req);
+ check(r.status===200&&r.data.resolution.result.refundAmount===20,'explicit device amounts accepted');
+ const saved=r.data.resolution.result;
+ check(saved.id===7&&saved.sourceCollectionId==='sold-copy'&&saved.card==='Original','canonical sale/copy and non-accounting metadata preserved');
+ check(saved.accountingRevision.ancestors.includes(account.accountingRevision.id),'choice extends reviewed account revision');
+ r=await call();check(r.data.saleResolutions.length===1&&r.data.saleResolutions[0].request.candidate.card==='Device metadata','full originals archived for recovery');
+ check(r.data.portfolio[0].id==='unrelated'&&r.data.copySales.entries[0].copyId==='sold-copy','unrelated inventory and sold identity retained');
+ let raw=await redis(['GET',key]);r=await call(req);check(r.status===200&&r.data.replayed===true&&await redis(['GET',key])===raw,'lost-response retry is byte-for-byte idempotent');
+ r=await call({...req,choice:'account'});check(r.status===409&&await redis(['GET',key])===raw,'reused recovery ID cannot alter choice');
+ r=await call({portfolio:[],flips:[account]});check(r.status===200&&r.data.flips[0].refundAmount===20&&r.data.saleResolutions.length===1,'old snapshot cannot erase choice or archive');
+ check(mergeSaleCorrection(saved,edit(saved,25)).refundAmount===25,'normal correction remains possible after choice');
+ r=await call({portfolio:[],flips:[device]});check(r.status===409,'another unreviewed device branch remains held');
+ await seed();r=await call(request('account'));check(r.status===200&&r.data.resolution.result.refundAmount===5,'explicit account amounts accepted');
+ await seed();const newer=edit(account,9);await call({portfolio:[],flips:[newer]});raw=await redis(['GET',key]);
+ r=await call(request());check(r.status===409&&r.data.error==='sale_resolution_conflict'&&await redis(['GET',key])===raw,'stale review cannot overwrite later cloud correction');
+ await seed();r=await call({...request(),candidate:{...device,sourceCollectionId:'another-copy'}});check(r.status===409,'different physical copies cannot be resolved by choosing amounts');
+ r=await call({...request(),choice:'latest'});check(r.status===400,'timestamps cannot implicitly choose a version');
+ r=await call({...request(),resolutionId:'bad'});check(r.status===400,'bad idempotency ID rejected');
+ r=await call({...request(),candidate:{...device,accountingRevision:{...device.accountingRevision,version:2}}});check(r.status===409,'unsupported histories stay protected');
+ r=await call({...request(),candidate:{...device,expenseNote:'x'.repeat(310000)}});check(r.status===413,'oversized recovery choice rejected');
+ r=await call(request(),false);check(r.status===401,'resolution requires verified account');
+ globalThis.__STUB.token.uid='different-owner';r=await call(request());check(r.status===409,'another account cannot resolve this sale');globalThis.__STUB=exact();
+ await seed();const outcomes=await Promise.all([call(request('device')),call(request('account'))]);
+ check(outcomes.filter(r=>r.status===200).length===1&&outcomes.filter(r=>r.status===409).length===1,'concurrent opposite choices have one CAS winner');
+ await seed();const idem=request();const repeat=await Promise.all([call(idem),call(idem)]);r=await call();
+ check(repeat.every(r=>r.status===200)&&r.data.saleResolutions.length===1,'concurrent same-request retries create one archive');
+ await seed();const changes=await Promise.all([call(request()),call({portfolio:[{id:'added-on-other-device'}],flips:[]})]);r=await call();
+ check(changes.every(r=>r.status===200)&&r.data.portfolio.some(r=>r.id==='added-on-other-device')&&r.data.saleResolutions.length===1,'CAS retry preserves unrelated simultaneous inventory');
+ await seed();await call({portfolio:[],flips:[],tombstones:{flips:{7:Date.now()+1000}}});raw=await redis(['GET',key]);r=await call(request());
+ check(r.status===409&&await redis(['GET',key])===raw,'deleted account sale cannot be resurrected by an old review');
+ await seed();const committed=request();await call(committed);await call({portfolio:[],flips:[],tombstones:{flips:{7:Date.now()+1000}}});raw=await redis(['GET',key]);r=await call(committed);
+ check(r.status===200&&r.data.replayed&&await redis(['GET',key])===raw,'recovery after later deletion returns receipt without restoring cloud sale');
+ r=await call();check(r.data.flips.length===0&&r.data.copySales.entries.length===1&&r.data.saleResolutions.length===1,'deleted/refunded report retains sold proof and recovery archive');
+ await seed();let blob=JSON.parse(await redis(['GET',key]));blob.flips.push({...account,id:'7'});await redis(['SET',key,JSON.stringify(blob)]);raw=await redis(['GET',key]);r=await call(request());check(r.status===409&&await redis(['GET',key])===raw,'numeric/string duplicate IDs never collapse during resolution');
+ await seed();blob=JSON.parse(await redis(['GET',key]));blob.saleResolutions=Array.from({length:100},()=>({version:1,request:{resolutionId:'sc_'+randomUUID()},result:account,createdAt:Date.now()}));await redis(['SET',key,JSON.stringify(blob)]);raw=await redis(['GET',key]);r=await call(request());check(r.status===413&&await redis(['GET',key])===raw,'full archive refuses new choice instead of pruning proof');
+ await seed();blob=JSON.parse(await redis(['GET',key]));blob.portfolio[0].notes='x'.repeat(899000);await redis(['SET',key,JSON.stringify(blob)]);raw=await redis(['GET',key]);r=await call(request());check(r.status===413&&await redis(['GET',key])===raw,'full account preserves both versions without partial save');
+}finally{h.restore();}
+finish(count,0);
