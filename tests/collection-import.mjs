@@ -9,8 +9,11 @@ import {ROOT,resolveCoreBundle} from './_assetRefs.mjs';
 import {completionGuard} from './_complete.mjs';
 const {finish}=completionGuard('collection-import');
 const source=readFileSync(ROOT+'/js/collection-import.js','utf8');
-const ctx=vm.createContext({window:{},TextEncoder,crypto:webcrypto,Map,Set,Date,JSON});
-vm.runInContext(source,ctx);const I=ctx.window.CardResellCollectionImport;
+const html=readFileSync(ROOT+'/index.html','utf8');
+const asset=name=>readFileSync(ROOT+'/'+html.match(new RegExp('src="/(js/'+name+'\\.[a-f0-9]{8}\\.js)"'))[1],'utf8');
+const protections=asset('inventory-edits')+'\n'+asset('inventory-recovery-policy');
+const scope={TextEncoder,crypto:webcrypto,Map,Set,Date,JSON};scope.window=scope;const ctx=vm.createContext(scope);
+vm.runInContext(protections+'\n'+source,ctx);const I=ctx.window.CardResellCollectionImport;
 let checks=0;const check=(value,message)=>{assert.ok(value,message);checks++;};
 const throws=(fn,pattern)=>{assert.throws(fn,pattern);checks++;};
 const plan=async(text,existing=[],options={})=>{const csv=I.parse(text);return I.plan(csv,I.autoMap(csv.headers),{game:'pokemon',mode:'skip',...options},existing);};
@@ -45,9 +48,18 @@ for(const h of [history,{tombstones:history.tombstones},{flips:history.flips}]){
 check((await I.plan(historyCsv,historyMap,{mode:'new'},[],history)).copies===1,'explicit new purchase can replace a previously sold printing with a new physical copy');
 const withId=I.parse('Card,Game,Collection ID\nPikachu,pokemon,'+historicId);
 check((await I.plan(withId,I.autoMap(withId.headers),{mode:'skip'},[],history)).skipped===1,'old CardResell export cannot resurrect a sold identity');
+const permanent={copy_sales_v1:{version:1,entries:[{copyId:historicId,saleId:'deleted-report',recordedAt:1}]}};
+check((await I.plan(historyCsv,historyMap,{mode:'skip'},[],permanent)).skipped===1,'permanent sold-copy proof survives deleted reports and expired tombstones');
+check((await I.plan(withId,I.autoMap(withId.headers),{mode:'skip'},[],permanent)).skipped===1,'explicit exported ID is protected by permanent history');
+check((await I.plan(historyCsv,historyMap,{mode:'new'},[],permanent)).copies===1,'a deliberate new purchase may create a new identity for a previously sold printing');
+for(const copy_sales_v1 of [{version:2,entries:[]},{version:1,entries:[{copyId:historicId,saleId:'s',recordedAt:0}]},{version:1,entries:[{copyId:historicId,saleId:'a',recordedAt:1},{copyId:historicId,saleId:'b',recordedAt:1}]}]){
+ await assert.rejects(()=>I.plan(historyCsv,historyMap,{mode:'skip'},[],{copy_sales_v1}));checks++;
+}
+await assert.rejects(()=>I.plan(historyCsv,historyMap,{mode:'skip'},[],{tombstones:{portfolio:{bad:'not-a-date'}}}));checks++;
+for(const bad of ['[{"id":{}}]','[{"id":[]}]','[{"id":"   "}]'])throws(()=>I.readRows(bad),/needs attention/);
 
 // Exercise the shipped Collection DOM, renderer, import module and save path.
-const html=readFileSync(ROOT+'/index.html','utf8');const core=readFileSync(resolveCoreBundle().path,'utf8');
+const core=readFileSync(resolveCoreBundle().path,'utf8');
 const wanted=new Set(['renderCollectionView','getUserKey','loadPortData','savePortData']);
 const coreFunctions=parseJS(core,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&wanted.has(n.id.name)).map(n=>core.slice(n.start,n.end)).join('\n');
 const exporter=readFileSync(ROOT+'/js/collection-export.js','utf8');
@@ -59,7 +71,7 @@ function _lsWrite(key,value){if(failWrite)return false;localStorage.setItem(key,
 function _scheduleUserDataSync(){syncs++}function loadTombstones(){return {portfolio:{},flips:{}}}
 function showToast(text){toasts.push(text)}function triggerGoogleSignIn(){signin++}
 HTMLAnchorElement.prototype.click=function(){download=decodeURIComponent(this.href.split(',').slice(1).join(','))};
-${coreFunctions}\n${exporter}\n${source}
+${coreFunctions}\n${exporter}\n${protections}\n${source}
 function seed(rows){localStorage.setItem(getUserKey('portfolio'),JSON.stringify(rows));document.getElementById('collectionView').style.display='block';renderCollectionView()}
 seed([]);
 </script>`;
@@ -73,7 +85,7 @@ try {
   const open=async()=>{await page.locator('#collectionImportBtn').click();};
   const upload=async(text)=>{await page.locator('#collectionImportDialog input[type=file]').setInputFiles({name:'inventory.csv',mimeType:'text/csv',buffer:Buffer.from(text)});await page.waitForFunction(()=>document.querySelector('[data-import-review]')?.disabled===false);};
   const review=async()=>{await page.locator('[data-import-review]').click();await page.waitForFunction(()=>document.querySelector('[data-import-review]')?.disabled===false);};
-  const commit=async()=>{await page.locator('#collectionImportConfirm').check();await page.locator('[data-import-commit]').click();};
+  const commit=async()=>{await page.locator('#collectionImportConfirm').check();await page.locator('[data-import-commit]').click();await page.waitForFunction(()=>{const input=document.querySelector('#collectionImportDialog input[type=file]');return !input||!input.disabled;});};
   await open();await upload(sample);await page.getByLabel('Default game',{exact:true}).selectOption('pokemon');await review();
   check(await page.locator('[data-import-status]').textContent().then(s=>s.includes('5 new copies')),'preview shows quantity expansion');
   check(await page.evaluate(()=>writes===0&&loadPortData().length===0),'preview has no writes');

@@ -3,6 +3,8 @@
 (() => {
   'use strict';
   const MAX_COPIES = 2000, MAX_BYTES = 2_000_000;
+  const historyKeys=['flips','tombstones','copy_sales_v1','sale_recovery_v1','sale_conflict_v1','inventory_conflict_v1','inventory_restore_v1'];
+  const recoveryPolicy=()=>{if(!window.CardResellInventoryRecoveryPolicy?.backupRetired)throw Error('Reload CardResell before importing so its inventory protection is available.');return window.CardResellInventoryRecoveryPolicy;};
   const fields = [
     ['card','Card name',['card','card name','name','product name']],
     ['set','Set',['set','set name']],
@@ -73,7 +75,7 @@
   async function digest(s) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join(''); }
   function readRows(raw) {
     let rows; try { rows=JSON.parse(raw===null?'[]':raw); } catch { throw Error('Your saved collection could not be read. Import stopped to protect it.'); }
-    if (!Array.isArray(rows) || rows.some(p=>!p || typeof p!=='object' || Array.isArray(p) || p.id==null || String(p.id)==='')) throw Error('Your saved collection needs attention before importing. Export a backup first.');
+    if (!Array.isArray(rows) || rows.some(p=>!p || typeof p!=='object' || Array.isArray(p) || !(typeof p.id==='string'&&p.id.trim()&&p.id.length<=1024||typeof p.id==='number'&&Number.isFinite(p.id)))) throw Error('Your saved collection needs attention before importing. Export a backup first.');
     if (new Set(rows.map(p=>String(p.id))).size!==rows.length) throw Error('Your saved collection has duplicate IDs. Import stopped to protect your cards.');
     return rows;
   }
@@ -86,7 +88,9 @@
     if (options.mode==='new' && mapping.id>=0) throw Error('CardResell IDs identify existing copies. Choose “Ignore” for that column only if these are new purchases.');
     const sold=history.flips||[], marks=history.tombstones||{};
     const byId=new Set([...existing,...sold].flatMap(p=>[p.id,p.sourceCollectionId]).filter(v=>v!=null).map(String));
-    const retired=new Set([...Object.keys(marks.portfolio||{}),...Object.keys(marks.flips||{})]);
+    // A sale report may be deleted while its physical-copy receipt remains.
+    // Share the strict recovery rules rather than treating missing reports as stock.
+    const retired=new Set([...recoveryPolicy().backupRetired(history),...Object.keys(marks.flips||{})]);
     const imports=new Set([...existing,...sold].map(p=>p.importKey).filter(Boolean));
     const printKey=p=>[p.card,p.set,p.number,p.game].map(norm).join('|');
     const prints=new Set(existing.map(printKey));
@@ -172,7 +176,7 @@
     }
     const dialog=el('dialog');dialog.className='collection-import';dialog.id='collectionImportDialog';dialog.setAttribute('aria-labelledby','collectionImportTitle');
     const body=el('div');body.className='collection-import-body';dialog.append(body);
-    const state={dialog,owner:account(),key:getUserKey('portfolio'),epoch:0,csv:null,plan:null,mapping:{}};active=state;
+    const state={dialog,owner:account(),key:getUserKey('portfolio'),epoch:0,csv:null,plan:null,mapping:{},busy:false};active=state;
     const header=el('header'),title=el('h2','Import your collection');title.id='collectionImportTitle';
     const close=()=>{state.epoch++;dialog.close();};header.append(title,button('Close',close));body.append(header);
     body.append(el('p','Bring a CSV from CardResell or another inventory app. Match the columns, review the cards, then add them to your collection. Existing cards are never overwritten.'));
@@ -192,12 +196,15 @@
     const commit=button('Add reviewed cards',commitFile);commit.disabled=true;commit.dataset.importCommit='';
     const footer=el('footer');footer.append(button('Cancel',close),review,commit);body.append(footer);
     const current=()=>active===state && dialog.open && account()===state.owner && getUserKey('portfolio')===state.key;
-    const historySnapshot=()=>({flips:localStorage.getItem(getUserKey('flips')),tombstones:localStorage.getItem(getUserKey('tombstones'))});
+    const historySnapshot=()=>Object.fromEntries(historyKeys.map(key=>[key,localStorage.getItem(getUserKey(key))]));
     function readHistory(snapshot) {
-      const flips=readRows(snapshot.flips);let tombstones;
-      try{tombstones=JSON.parse(snapshot.tombstones||'{}');}catch{throw Error('Your saved deletion history could not be read. Import stopped to protect it.');}
-      if(!tombstones||typeof tombstones!=='object'||Array.isArray(tombstones)||['portfolio','flips'].some(k=>tombstones[k]!=null&&(!tombstones[k]||typeof tombstones[k]!=='object'||Array.isArray(tombstones[k]))))throw Error('Your saved deletion history needs attention before importing.');
-      return {flips,tombstones};
+      const read=(key,fallback,label)=>{try{return snapshot[key]===null?fallback:JSON.parse(snapshot[key]);}catch{throw Error('Your saved '+label+' could not be read. Import stopped to protect it. Download a recovery backup before changing these records.');}};
+      for(const [key,place] of [['sale_recovery_v1','the saved sale in Collection'],['sale_conflict_v1','the saved choice in Review sale sync'],['inventory_conflict_v1','the saved choice in Review inventory sync'],['inventory_restore_v1','the saved request in Recover inventory']]){
+        if(read(key,null,'recovery progress')!==null)throw Error('Finish '+place+' before importing cards.');
+      }
+      const history={flips:readRows(snapshot.flips),tombstones:read('tombstones',{},'deletion history'),copy_sales_v1:read('copy_sales_v1',null,'sold-copy history')};
+      if(!history.tombstones||typeof history.tombstones!=='object'||Array.isArray(history.tombstones))throw Error('Your saved deletion history needs attention before importing.');
+      recoveryPolicy().backupRetired(history);return history;
     }
     const unchanged=()=>localStorage.getItem(state.key)===state.snapshot&&JSON.stringify(historySnapshot())===JSON.stringify(state.historySnapshot);
     function invalidate() { state.epoch++;state.plan=null;preview.hidden=true;label.hidden=true;confirm.checked=false;commit.disabled=true;error.textContent='';status.textContent='';review.disabled=!state.csv; }
@@ -247,9 +254,15 @@
       } catch(e) { if(current()&&epoch===state.epoch){state.plan=null;error.textContent=e.message;status.textContent='';} }
       finally { if(current()&&epoch===state.epoch)review.disabled=false; }
     }
-    function commitFile() {
-      if(!checkAccount() || !confirm.checked || !state.plan || state.plan.errors.length || !state.plan.copies)return;
+    async function commitFile() {
+      if(state.busy || !checkAccount() || !confirm.checked || !state.plan || state.plan.errors.length || !state.plan.copies)return;
+      const epoch=state.epoch,lock='cardresell:'+getUserKey('sale_recovery_v1');
+      const disabled=new Map([...dialog.querySelectorAll('button,input,select')].map(n=>[n,n.disabled]));
+      state.busy=true;disabled.forEach((_,n)=>n.disabled=true);
       try {
+        if(!navigator.locks?.request)throw Error('Update your browser to import inventory safely across tabs.');
+        await navigator.locks.request(lock,()=>{
+        if(!checkAccount() || epoch!==state.epoch)return;
         if(!unchanged()) {invalidate();throw Error('Your collection or sales history changed. Review again before adding cards.');}
         const existing=readRows(state.snapshot),now=Date.now(),taken=new Set(existing.map(p=>String(p.id)));
         const added=state.plan.rows.flatMap(r=>r.entries).map(p=>{
@@ -260,13 +273,17 @@
             ...(p.finish?{finishReviewRequired:true,finishConfirmed:false}:{})};
         });
         const next=existing.concat(added);
-        const {flips,tombstones}=readHistory(state.historySnapshot);
-        if(!Array.isArray(flips) || bytes(JSON.stringify({portfolio:next,flips,tombstones,clientUpdatedAt:now}))+1024>900000)throw Error('This import would exceed the account sync size limit. Split it into a smaller batch.');
-        // No await between the snapshot check and the single atomic storage write.
+        const {flips,tombstones,copy_sales_v1}=readHistory(state.historySnapshot);
+        if(!Array.isArray(flips) || bytes(JSON.stringify({portfolio:next,flips,tombstones,copySales:copy_sales_v1,clientUpdatedAt:now}))+1024>900000)throw Error('This import would exceed the account sync size limit. Split it into a smaller batch.');
+        // The shared sale/recovery lock serializes participating tabs. Check and
+        // perform the single storage write synchronously inside that lock.
         if(savePortData(next)!==true)throw Error('The cards could not be saved on this device. Free some storage and try again.');
         close();window.renderCollectionView?.();window.showToast?.(added.length+' cards added on this device. Account sync will confirm separately.','success');
-      } catch(e) {error.textContent=e.message;}
+        });
+      } catch(e) {if(current())error.textContent=e.message;}
+      finally{state.busy=false;if(current()){disabled.forEach((was,n)=>n.disabled=was);commit.disabled=!confirm.checked||!state.plan||state.plan.errors.length>0||!state.plan.copies;review.disabled=!state.csv;}}
     }
+    dialog.addEventListener('cancel',e=>{if(state.busy)e.preventDefault();});
     const timer=setInterval(()=>{if(active===state && !current())checkAccount();},300);
     dialog.addEventListener('close',()=>{clearInterval(timer);state.epoch++;if(active===state)active=null;dialog.remove();document.getElementById('collectionImportBtn')?.focus();},{once:true});
     document.body.append(dialog);dialog.showModal();file.focus();
