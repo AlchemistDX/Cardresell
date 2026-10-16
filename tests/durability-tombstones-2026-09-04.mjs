@@ -419,7 +419,7 @@ for (const [fname, kind] of [
   ok('pull applies tombstones to the merged portfolio',
      /_applyTombstones\(\s*_unionById\(\s*remotePort/.test(pull));
   ok('pull applies tombstones to the merged flips',
-     /_applyTombstones\(\s*_unionById\(\s*remoteFlips/.test(pull));
+     /_applyTombstones\(\s*CardResellSaleCorrections\.mergeSales\(\s*remoteFlips,\s*localFlips\),\s*marks\.flips\)/.test(pull));
   ok('pull merges the server tombstones with local ones', /_mergeTombstones\(/.test(pull));
   ok('pull persists the merged tombstones', /_saveTombstones\(/.test(pull));
   ok('pull no longer writes the raw union straight to storage',

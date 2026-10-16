@@ -1,5 +1,6 @@
 import { verifyTokenFlexible } from './_verifyToken.js';
 import {copySales, unsoldCopies, validateSaleLinks} from './_copySales.js';
+import {mergeSaleCorrection} from './_saleCorrections.js';
 // /api/user-data — Cross-device sync for Portfolio + Flips
 //
 // GET  /api/user-data                  → { portfolio: [...], flips: [...], tombstones, serverUpdatedAt }
@@ -105,7 +106,7 @@ export default async function handler(req, res) {
       // sale by omitting its row, stripping its link, or deleting its report.
       const receipts = copySales(existing?.copySales, [...(existing?.flips || []), ...body.flips]);
       const portfolio = unsoldCopies(_applyTombstones(_mergeById(existing?.portfolio || [], body.portfolio, preferIncoming), marks.portfolio), receipts);
-      const flips = _applyTombstones(_mergeById(existing?.flips || [], body.flips, preferIncoming), marks.flips);
+      const flips = _applyTombstones(_mergeById(existing?.flips || [], body.flips, preferIncoming, true), marks.flips);
       validateSaleLinks(receipts, flips);
       if (portfolio.length > MAX_ITEMS || flips.length > MAX_ITEMS)
         return res.status(413).json({ error: 'too_many_items', message: 'The combined collection exceeds the sync limit. Nothing was discarded.' });
@@ -121,16 +122,20 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    if (error.code === 'copy_sale_conflict') return res.status(error.status).json({error:error.code,message:error.message});
+    if (error.code === 'copy_sale_conflict' || error.code === 'sale_correction_conflict') return res.status(error.status).json({error:error.code,message:error.message});
     return res.status(503).json({ error: 'storage_unavailable', message: 'Cloud collection could not be confirmed. Your device data is unchanged. Please retry sync.' });
   }
 }
 
 // Union two arrays of {id, ...} rows by id. Later wins on conflict.
-function _mergeById(a, b, preferIncoming = true) {
+function _mergeById(a, b, preferIncoming = true, sales = false) {
   const map = new Map();
-  for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), row);
-  for (const row of (b || [])) if (row && row.id != null && (preferIncoming || !map.has(String(row.id)))) map.set(String(row.id), row);
+  for (const row of (a || [])) if (row && row.id != null) map.set(String(row.id), sales ? mergeSaleCorrection(row,row) : row);
+  for (const row of (b || [])) if (row && row.id != null) {
+    const previous=map.get(String(row.id));
+    if(sales)map.set(String(row.id),mergeSaleCorrection(previous||row,row,preferIncoming));
+    else if(preferIncoming||!previous)map.set(String(row.id),row);
+  }
   return Array.from(map.values());
 }
 

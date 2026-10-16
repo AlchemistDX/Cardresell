@@ -20,8 +20,8 @@ try{for(const width of [390,1280]){
  await page.waitForFunction(()=>!!window.CardResellFlipReport);
  const before=await page.evaluate(()=>{
   window.googleUser={sub:'report-owner'};window._googleIdToken=null;
-  const mk=(id,over={})=>({id,card:'Card '+id,date:'2026-10-14',buyPrice:100,sellPrice:150,fees:20,shippingCost:5,gradingCost:25,profit:999,costMeta:{buyPrice:'value',fees:'value',shippingCost:'value',gradingCost:'value'},...over});
-  window.reportFixtures=[mk(1),mk(2,{card:'=SUM(1,2)',fees:0,costMeta:{buyPrice:'value',fees:'blank',shippingCost:'value',gradingCost:'value'}}),mk(3,{date:'2026-09-30',buyPrice:0,sellPrice:20,fees:0,shippingCost:0,gradingCost:0,costMeta:{buyPrice:'zero',fees:'zero',shippingCost:'zero',gradingCost:'zero'}}),mk(4,{costMeta:undefined,buyPrice:10,fees:0}),mk(5,{date:'2026-02-30'})];
+  const mk=(id,over={})=>({id,card:'Card '+id,date:'2026-10-14',buyPrice:100,sellPrice:150,fees:20,shippingCost:5,gradingCost:25,refundAmount:0,otherExpenses:0,profit:999,costMeta:{buyPrice:'value',fees:'value',shippingCost:'value',gradingCost:'value',refundAmount:'zero',otherExpenses:'zero'},...over});
+  window.reportFixtures=[mk(1),mk(2,{card:'=SUM(1,2)',fees:0,costMeta:{buyPrice:'value',fees:'blank',shippingCost:'value',gradingCost:'value',refundAmount:'zero',otherExpenses:'zero'}}),mk(3,{date:'2026-09-30',buyPrice:0,sellPrice:20,fees:0,shippingCost:0,gradingCost:0,refundAmount:0,otherExpenses:0,costMeta:{buyPrice:'zero',fees:'zero',shippingCost:'zero',gradingCost:'zero',refundAmount:'zero',otherExpenses:'zero'}}),mk(4,{costMeta:undefined,buyPrice:10,fees:0}),mk(5,{date:'2026-02-30'})];
   saveFlipsData(window.reportFixtures);
   document.querySelectorAll('.view').forEach(n=>n.style.display='none');document.getElementById('flipsView').style.display='block';renderFlipsView();
   return JSON.stringify(loadFlipsData());
@@ -55,7 +55,7 @@ try{for(const width of [390,1280]){
  await target().getByRole('button',{name:'Correct sale',exact:true}).click();
  check(await target().getByLabel('Edit fees',{exact:true}).inputValue()==='','unknown cost stays blank in correction form');
  await target().getByLabel('Edit fees',{exact:true}).fill('10');
- await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();
+ await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.flip-report-editor')||!!document.querySelector('.flip-report-editor [role=status]')?.textContent);
  const corrected=await page.evaluate(()=>loadFlipsData());
  check(corrected.find(f=>f.id===2).profit===10,'saved correction recalculates profit');
  check(corrected.find(f=>f.id===2).costMeta.fees==='value','corrected fee completeness saved');
@@ -64,22 +64,22 @@ try{for(const width of [390,1280]){
  await page.locator('#flipReportPanel summary').click();await target().getByRole('button',{name:'Correct sale',exact:true}).click();
  await target().getByLabel('Edit fees',{exact:true}).fill('0');
  await page.evaluate(()=>{const data=loadFlipsData();data.find(f=>f.id===2).fees=12;saveFlipsData(data);});
- await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();
+ await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.flip-report-editor')||!!document.querySelector('.flip-report-editor [role=status]')?.textContent);
  check((await target().locator('form [role=status]').textContent()).includes('This sale changed'),'stale edit blocked');
  check(await page.evaluate(()=>loadFlipsData().find(f=>f.id===2).fees)===12,'stale edit cannot overwrite newer expense');
  await page.evaluate(()=>renderFlipsView());await page.locator('#flipReportPanel summary').click();await target().getByRole('button',{name:'Correct sale',exact:true}).click();
  await target().getByLabel('Edit fees',{exact:true}).fill('0');
  await page.evaluate(()=>{window.realSaveFlips=saveFlipsData;window.saveFlipsData=()=>false;});
- await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();
+ await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.flip-report-editor')||!!document.querySelector('.flip-report-editor [role=status]')?.textContent);
  check((await target().locator('form [role=status]').textContent()).includes('could not be saved'),'storage failure stays visible without success');
  await page.evaluate(()=>{window.saveFlipsData=window.realSaveFlips;});
- await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();
+ await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.flip-report-editor')||!!document.querySelector('.flip-report-editor [role=status]')?.textContent);
  check(await page.evaluate(()=>loadFlipsData().find(f=>f.id===2).costMeta.fees)==='zero','explicit zero correction persisted');
  await page.reload({waitUntil:'load'});await page.evaluate(()=>{window.googleUser={sub:'report-owner'};document.getElementById('flipsView').style.display='block';renderFlipsView();});await page.locator('#flipReportToggle').click();
  check(await page.evaluate(()=>loadFlipsData().find(f=>f.id===2).profit)===20,'saved correction survives actual reload');
  await page.locator('#flipReportPanel summary').click();await target().getByRole('button',{name:'Correct sale',exact:true}).click();
  await page.evaluate(()=>{window.googleUser={sub:'different-editor'};saveFlipsData([]);});
- await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();
+ await target().getByRole('button',{name:'Save sale corrections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.flip-report-editor')||!!document.querySelector('.flip-report-editor [role=status]')?.textContent);
  check(await page.evaluate(()=>loadFlipsData().length)===0,'account change cannot write old account sale into new account');
  await page.evaluate(()=>{window.googleUser={sub:'report-owner'};renderFlipsView();});
  const bounds=await page.locator('#flipReportPanel').boundingBox();check(bounds.x>=0&&bounds.x+bounds.width<=width+1,'report fits viewport');
@@ -88,8 +88,8 @@ try{for(const width of [390,1280]){
  check((await page.locator('#flipReportPanel [role=status]').textContent()).includes('0 sales'),'account switch clears previous report before export');
  check(await page.getByRole('button',{name:'Export report CSV',exact:true}).isDisabled(),'empty account cannot export previous data');
  const edge=await page.evaluate(()=>{
-  const {build}=CardResellFlipReport,mk=(v,meta)=>({buyPrice:v,sellPrice:10,fees:0,shippingCost:0,gradingCost:0,costMeta:{buyPrice:meta,fees:'zero',shippingCost:'zero',gradingCost:'zero'}});
-  return {partial:build([mk('5junk','value')]).rows[0],missingMeta:build([{...mk(5,'value'),costMeta:{fees:'zero',shippingCost:'zero',gradingCost:'zero'}}]).rows[0],loss:build([mk(20,'value')]).totals[5],zero:build([mk(0,'zero')]).rows[0].complete,rounding:build([mk(0.1,'value'),mk(0.2,'value')]).totals[1]};
+  const {build}=CardResellFlipReport,mk=(v,meta)=>({buyPrice:v,sellPrice:10,fees:0,shippingCost:0,gradingCost:0,refundAmount:0,otherExpenses:0,costMeta:{buyPrice:meta,fees:'zero',shippingCost:'zero',gradingCost:'zero',refundAmount:'zero',otherExpenses:'zero'}});
+  return {partial:build([mk('5junk','value')]).rows[0],missingMeta:build([{...mk(5,'value'),costMeta:{fees:'zero',shippingCost:'zero',gradingCost:'zero',refundAmount:'zero',otherExpenses:'zero'}}]).rows[0],loss:build([mk(20,'value')]).totals[5],zero:build([mk(0,'zero')]).rows[0].complete,rounding:build([mk(0.1,'value'),mk(0.2,'value')]).totals[1]};
  });
  check(edge.partial.costs[0]===null&&!edge.partial.complete,'partial numeric strings rejected');
  check(!edge.missingMeta.complete,'partial cost metadata cannot claim complete');
