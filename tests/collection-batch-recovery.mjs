@@ -18,6 +18,52 @@ async function close(page){const b=page.getByRole('button',{name:'Close batch pr
 async function reload(page){await page.reload();await page.evaluate(()=>seed(data));}
 const stored=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('cr_collection_draft_batch_v1:owner')));
 try{
+ for(const stage of ['capacity','eligibility','snapshot'])for(const action of ['Cancel','Close batch preparation','Escape']){
+  const {context,page,errors}=await boot();await select(page);
+  await page.evaluate(stage=>{
+   if(stage==='capacity'){deferHead=true;window.releaseCheck=()=>finishHead();}
+   if(stage==='eligibility'){const original=fetchSellStamps;fetchSellStamps=async(...args)=>{await new Promise(r=>window.releaseCheck=r);return original(...args);};}
+   if(stage==='snapshot'){const original=crypto.subtle.digest.bind(crypto.subtle);crypto.subtle.digest=async(...args)=>{await new Promise(r=>window.releaseCheck=r);crypto.subtle.digest=original;return original(...args);};}
+  },stage);
+  await page.locator('[data-batch-confirm]').click();
+  await page.waitForFunction(stage=>stage==='capacity'?!!window.finishHead:!!window.releaseCheck,stage);
+  if(action==='Escape')await page.keyboard.press('Escape');else await page.locator('.draft-batch').getByRole('button',{name:action,exact:true}).click();
+  await page.evaluate(()=>releaseCheck());await idle(page);
+  check(await page.evaluate(()=>calls.length===0&&manifests.length===0),`${action} during ${stage} prevents every draft write`);
+  check(await stored(page)===null,`${action} during ${stage} does not create a recovery batch`);
+  check(await page.locator('.draft-batch[open]').count()===0,'cancelled checks cannot reopen the dialog');
+  check(await page.locator('.collection-draft-check:checked').count()===2,'cancelled preparation preserves the selected cards');
+  if(stage==='capacity'&&action==='Cancel'){
+   await page.evaluate(()=>deferHead=false);await page.locator('[data-create]').click();await confirm(page);
+   check(await page.evaluate(()=>calls.length===2),'cancelled preflight releases its lock and permits a freshly approved batch');
+  }
+  check(errors.length===0,errors.join('\n'));await context.close();
+ }
+ for(const replacement of ['valid','unreadable']){
+  const {context,page}=await boot();await page.evaluate(()=>mode='network');await select(page);await confirm(page);const saved=await stored(page);
+  await page.evaluate(()=>localStorage.setItem('cr_collection_draft_batch_v1:owner','{"version":999}'));await reload(page);
+  await page.getByRole('button',{name:'Review recovery',exact:true}).click();
+  const other=await context.newPage();await other.goto(url);
+  const updated=replacement==='valid'?JSON.stringify(saved):'{"version":1000}';
+  page.once('dialog',async dialog=>{await other.evaluate(raw=>localStorage.setItem('cr_collection_draft_batch_v1:owner',raw),updated);await dialog.accept();});
+  await page.getByRole('button',{name:'Clear unreadable recovery record',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('.draft-batch[open]')||document.querySelector('.draft-batch')?.textContent.includes('changed'));
+  check(await page.evaluate(()=>localStorage.getItem('cr_collection_draft_batch_v1:owner'))===updated,'stale confirmation preserves a newer '+replacement+' recovery record');
+  check(await page.evaluate(()=>calls.length===0&&manifests.length===0),'clearing recovery cannot submit drafts');await context.close();
+ }
+ {
+  const {context,page}=await boot();await page.evaluate(()=>mode='defer');await select(page);await page.locator('[data-batch-confirm]').click();await page.waitForFunction(()=>!!window.finishRequest);
+  await close(page);await page.evaluate(()=>{mode='ok';finishRequest()});await idle(page);
+  check(await page.evaluate(()=>calls.length===2),'closing saved progress does not abandon an already-started batch');
+  check((await stored(page)).rows.every(r=>r.state==='done'),'already-started work remains recorded after closing progress');
+  check(await page.locator('.draft-batch[open]').count()===0,'background completion does not reopen progress');await context.close();
+ }
+ {
+  const {context,page}=await boot();await page.evaluate(()=>localStorage.setItem('cr_collection_draft_batch_v1:owner','{"version":999}'));await reload(page);
+  await page.getByRole('button',{name:'Review recovery',exact:true}).click();page.once('dialog',d=>d.accept());
+  await page.getByRole('button',{name:'Clear unreadable recovery record',exact:true}).click();await page.waitForFunction(()=>localStorage.getItem('cr_collection_draft_batch_v1:owner')===null);
+  check(await stored(page)===null,'explicit clearing still works when the unreadable record is unchanged');await context.close();
+ }
  for(const width of [390,1280]){
   const {context,page,errors}=await boot(width);await select(page);
   check(await page.evaluate(()=>calls.length===0&&manifests.length===0),'preview makes no draft writes');
