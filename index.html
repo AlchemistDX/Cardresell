@@ -2968,12 +2968,15 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="fl-header">
     <div class="fl-title">Flip Log</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
       <button class="fl-sub-btn" id="flipReportToggle" aria-expanded="false" aria-controls="flipReportPanel" onclick="toggleFlipReport()">Sales report</button>
       <button class="fl-sub-btn" onclick="exportFlips()">⬇ Export CSV</button>
       <button class="fl-add-btn" onclick="openAddFlip('flip')">+ Log a Flip</button>
     </div>
   </div>
 
+  <p id="flipSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
+  <button id="flipSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
   <section id="flipReportPanel" class="section-panel" hidden aria-label="Sales and expense report"></section>
   <div id="flipLogWrap"></div>
 
@@ -3075,6 +3078,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <h1 class="workspace-title">Your collection</h1>
     <p id="collectionSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
     <div id="saleRecoveryNotice" role="status" hidden style="margin:.8rem 0;padding:.8rem;border:1px solid var(--gold);border-radius:10px;font-size:.85rem"></div>
+    <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
     <button id="collectionSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
     <section class="collection-grade-history" aria-labelledby="collectionGradesTitle">
@@ -3959,8 +3963,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.cf948d2e.js"></script>
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
-<script defer src="/js/sale-corrections.d8a98da8.js"></script>
-<script defer src="/js/core.438f3c7c.js"></script>
+<script defer src="/js/sale-corrections.ba658815.js"></script>
+<script defer src="/js/core.5c2d1d38.js"></script>
 <script defer src="/js/sale-recovery.bcb77f9e.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
@@ -4048,6 +4052,22 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/selling-plan.df207743.js"></script>
 <script defer src="/js/selling-advice.7b8b622b.js"></script>
 <style>
+
+#saleConflictDialog { margin:auto; box-sizing:border-box; width:min(900px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); padding:1.2rem; border:1px solid var(--border); border-radius:14px; color:var(--text); background:var(--bg); overflow:auto; overflow-wrap:anywhere; }
+#saleConflictDialog::backdrop { background:rgba(0,0,0,.72); }
+#saleConflictDialog h2 { margin:0 0 .7rem; }
+#saleConflictDialog p { font-size:.85rem; line-height:1.5; }
+#saleConflictDialog button { margin:.25rem .5rem .25rem 0; white-space:normal; }
+.sale-conflict-item { margin:1rem 0; padding-top:.7rem; border-top:1px solid var(--border); }
+.sale-conflict-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+.sale-conflict-version { padding:.8rem; border:1px solid var(--border); border-radius:8px; min-width:0; }
+.sale-conflict-version h4 { margin:0 0 .7rem; }
+.sale-conflict-version dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.6rem; font-size:.85rem; margin:0 0 1rem; }
+.sale-conflict-version dt { margin:0; color:var(--text-muted); }
+.sale-conflict-version dd { margin:0; text-align:right; font-weight:600; white-space:pre-wrap; }
+.sale-conflict-version label { display:flex; align-items:center; gap:.4rem; min-height:44px; font-weight:600; }
+@media(max-width:600px) { .sale-conflict-grid { grid-template-columns:1fr; } }
+
 #flipReportPanel { margin-bottom:1rem; padding:1rem; box-sizing:border-box; overflow-wrap:anywhere; }
 #flipReportPanel h3 { margin:0 0 .6rem; }
 #flipReportPanel p { margin:.6rem 0; }
@@ -4066,6 +4086,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 .flip-report-totals dd { margin:.35rem 0; font-size:1.1rem; font-weight:700; }
 </style>
 <script defer src="/js/flip-report.c7f8d720.js"></script>
+<script defer src="/js/sale-conflicts.741b4510.js"></script>
 <script defer src="/js/collection-export.a65335bc.js"></script>
 <script defer src="/js/collection-import.7e472fce.js"></script>
 <script defer src="/js/ebay-connect.6aec6f8b.js"></script>

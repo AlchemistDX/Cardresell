@@ -68,9 +68,12 @@ try { for(const width of [390,1280]) {
  check(JSON.stringify(sync.afterStale)===JSON.stringify(sync.current),'real pull cannot overwrite local correction with stale baseline');
  check(JSON.stringify(sync.afterConflict)===JSON.stringify(sync.current)&&sync.notices.some(t=>t.includes('corrections differ')),'conflicting pull preserves local amounts and explains sync pause');
  // Creation paths carry the same fields and clear them for the next sale.
- await page.evaluate(()=>{savePortData([{id:'next-copy',card:'Next',buyPrice:10}]);openMarkSoldModal('next-copy');});
+ const stayed=await page.evaluate(async()=>{savePortData([{id:'next-copy',card:'Next',buyPrice:10}]);openMarkSoldModal('next-copy');document.getElementById('msGradingCost').focus();await new Promise(r=>setTimeout(r,80));return document.activeElement.id==='msGradingCost';});
+ check(stayed,'delayed autofocus cannot steal a cost input and change the sale price');
  await page.locator('#msSellPrice').fill('50');await page.locator('#msFees').fill('5');await page.locator('#msShipCost').fill('2');await page.locator('#msGradingCost').fill('0');await page.locator('#msRefundAmount').fill('4');await page.locator('#msOtherExpenses').fill('1');
- check((await page.locator('#msProfitPreview').textContent()).includes('$28.00'),'mark-sold preview deducts new amounts');
+ const preview=await page.locator('#msProfitPreview').textContent();
+ if(!preview.includes('$28.00'))console.error('mark-sold inputs',await page.evaluate(()=>Object.fromEntries(['msSellPrice','msBuyPrice','msFees','msShipCost','msGradingCost','msRefundAmount','msOtherExpenses'].map(id=>[id,document.getElementById(id).value]))),preview,width);
+ check(preview.includes('$28.00'),'mark-sold preview deducts new amounts');
  await page.evaluate(()=>confirmMarkSold());check(await page.evaluate(()=>loadFlipsData().find(f=>f.sourceCollectionId==='next-copy').profit)===28,'recoverable mark-sold records refunds and expenses');
  await page.evaluate(()=>{openAddFlip('flip');for(const [id,v] of Object.entries({mCardName:'Manual sale',mBuyPrice:'10',mSellPrice:'30',mFees:'2',mShipCost:'1',mGradingCost:'0',mRefundAmount:'3',mOtherExpenses:'4'}))document.getElementById(id).value=v;saveFlipEntry();});
  check(await page.evaluate(()=>loadFlipsData().find(f=>f.card==='Manual sale').profit)===10,'manual sale records both new amounts');

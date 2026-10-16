@@ -42,9 +42,9 @@ The history is bounded at 100 ancestors. Reaching that limit refuses the next
 correction instead of truncating its proof. Histories are not a tamper-proof
 audit trail: an authenticated seller controls their own records.
 
-There is no in-product conflict-resolution chooser yet. A held conflict needs
-exports from the affected devices and explicit reconciliation; repeatedly
-retrying does not select a winner. Cloud account notification and marketplace
+The subsequent sale-conflict milestone adds an explicit review and recovery
+chooser; see `sale-conflict-resolution-20261016.md`. Repeatedly retrying ordinary
+sync still does not select a winner. Cloud account notification and marketplace
 statement import remain separate work. Existing account UIDs, subscriptions,
 credits and listing write gates are untouched.
 
