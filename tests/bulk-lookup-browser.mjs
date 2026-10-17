@@ -30,7 +30,7 @@ function check(label,actual,expected){assert.deepEqual(actual,expected,label);ch
 const mtg=(id,set='Test set',num='123',extra={})=>({id,name:'Fixture Wizard',set_name:set,set:'tst',collector_number:num,lang:'en',games:['paper'],finishes:['nonfoil','foil'],prices:{usd:'0.25',usd_foil:'7.00'},image_uris:{normal:'https://cards.scryfall.io/normal/front/test.jpg'},...extra});
 const pokemon=(id,set='Test expansion',num='44',extra={})=>({id,name:'Fixture Mouse',set:{id:'test',name:set},number:num,images:{large:'https://images.pokemontcg.io/test/44.png'},tcgplayer:{prices:{normal:{market:0.1},reverseHolofoil:{market:8}}},...extra});
 try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
- const page=await browser.newPage({viewport}),errors=[],requests=[];
+ const page=await browser.newPage({viewport,hasTouch:true}),errors=[],requests=[];
  page.on('pageerror',e=>errors.push(e.message));
  let response={data:[mtg('first'),mtg('second','Other printing','456')],has_more:false},httpStatus=200,hold=null;
  await page.route('**/*',async r=>{
@@ -70,9 +70,20 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  const open=async()=>{await page.getByRole('button',{name:'Find card by name · free'}).click();await page.locator('#bulkLookupDialog').waitFor()};
  const search=async(game='mtg',name='Fixture Wizard')=>{await page.locator('[name=game]').selectOption(game);await page.locator('[name=name]').fill(name);await page.getByRole('button',{name:'Search catalogue',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#bulkLookupDialog button[type=submit]').disabled)};
  await open();
+ check('phone opens photo without focusing keyboard field',await page.evaluate(()=>document.activeElement.id),'bulkLookupTitle');
+ check('reference photo available before searching',await page.locator('.lookup-photo img').getAttribute('src').then(Boolean),true);
+ check('reference photo can be collapsed',await page.locator('.lookup-photo').getAttribute('open')!==null,true);
+ await page.locator('[name=game]').selectOption('pokemon');
+ await page.locator('[name=name]').fill('Plusle');
+ await page.locator('[name=number]').fill('44/100');
+ await page.keyboard.press('Escape');await open();
+ check('reopening retains this card search fields',await page.evaluate(()=>['game','name','number'].map(n=>document.querySelector('[name='+n+']').value)),['pokemon','Plusle','44/100']);
+ check('reopening does not search or spend credits',requests.length,0);
+ await page.locator('[name=number]').fill('');
  check('dialog fits screen',await page.locator('#bulkLookupDialog').evaluate(e=>e.scrollWidth<=e.clientWidth&&e.getBoundingClientRect().width<=innerWidth),true);
  check('search fields readable on mobile',await page.locator('[name=name]').evaluate(e=>parseFloat(getComputedStyle(e).fontSize)>=16),true);
  check('empty search does not call catalogue',requests.length,0);
+ if(process.env.CR_SHOT_DIR)await page.screenshot({path:process.env.CR_SHOT_DIR+`/lookup-search-${viewport.width}.png`});
  await search();
  check('all exact printings shown',await page.locator('.lookup-results button').count(),2);
  check('search never selects first result automatically',await page.evaluate(()=>miss.success),false);
@@ -85,6 +96,9 @@ try {for(const viewport of [{width:390,height:844},{width:844,height:390}]) {
  await page.getByRole('button',{name:'Back to results'}).click();
  await page.keyboard.press('Escape');
  check('escape cancels without changing row',await page.evaluate(()=>!miss.success&&!document.getElementById('bulkLookupDialog')),true);
+ await page.evaluate(()=>{window._fbAuth.currentUser={uid:'different-owner'}});await open();
+ check('search text never follows another account',await page.locator('[name=name]').inputValue(),'');
+ await page.keyboard.press('Escape');
  await open();await search();await page.locator('.lookup-results button').nth(1).click();
  await page.evaluate(()=>{miss.condition='LP';miss.conditionChosen=true;miss.copyUids=['physical-fixture'];miss.acquisitionCost=1.25;miss.location='Box A';window.before={uid:miss.scanUid,file:miss.file,url:miss.objectUrl}});
  await page.getByRole('button',{name:'Use this printing'}).click();

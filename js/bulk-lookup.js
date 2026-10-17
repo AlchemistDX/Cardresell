@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   let active = null;
+  const searches = new WeakMap();
   const text = value => typeof value === 'string' ? value.trim().slice(0,240) : '';
   const quote = value => '"' + text(value).replace(/["\\\x00-\x1f]/g, ' ') + '"';
   const price = value => (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
@@ -78,6 +79,8 @@
       #bulkLookupDialog .lookup-results button{text-align:left;overflow-wrap:anywhere;display:flex;flex-direction:column;align-items:center;gap:7px;font-size:14px}
       #bulkLookupDialog img{object-fit:contain;width:100%;height:150px}#bulkLookupDialog .lookup-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center}
       #bulkLookupDialog .lookup-compare img{height:210px}#bulkLookupDialog .lookup-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+      #bulkLookupDialog .lookup-photo{margin:12px 0}#bulkLookupDialog .lookup-photo summary{cursor:pointer;min-height:44px;padding:10px 0}
+      #bulkLookupDialog .lookup-photo img{height:min(42dvh,320px);display:block}
       #bulkLookupDialog .lookup-primary{background:#7748d2;border-color:#bca1ef;font-weight:700}
       #bulkLookupDialog [hidden]{display:none!important}`;
   }
@@ -90,10 +93,14 @@
     const s = active = {dialog,row,results,queue:window._bulkQueue,owner:window._fbAuth?.currentUser,
       file:row.file,opener:document.activeElement,generation:0,request:null};
     const header = node('header','',dialog);
-    node('h2','Find this card',header,{id:'bulkLookupTitle'});
+    const title = node('h2','Find this card',header,{id:'bulkLookupTitle',tabindex:'-1'});
     node('button','Close',header,{type:'button'}).onclick = close;
     node('p','Search by its printed name, then choose the matching picture, set and card number. No scan credits are used.',dialog);
-    const searchView = node('div','',dialog), form = node('form','',searchView);
+    const searchView = node('div','',dialog);
+    const photo = node('details','',searchView,{class:'lookup-photo',open:''});
+    node('summary','Your card photo',photo);
+    picture(row.objectUrl || row.imageDataUrl,'Your card — read its printed name and number',photo);
+    const form = node('form','',searchView);
     const field = (label,tag,attrs) => node(tag,'',node('label',label,form),attrs);
     const game = field('Game','select',{name:'game'});
     node('option','Magic: The Gathering (English)',game,{value:'mtg'});
@@ -102,6 +109,12 @@
     game.value = existingGames.length === 1 && existingGames[0] === 'pokemon' ? 'pokemon' : 'mtg';
     const name = field('Card name','input',{name:'name',required:'',maxlength:'120',autocomplete:'off',placeholder:'e.g. Elite Interceptor'});
     const number = field('Card number (optional)','input',{name:'number',maxlength:'30',autocomplete:'off',placeholder:'e.g. 123'});
+    const savedSearch = searches.get(row);
+    if (savedSearch?.owner === s.owner && savedSearch?.file === s.file) {
+      game.value=savedSearch.game; name.value=savedSearch.name; number.value=savedSearch.number;
+    }
+    name.placeholder = game.value === 'mtg' ? 'e.g. Elite Interceptor' : 'e.g. Plusle';
+    const remember = () => searches.set(row,{owner:s.owner,file:s.file,game:game.value,name:name.value,number:number.value});
     const submit = node('button','Search catalogue',form,{type:'submit',class:'lookup-primary'});
     const status = node('p','',searchView,{role:'status','aria-live':'polite'});
     const list = node('div','',searchView,{class:'lookup-results'});
@@ -114,8 +127,8 @@
       s.generation++; s.request?.abort(); list.replaceChildren(); status.textContent='';
       query=null; previous.hidden=next.hidden=true; submit.disabled=false;
     };
-    name.oninput = number.oninput = invalidate;
-    game.onchange = () => { invalidate(); name.placeholder = game.value === 'mtg' ? 'e.g. Elite Interceptor' : 'e.g. Plusle'; };
+    name.oninput = number.oninput = () => { remember(); invalidate(); };
+    game.onchange = () => { remember(); invalidate(); name.placeholder = game.value === 'mtg' ? 'e.g. Elite Interceptor' : 'e.g. Plusle'; };
     function choose(card) {
       if (!current(s)) return close();
       searchView.hidden=true; confirm.hidden=false; confirm.replaceChildren();
@@ -134,6 +147,7 @@
         // Update this physical copy in place. Photo, scan/copy IDs, quantity,
         // condition and seller metadata remain intact; nothing is saved yet.
         const {info,...identity} = card;
+        searches.delete(row);
         Object.assign(row,identity,{success:true,manualIdentity:true,error:'',definiteMiss:false,photoRejected:false,
           textRescue:false,marketPrice:null,priceVariant:'',priceSource:null,tcgplayerUrl:'',unavailableReason:''});
         window._scanApplyFinishReview?.(row,info);
@@ -199,7 +213,9 @@
     dialog.addEventListener('cancel',event=>{event.preventDefault();close()});
     // A result may finish rescuing, be removed, or change accounts while open.
     s.watch=setInterval(()=>{if (!current(s)) close()},250);
-    dialog.showModal(); name.focus();
+    dialog.showModal();
+    // Keep the reference photo visible on phones instead of opening the keyboard.
+    if (matchMedia('(pointer:coarse)').matches) title.focus(); else name.focus();
   }
   window.CardResellBulkLookup = {open,close,isEditing:row=>active?.row===row};
 })();
