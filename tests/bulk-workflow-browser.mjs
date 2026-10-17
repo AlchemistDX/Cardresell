@@ -42,6 +42,19 @@ try {
   });
   check(width+' no identified cards cannot offer a working save',await page.locator('#bulkAddAllBtn').isDisabled());
   check(width+' unresolved next step is visible',await page.locator('#bulkReviewNextBtn').isVisible());
+  check(width+' recovery action explains free search',await page.locator('#bulkReviewNextBtn').textContent(),'Find next card by name · free');
+  await page.locator('#bulkReviewNextBtn').click();
+  check(width+' next step opens catalogue recovery directly',await page.locator('#bulkLookupDialog').isVisible());
+  check(width+' opening recovery preserves unidentified rows',await page.evaluate(()=>_bulkResults.every(r=>!r.success)));
+  await page.keyboard.press('Escape');
+  await page.evaluate(()=>{_bulkResults[0].definiteMiss=false;_bulkResults[0].error='Temporary connection failure';CardResellBulkWorkflow.sync();});
+  await page.locator('#bulkReviewNextBtn').click();
+  check(width+' free recovery skips transient failures',await page.evaluate(()=>CardResellBulkLookup.isEditing(_bulkResults[1])));
+  await page.keyboard.press('Escape');
+  await page.evaluate(()=>{_bulkResults.forEach(r=>{r.definiteMiss=false;r.photoRejected=false;});CardResellBulkWorkflow.sync();});
+  check(width+' retry-only rows get an accurate action label',await page.locator('#bulkReviewNextBtn').textContent(),'Review an unfinished card');
+  await page.locator('#bulkReviewNextBtn').click();
+  check(width+' retry-only action focuses the row without opening search',await page.evaluate(()=>!document.getElementById('bulkLookupDialog')&&document.activeElement.closest('#bulk-row-0')!==null));
   await page.evaluate(()=>seedWorkflow());
   if(process.env.CR_SHOT_DIR){await page.screenshot({path:process.env.CR_SHOT_DIR+'/workflow-ready-'+width+'.png'});}
   check(width+' save explains which copies it includes',await page.locator('#bulkAddAllBtn').textContent(),'Save 3 identified cards');
