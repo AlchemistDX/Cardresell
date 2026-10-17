@@ -70,6 +70,7 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'bulk-match-review-browser.mjs': 'Required bulk confirmation release gate: CR_CHROMIUM=<binary> node tests/bulk-match-review-browser.mjs. Shipped mobile app, actual scan/confirmation handlers and private Redis in legacy and membership modes; synthetic auth/provider only. Covers exact choice, lost-response replay, stale sessions and downstream save/draft eligibility.',
   'bulk-text-rescue-browser.mjs': 'Required Magic recovery release gate: CR_CHROMIUM=<binary> CR_TESSERACT=<binary> node tests/bulk-text-rescue-browser.mjs. Shipped mobile confirmation/OCR handoff, cancellation and real OCR of synthetic title strips; no paid scans or customer photos.',
   'bulk-lookup-browser.mjs': 'Required binder recovery release gate: CR_CHROMIUM=<binary> node tests/bulk-lookup-browser.mjs. Shipped crop bytes, scan handoff, exact printing confirmation, pagination and stale account/batch guards; synthetic catalogues and no paid scans.',
   'scan-finish-browser.mjs': 'Required scan-finish release gate: CR_CHROMIUM=<binary> node tests/scan-finish-browser.mjs; full shipped mobile/desktop scan, finish review, Collection and draft metadata; synthetic providers, no paid scans.',

@@ -196,5 +196,5 @@ for (const width of [320,390,1280]) {
  check(width+' no page errors',errors,[]);
  await page.close();
 }
-console.log(`PASS ${checks} scan finish checks`);
+console.log(`SUITE COMPLETE: scan-finish-browser: ${checks} passed, 0 failed`);
 } finally {await browser.close();await new Promise(r=>server.close(r));}

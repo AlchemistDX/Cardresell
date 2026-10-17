@@ -32,7 +32,18 @@ ok((src.match(/result\.rarity, result\.foilHint\)/g) || []).length === 2, 'scan 
 ok(/data\.foil_hint === 'foil' \|\| data\.foil_hint === 'non_foil'/.test(src), 'client whitelists foil_hint');
 // Definite miss: no useless same-photo retry.
 ok(/result\.definiteMiss = true;/.test(src), 'miss marks definiteMiss');
-ok(/\(result\.photoRejected \|\| result\.definiteMiss\) \? '' :/.test(src), 'retry hidden on definite miss');
+const retryExpression = src.match(/const retryBtn = (.+);\n/)?.[1];
+ok(!!retryExpression, 'shipped retry control can be evaluated');
+for (const [result, visible, name] of [
+  [{definiteMiss:true},false,'definite miss'],
+  [{photoRejected:true},false,'rejected photo'],
+  [{providerNeedsReview:true},false,'pending provider choice'],
+  [{error:'Network disconnected'},true,'transient network failure'],
+]) {
+  const control = retryExpression ? vm.runInNewContext(retryExpression,{result,rowId:'fixture',buttonStyle:''}) : null;
+  ok(typeof control==='string' && (visible ? control.includes('bulkRetryRow') : control===''),
+    'retry visibility for '+name);
+}
 ok(src.includes('No ID credit was used. Find the card by name, or take a closer photo with its name and number readable.'), 'miss hint offers free catalogue recovery or a clearer photo');
 // A new batch never starts on the previous batch's "Done!".
 {const i=src.indexOf("'Scanning 0 of ' + total + '…'"),w=src.indexOf('async function worker()');

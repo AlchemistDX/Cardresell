@@ -3,11 +3,13 @@ import { harness } from './_assert.mjs';
 import { billingHarness, ambiguous, exact, UID, PAID_KEY, freeKey } from './_scanBillingHarness.mjs';
 import { redisCommand } from './_idRedis.mjs';
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const { ID_BILLING_SCRIPT, idBilling, idEntitlement, newIdReceipt, offerIdConfirmation, claimIdRetry, canonicalPick, candidateHash } = await import('../api/_idBilling.js');
 const { TIER_BENEFITS } = await import('./stubs/_tier.js');
 const t = harness('id-confirmation-atomic');
+const evidenceDir = mkdtempSync(join(tmpdir(), 'cardresell-confirmation-atomic-'));
 const evidence = { script_sha256: createHash('sha256').update(ID_BILLING_SCRIPT).digest('hex'),
   runtime: await redisCommand(['EVAL', 'return _VERSION', 0]), cases: [] };
 console.log('Exact production Lua SHA256:', evidence.script_sha256, evidence.runtime);
@@ -535,8 +537,13 @@ for (const after of [false, true]) {
 // User-reported managed V7: both orders reject shared references with nil and
 // accept independent equal-value structures. This local shim models that
 // behavior; it is NOT another managed run or a downloaded provider artifact.
-const beforeCopySource = execFileSync('git', ['show', '12d45c2:api/_idBilling.js'], { encoding: 'utf8' });
-const beforeCopyScript = /export const ID_BILLING_SCRIPT = `([\s\S]*?)`;/m.exec(beforeCopySource)[1];
+// Explicit negative control for the former shared-reference defect. The old
+// local-only commit name was never published and broke this gate in fresh
+// checkouts. Mutate that one assignment instead of relying on hidden history;
+// keep every financial, encoding and replay assertion below intact.
+const sharedReferenceScript = ID_BILLING_SCRIPT.replace('result.pickedCard = copy(selected)', 'result.pickedCard = selected');
+t.check('shared-reference negative control changes exactly the copy assignment',
+  sharedReferenceScript !== ID_BILLING_SCRIPT && (ID_BILLING_SCRIPT.match(/result\.pickedCard = copy\(selected\)/g) || []).length === 1);
 const referenceSensitive = `
 local native=cjson
 local function repeated(v,seen)
@@ -554,7 +561,7 @@ local cjson={decode=native.decode,encode=function(v)
 end}
 `;
 const copyEvidence = [];
-for (const bucket of ['free', 'paid']) for (const variant of ['original', 'shallow', 'recursive', 'native']) {
+for (const bucket of ['free', 'paid']) for (const variant of ['shared-reference', 'shallow', 'recursive', 'native']) {
   const h = billingHarness({ bucket, balance: 4 });
   try {
     const context = { receipt: newIdReceipt(), owner: UID, scan: `synthetic-copy-${bucket}-${variant}`,
@@ -577,7 +584,7 @@ for (const bucket of ['free', 'paid']) for (const variant of ['original', 'shall
         const args = JSON.parse(init.body);
         if (args[0] === 'EVAL' && args[2] === 3 && args[6] === 'accept') {
           acceptCalls++;
-          const script = variant === 'original' ? beforeCopyScript
+          const script = variant === 'shared-reference' ? sharedReferenceScript
             : variant === 'shallow' ? ID_BILLING_SCRIPT.replace('out[k]=copy(x)', 'out[k]=x') : ID_BILLING_SCRIPT;
           args[1] = (variant === 'native' ? '' : referenceSensitive) + script;
           return savedFetch(url, { ...init, body: JSON.stringify(args) });
@@ -589,7 +596,7 @@ for (const bucket of ['free', 'paid']) for (const variant of ['original', 'shall
       candidate: candidateHash(cards[1]) });
     let result, error;
     try { result = await accept(); } catch (e) { error = e.code; }
-    const rejected = ['original', 'shallow'].includes(variant);
+    const rejected = ['shared-reference', 'shallow'].includes(variant);
     if (rejected) {
       t.check(`${bucket}/${variant}:reference-sensitive encoder fails actual acceptance before financial write`,
         error === 'billing_unavailable' && !result && h.store.get(key) === pendingBytes
@@ -614,9 +621,9 @@ for (const bucket of ['free', 'paid']) for (const variant of ['original', 'shall
       pendingPreservedOnFailure: rejected ? h.store.get(key) === pendingBytes : null });
   } finally { h.restore(); }
 }
-writeFileSync('/home/user/workspace/billing_release_structural_copy_regression_20260917.json',
+writeFileSync(join(evidenceDir, 'structural-copy-regression.json'),
   JSON.stringify({ scope: 'LOCAL actual production modules/Lua plus explicit reference-sensitive encoder fault injection',
-    originalScriptSha256: createHash('sha256').update(beforeCopyScript).digest('hex'),
+    sharedReferenceMutationSha256: createHash('sha256').update(sharedReferenceScript).digest('hex'),
     repairedScriptSha256: evidence.script_sha256, cases: copyEvidence }, null, 2));
 
 // Fault injection at the serializer boundary, not a claim about the provider's
@@ -689,7 +696,7 @@ for (const bucket of ['free', 'paid']) for (const fault of [
       && h.store.get(freeKey()) === free && h.store.get(PAID_KEY) === paid);
   } finally { h.restore(); }
 }
-writeFileSync('/home/user/workspace/billing_release_atomic_test_evidence_20260917.json', JSON.stringify(evidence, null, 2));
+writeFileSync(join(evidenceDir, 'atomic-test-evidence.json'), JSON.stringify(evidence, null, 2));
 for (const operation of ['debit', 'refund', 'accept', 'replay']) {
   const h = billingHarness();
   try {
