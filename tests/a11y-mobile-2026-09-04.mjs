@@ -200,7 +200,13 @@ ok('the pricing title carries the id its dialog points at',
   }
   ok('the registry closes pricing via its real closer', /pricingOverlay:\s*\(\) => closePricingModal\(\)/.test(nc));
   ok('the registry closes the scanner via its real closer', /scanOverlay:\s*\(\) => cancelScan\(\)/.test(nc));
-  ok('the registry closes bulk scan via its real closer', /bulkScanOverlay:\s*\(\) => closeBulkScan\(\)/.test(nc));
+  const bulkCloseExpression=nc.match(/bulkScanOverlay:\s*\(\)\s*=>\s*([^\n]+),/)[1];
+  const runBulkClose=new Function('window','closeBulkScan','return ('+bulkCloseExpression+');');
+  let keptBatch=0,discardedBatch=0;
+  runBulkClose({CardResellBulkWorkflow:{close(){keptBatch++;}}},()=>discardedBatch++);
+  ok('the registry uses the recoverable bulk closer when loaded',keptBatch===1&&discardedBatch===0);
+  runBulkClose({},()=>discardedBatch++);
+  ok('the registry retains the original closer as its loading fallback',discardedBatch===1);
   ok('the registry closes bulk grade via its real closer', /bulkGradeOverlay:\s*\(\) => closeBulkGrade\(\)/.test(nc));
   // Every registered closer must be a real function.
   for (const fn of ['closePricingModal', 'cancelScan', 'closeBulkScan', 'closeBulkGrade']) {

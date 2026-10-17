@@ -37,10 +37,10 @@
     return true;
   }
   function guardSave() {
-    const row = (window._bulkResults || []).find(r => r?.providerNeedsReview);
-    if (!row) return false;
-    window.showToast?.('Review the remaining matches, or remove those cards, before saving this batch.');
-    document.getElementById(row.rowId)?.scrollIntoView({ block:'center', behavior:'smooth' });
+    // Saving acknowledged identities does not end review of the remaining rows.
+    // An in-flight or uncertain debit must settle before any handoff/save.
+    if (!(window._bulkResults || []).some(locked)) return false;
+    window.showToast?.('Finish checking your selected match before saving.');
     return true;
   }
   function node(tag, text, parent, attrs = {}) {
