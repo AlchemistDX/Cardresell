@@ -37,12 +37,15 @@
   if(add){add.parentElement.style.display=toSave||_bulkDraftSelectable().length?'flex':'none';add.textContent=toSave?'Save '+toSave+' identified card'+(toSave===1?'':'s'):already?'Identified cards saved':'No identified cards yet';add.disabled=working||!toSave;add.style.opacity=add.disabled?'.5':'1';}
   let next=document.getElementById('bulkReviewNextBtn');
   if(unresolved.length){
-   const match=unresolved.find(r=>r.providerNeedsReview),r=match||unresolved[0];
-   next=button('bulkReviewNextBtn',match?'Review next match':'Find an unidentified card',()=>{
-    if(busy())return;
+   const match=unresolved.find(r=>r.providerNeedsReview);
+   const lookup=!match&&window.CardResellBulkLookup&&unresolved.find(r=>(r.definiteMiss||r.photoRejected)&&!r._rescanning&&!r._photoChecking&&!r._replacementPhoto);
+   const r=match||lookup||unresolved[0];
+   next=button('bulkReviewNextBtn',match?'Review next match':lookup?'Find next card by name · free':'Review an unfinished card',()=>{
+    if(busy()||!current())return;
     const row=document.getElementById(r.rowId);row?.scrollIntoView({block:'center'});
     if(r.providerNeedsReview&&window.CardResellBulkMatchReview)window.CardResellBulkMatchReview.open(r.rowId);
-    if(!document.getElementById('bulkMatchDialog')){const action=row?.querySelector('button');action?.focus({preventScroll:true});}
+    else if(lookup)window.CardResellBulkLookup?.open(r.rowId);
+    if(!document.getElementById('bulkMatchDialog')&&!document.getElementById('bulkLookupDialog')){const action=row?.querySelector('button');action?.focus({preventScroll:true});}
    });
    next.style.width='100%';next.style.marginBottom='8px';next.disabled=working;
    if(!next.isConnected)bar.insertBefore(next,summary?.nextSibling||bar.firstChild);
