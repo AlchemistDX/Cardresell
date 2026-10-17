@@ -31,7 +31,7 @@
   }
   async function run(fn) {
    if(state.busy||!valid())return;state.busy=true;error.textContent='';content.inert=true;actions.querySelectorAll('button').forEach(b=>b.disabled=true);
-   try{await fn();}catch(e){if(valid())error.textContent=e.message;}finally{state.busy=false;if(valid()){content.inert=false;actions.querySelectorAll('button').forEach(b=>b.disabled=false);}}
+   try{await fn();}catch(e){if(valid()){error.textContent=e.message;status.textContent=state.data?'Showing the last loaded status. Reload to check for changes.':(draftId?'Saved status could not be loaded. Retry, or view all saved operations to find an existing plan.':'Saved operations could not be loaded. Use Reload saved status to try again.');}}finally{state.busy=false;if(valid()){content.inert=false;actions.querySelectorAll('button').forEach(b=>b.disabled=false);}}
   }
   function confirmation(host,text,label,fn) {
    const wrap=el('div'),row=el('label'),input=el('input');input.type='checkbox';row.append(input,el('span',text));
@@ -40,9 +40,16 @@
   async function act(record,action) {
    await request('/api/ebay-listing-operations',{action,id:record.id,expectedRev:record.rev,confirmed:true});await load();
   }
+  function navigation() {
+   actions.replaceChildren(button('Reload saved status',()=>run(load)));
+   if(draftId)actions.append(button('View all saved operations',()=>{
+    if(state.busy||!valid())return;
+    dialog.close();open();
+   }));
+  }
   async function load() {
    const data=await request('/api/ebay-listing-operations'+(draftId?'?draftId='+encodeURIComponent(draftId):''));state.data=data;
-   content.replaceChildren();actions.replaceChildren(button('Reload saved status',()=>run(load)));
+   content.replaceChildren();navigation();
    status.textContent=data.notice;
    if(!data.records.length)content.append(el('p',draftId?'No saved eBay listing plan for this copy.':'No saved eBay listing operations. Open a draft, check direct eBay readiness, then save its listing plan when the checks pass.'));
    for(const r of data.records) {
@@ -71,7 +78,7 @@
     } else content.append(button('Review eBay requirements',()=>{dialog.close();window.CardResellEbayListingReview?.open(draftId);}));
    }
   }
-  actions.append(button('Reload saved status',()=>run(load)));await run(load);
+  navigation();await run(load);
  }
  window.CardResellEbayListingOperations={open};
 })();
