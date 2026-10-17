@@ -78,10 +78,17 @@ for (const width of [320,390,1280]) {
 
  check(width+' estimate persists without confirmation',await page.evaluate(()=>_scanFinishFields(window._bulkResults[0]).finishKey),'normal');
  const savedBase=await page.evaluate(()=>{
+   // This persistence check used to reuse the saved row as an editable scan.
+   // Saved rows now hand edits to Collection. Restore a separate unsaved
+   // fixture for the independent finish-menu checks below.
+   const unsaved=_bulkResults.map(r=>({...r,copyUids:r.copyUids?.slice()}));
    _bulkSaveToCollection(window._bulkResults,{0:0});
-   const saved=loadPortData()[0];savePortData([]);
-   return {basis:saved.finishBasis,confirmed:saved.finishConfirmed,value:saved.currentValue};
+   const saved=loadPortData()[0],editable=!!document.querySelector('#bulk-row-0 .scan-finish-chip');
+   savePortData([]);_bulkResults=unsaved;_bulkSaved=false;
+   _bulkResetBottomBarButtons();_bulkResults.forEach(r=>_bulkUpdateRow(r.rowId,r));
+   return {basis:saved.finishBasis,confirmed:saved.finishConfirmed,value:saved.currentValue,editable};
  });
+ check(width+' saved card edits move to Collection',savedBase.editable,false);
  check(width+' Collection preserves base assumption',savedBase.basis,'base_printing');
  check(width+' Collection does not turn base into confirmation',savedBase.confirmed,false);
  check(width+' Collection preserves base price',savedBase.value,3);

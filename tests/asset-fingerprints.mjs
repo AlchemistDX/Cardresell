@@ -53,7 +53,7 @@ if (assets.length > 0) {
         'a duplicated reference means the same bundle is loaded twice');
 }
 
-for (const name of ['collection-import','collection-export','ebay-connect', 'ebay-listing-review','ebay-listing-operations','collection-drafts','draft-batch','bulk-lookup','bulk-match-review','binder']) {
+for (const name of ['collection-import','collection-export','ebay-connect', 'ebay-listing-review','ebay-listing-operations','collection-drafts','draft-batch','bulk-lookup','bulk-match-review','bulk-workflow','binder']) {
   const matches=assets.filter(a=>a.base===name&&a.ext==='js');
   check(`${name} is loaded by the real entry document`,matches.length===1);
   if(matches.length===1) {
