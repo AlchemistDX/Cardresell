@@ -32,6 +32,8 @@ try {
   await dialog.getByRole('button',{name:'Confirm eBay connection',exact:true}).click();await dialog.getByRole('button',{name:'Check seller setup',exact:true}).waitFor();
   await dialog.getByRole('button',{name:'Check seller setup',exact:true}).click();await dialog.locator('dl').waitFor();
   check((await dialog.locator('dd').allTextContents()).join('|')==='Complete|2|Could not check|0|1','partial checks distinguish unknown from missing');
+  check((await dialog.getByRole('status').textContent()).includes('account is connected'),'partial setup cannot look like failed authorization');
+  check((await dialog.getByRole('link',{name:'Open eBay Business Policies'}).getAttribute('href')).startsWith('https://www.ebay.com/help/'),'policy setup has an official recovery path');
   check(await dialog.evaluate(d=>d.scrollWidth<=d.clientWidth+1&&d.getBoundingClientRect().width<=innerWidth),'seller dialog fits '+width+'px');
   check(await dialog.evaluate(d=>Math.abs(d.getBoundingClientRect().left-(innerWidth-d.getBoundingClientRect().width)/2)<2),'seller dialog stays centered at '+width+'px');
   await dialog.getByRole('button',{name:'Disconnect eBay',exact:true}).click();check(await page.evaluate(()=>connected),'disconnect awaits explicit confirmation');

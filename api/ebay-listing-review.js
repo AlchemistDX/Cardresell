@@ -44,7 +44,7 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
    const available=Boolean(cfg)&&(!pilot.length||pilot.includes(uid)),connected=available&&!!connection;
    const accountChanged=Boolean(saved?.accountHash && saved.accountHash!==connection?.accountHash);
    if(req.method==='GET')return res.status(200).json({draftId:id,draftRev:read.draft.rev,available,connected,connectionVersion:connection?.version||null,publishingEnabled:false,
-     baseline:buildSubmissionReview({read,owner:uid,environment}),
+     baseline:buildSubmissionReview({read,owner:uid,environment,connected}),
      suggestedAspects:{...(read.packet?.aspects?.required||{}),...(read.packet?.aspects?.optional||{})},conditionIntent:read.packet?.condition?.descriptors||[],
      saved:accountChanged?null:saved,accountChanged,
      stale:!!saved&&(accountChanged||saved.connectionVersion!==(connection?.version||null)||saved.report.draftRev!==read.draft.rev||saved.report.expiresAt<=Date.now()),
@@ -67,7 +67,7 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
    const selected=selections(body.selected);
    const host=photoHost===undefined?resolvePhotoProvider(env,fetcher).host:photoHost;
    const photos=await reviewedPhotos({owner:uid,draftId:id,selected,photos:body.photos||[],host});
-   const report=buildSubmissionReview({read,owner:uid,environment,selected,reference,...photos});
+   const report=buildSubmissionReview({read,owner:uid,environment,connected,selected,reference,...photos});
    const record={version:1,rev:(saved?.rev||0)+1,accountHash:session?.record.accountHash||null,connectionVersion:session?.record.version||null,report};
    // No marketplace write is performed. This durable checkpoint is an
    // expiring review, never an approved operation or a published listing.

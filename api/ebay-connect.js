@@ -1,5 +1,6 @@
 import {verifyTokenFlexible} from './_verifyToken.js';
 import {kvFromEnv} from './_kv.js';
+import {sellerSetupIssue} from './_ebaySetup.js';
 import {config,hash,random,keys,seal,unseal,parseRecord,cookie,cookieHeader,STATE_COOKIE,PENDING_COOKIE,SCOPES,limited,mint,ebayJson,scripts,access} from './_ebaySeller.js';
 
 const safeText=v=>typeof v==='string'&&v.length<=200&&!/[\x00-\x1f]/.test(v)?v:'';
@@ -99,7 +100,9 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
     const report={sellerRegistered:typeof values[0]?.sellerRegistrationCompleted==='boolean'?values[0].sellerRegistrationCompleted:null,
       fulfillmentPolicies:count(1,'fulfillmentPolicies'),paymentPolicies:count(2,'paymentPolicies'),returnPolicies:count(3,'returnPolicies'),
       inventoryLocations:Array.isArray(values[4]?.locations)?values[4].locations.filter(l=>l.merchantLocationStatus==='ENABLED').length:null};
-    return res.status(200).json({marketplace:'EBAY_US',checkedAt:Date.now(),publishingEnabled:false,...report,partial:Object.values(report).some(v=>v===null),reconnectRequired:results.some(r=>r.status==='rejected'&&r.reason?.status===409)});
+    const checks=['registration','fulfillment','payment','return','location'];
+    const issues=Object.values(report).flatMap((value,i)=>value===null?[sellerSetupIssue(checks[i],results[i].reason)]:[]);
+    return res.status(200).json({marketplace:'EBAY_US',checkedAt:Date.now(),publishingEnabled:false,...report,issues,partial:issues.length>0,reconnectRequired:results.some(r=>r.status==='rejected'&&r.reason?.status===409)});
    }
    return res.status(400).json({error:'Unknown connection action'});
   } catch(error) {

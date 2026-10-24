@@ -84,7 +84,15 @@
         details.replaceChildren();const list=el('dl');
         const rows=[['Seller registration',report.sellerRegistered===true?'Complete':report.sellerRegistered===false?'Incomplete':'Could not check'],['Shipping policies',report.fulfillmentPolicies],['Payment policies',report.paymentPolicies],['Return policies',report.returnPolicies],['Enabled inventory locations',report.inventoryLocations]];
         rows.forEach(([label,value])=>list.append(el('dt',label),el('dd',value===null?'Could not check':String(value))));details.append(list);
-        status.textContent=report.reconnectRequired?'eBay authorization expired or was revoked. Use Reconnect eBay to authorize again.':report.partial?'Some eBay checks were unavailable. Retry to confirm the remaining items.':'Seller setup checked for eBay US.';
+        status.textContent=report.reconnectRequired?'eBay authorization expired or was revoked. Use Reconnect eBay to authorize again.':report.partial?'Your eBay account is connected. Some seller settings could not be checked; see the details below.':'Seller setup checked for eBay US.';
+        for(const issue of report.issues||[]) {
+          const codes=[Number.isInteger(issue.providerStatus)?'HTTP '+issue.providerStatus:'',Number.isInteger(issue.providerErrorId)?'eBay code '+issue.providerErrorId:''].filter(Boolean);
+          details.append(el('p',issue.message+(codes.length?' ('+codes.join(' · ')+')':'')));
+        }
+        if(['fulfillmentPolicies','paymentPolicies','returnPolicies'].some(key=>report[key]===null||report[key]===0)) {
+          const help=el('p','Review your shipping, payment and return policies in eBay. Business Policies enrollment may be required. '),link=el('a','Open eBay Business Policies');link.href='https://www.ebay.com/help/selling/business-policies/business-policies?id=4212';link.target='_blank';link.rel='noopener noreferrer';help.append(link);details.append(help);
+        }
+        if(report.inventoryLocations===0)details.append(el('p','No enabled inventory location was found. Direct listing preparation needs an eBay inventory location with a complete dispatch address.'));
         details.append(el('p','These checks describe account setup only. Each draft still needs reviewed card details, photos, price, and selling terms before it can be listed.'));
       })),button('Disconnect eBay',disconnect));
     }

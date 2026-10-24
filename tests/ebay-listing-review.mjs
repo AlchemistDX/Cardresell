@@ -21,6 +21,7 @@ check(r.sku!==draft.sku&&r.sku===copySku('production',uid,draft.instanceId),'mar
 check(r.sku!==copySku('production','other',draft.instanceId)&&r.sku!==copySku('sandbox',uid,draft.instanceId)&&r.sku!==copySku('production',uid,'another-copy'),'owner/environment/copy isolation');
 check(r.payload.offer.includeCatalogProductDetails===false,'catalogue details cannot overwrite reviewed card');
 check(!build({reference:null}).payload,'absent live metadata yields no submission payload');
+check(build({reference:null,connected:true}).issues.some(i=>i.code==='REQUIREMENTS_PENDING')&&!build({reference:null,connected:true}).issues.some(i=>i.code==='CONNECTION'),'connected account needs requirements, not a second connection');
 check(!build({selected:{...selected,detailsConfirmed:false}}).payload&&!build({selected:{...selected,copyAvailable:false}}).payload,'both explicit confirmations required');
 check(!build({read:{...read,packetUsable:false}}).payload,'stale packet cannot submit');
 check(!build({read:{...read,draft:{...draft,quantity:2}}}).payload,'multiple physical copies cannot share a direct offer');
@@ -72,7 +73,7 @@ const live=await listingReference(cfg,'SELLER','183454','4000',fetcher);check(li
 await listingReference(cfg,'SELLER','183454','4000',fetcher);check(calls.filter(c=>c.url.endsWith('/identity/v1/oauth2/token')).length===1,'warm checks reuse the app token while re-reading live rules');
 const beforeSandbox=calls.length;await listingReference({...cfg,environment:'sandbox',api:'https://api.sandbox.ebay.com'},'SELLER','183454','4000',fetcher);check(calls.slice(beforeSandbox).every(c=>c.url.startsWith('https://api.sandbox.ebay.com/'))&&calls.filter(c=>c.url.endsWith('/identity/v1/oauth2/token')).length===2,'sandbox metadata and app-token cache cannot reuse Production');
 check(calls.every(c=>!c.opts.method||c.url.endsWith('/identity/v1/oauth2/token')),'no listing mutations while checking metadata');
-await assert.rejects(()=>listingReference(cfg,'SELLER','183454','4000',async(u,o)=>String(u).includes('/return_policy')?new Response('',{status:503}):fetcher(u,o)));checks++;
+await assert.rejects(()=>listingReference(cfg,'SELLER','183454','4000',async(u,o)=>String(u).includes('/return_policy')?new Response('',{status:503}):fetcher(u,o)),e=>e.status===502&&e.message.includes('Business Policies'));checks++;
 let lastKey='';r=await reviewedPhotos({owner:uid,draftId:draft.draftId,selected,photos:[{...photo,objectKey:'another-owner/key',publicUrl:'http://127.0.0.1/secret'}],host:{...photoHost,head:async key=>{lastKey=key;return {exists:true,byteLength:2000,contentType:'image/jpeg'};}}});
 check(r.photos.length===1&&lastKey.startsWith('owner-'+uid+'/'+draft.draftId),'photo key recomputed from verified owner, never browser URL');
 check((await reviewedPhotos({owner:uid,draftId:draft.draftId,selected,photos:[photo],host:null})).photos.length===0,'unconfigured hosting blocks direct photos');
@@ -90,6 +91,7 @@ async function call({method='GET',who=uid,body={},handler=h,origin=env.EBAY_SELL
  await handler({method,headers:{...(who?{authorization:'Bearer '+who}:{}),origin},query:{id:draft.draftId},body:{draftId:draft.draftId,expectedDraftRev:1,expectedReviewRev:0,requirementsFingerprint:hash(JSON.stringify(reference)),selected,photos:[photo],...body}},res);return res;
 }
 check((await call({who:null})).code===401,'unsigned review refused');
+r=await call();check(r.data.connected&&r.data.baseline.issues.some(i=>i.code==='REQUIREMENTS_PENDING')&&!r.data.baseline.issues.some(i=>i.code==='CONNECTION'),'connected GET baseline names the pending requirements step');
 check((await call({who:'other-owner'})).code===404,'other owner cannot read draft review');
 check((await call({method:'DELETE'})).code===405,'no destructive verb supported');
 check((await call({method:'POST',origin:'https://other.example'})).code===403,'cross-origin checkpoint refused');
