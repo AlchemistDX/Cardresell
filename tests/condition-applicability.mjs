@@ -6,7 +6,7 @@
 import { completionGuard } from './_complete.mjs';
 const { finish: _finish } = completionGuard('condition-applicability');
 
-const PW = process.env.PLAYWRIGHT_PATH || '/home/user/node_modules/playwright/index.js';
+const PW = process.env.PLAYWRIGHT_PATH || 'playwright';
 const _pw = (await import(PW)).default;
 const { chromium } = _pw;
 
@@ -16,11 +16,23 @@ const check = (label, cond) => {
   else { fail++; console.log('  FAIL ' + label); }
 };
 
-const browser = await chromium.launch();
+const {createServer} = await import('node:http');
+const {readFileSync,existsSync} = await import('node:fs');
+const {resolve,extname} = await import('node:path');
+const {ROOT} = await import('./_assetRefs.mjs');
+const server=createServer((req,res)=>{
+  const path=resolve(ROOT,'.'+new URL(req.url,'http://local').pathname);
+  if(!path.startsWith(ROOT+'/')||!existsSync(path)){res.statusCode=404;return res.end();}
+  res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css'})[extname(path)]||'application/octet-stream');res.end(readFileSync(path));
+});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const browser = await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
 const page = await browser.newPage();
 const errs = [];
 page.on('pageerror', e => errs.push(String(e)));
-const BASE = process.env.SITE_BASE || 'http://127.0.0.1:8097';
+const BASE = 'http://127.0.0.1:'+server.address().port;
+await page.route('**/*',r=>!r.request().url().startsWith(BASE)||r.request().url().includes('/api/')?r.fulfill({status:204,body:''}):r.continue());
+await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
 await page.goto(BASE + '/index.html', { waitUntil: 'load' });
 await page.waitForTimeout(1200);
 
@@ -119,6 +131,5 @@ if (errs.length) console.log('       errors: ' + errs.join(' | '));
 
 console.log(`\ncondition-applicability: ${pass} passed, ${fail} failed`);
 await browser.close();
-_finish(pass, fail);
-
+await new Promise(r=>server.close(r));
 _finish(pass, fail);

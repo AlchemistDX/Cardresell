@@ -375,9 +375,13 @@ assert('calc() zeroes TCGplayer postage on Direct levels',
 
 // Low-value Direct rule: 50% of sale price at or below $2.49.
 eq('Direct per-item fee is 50% at $2.00',
-   sum(feeTCGPlayer(2, 0, 'direct')), 2 * 0.0895 + 2 * 0.025 + 1.00);
+   sum(feeTCGPlayer(2, 0, 'direct')), 1.00);
 assert('Direct per-item fee is flat $1.12 above $2.49',
   feeTCGPlayer(3, 0, 'direct').some(f => f.f === '$1.12'));
+
+eq('Direct+Pro low-value boundary omits every other fee',sum(feeTCGPlayer(2.49,5,'directpro')),1.245);
+eq('Direct high-value quote ignores buyer shipping',sum(feeTCGPlayer(100,5,'direct')),8.95+2.5+1.12);
+eq('Marketplace shipping commission remains outside the item cap',sum(feeTCGPlayer(1000,10,'l14')),75+1.075+25.25+.30);
 
 // The $75 cap covers commission AND Pro fee combined, not commission alone.
 eq('Pro cap applies to commission + Pro fee combined',
