@@ -158,8 +158,8 @@ check('JP EN-ref ebay/PC/sell all use jpRefNum',             INDEX.includes("con
 check('Graded comps banner ebay query includes number',      INDEX.includes("${cardName}${cardNum} ${graderLabel} ${grade} pokemon card"));
 
 console.log('\n[Raw price restoration + faster card display 2026-08-13]');
-check('Raw median cached on eBay-sold fetch',                INDEX.includes('window._rawMedianCache = window._rawMedianCache || {}'));
-check('Raw click restores cached eBay median',               INDEX.includes('const cachedMedian = window._rawMedianCache[cardKey]'));
+check('Card-wide raw median cache cannot override a selected printing', !INDEX.includes('window._rawMedianCache = window._rawMedianCache || {}'));
+check('Raw click restores the remembered printing', INDEX.includes('o.value === window._crRawSelection?.key')); // behavior covered in selling-selection-browser.mjs
 check('Small image loads first, upgrades to large in bg',    INDEX.includes('progressive loading: show small'));
 check('Image gets fetchPriority=high + eager loading',       INDEX.includes("cardImg.fetchPriority = 'high'; cardImg.loading = 'eager'"));
 check('Preconnect to pokemontcg.io image CDN',               INDEX.includes('href="https://images.pokemontcg.io"'));

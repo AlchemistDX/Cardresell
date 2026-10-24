@@ -166,9 +166,14 @@ function scoreConfidence({ count, prices, med, outliersRemoved, tcgMarket }) {
 
 function forRequest(cached, tcgMarket) {
   const { _prices, ...data } = cached;
-  return Array.isArray(_prices) && _prices.length ? { ...data,
-    ...scoreConfidence({ count: data.count, prices: _prices, med: data.median,
-      outliersRemoved: data.outliersRemoved, tcgMarket }) } : data;
+  if (!Array.isArray(_prices) || !_prices.length) return data;
+  const score = scoreConfidence({count:data.count,prices:_prices,med:data.median,outliersRemoved:data.outliersRemoved,tcgMarket});
+  if (data.matchReviewRequired) {
+    score.confidenceScore = Math.min(Math.max(0,score.confidenceScore - 20),74);
+    if (score.confidence === 'high') score.confidence = 'medium';
+    score.confidenceReasons.push('Verify exact printing and condition');
+  }
+  return {...data,...score};
 }
 
 // ── Filters ─────────────────────────────────────────────────────────────
@@ -179,7 +184,7 @@ const PROMO_PATTERNS = [
 ];
 
 const GRADE_PATTERNS = {
-  raw:   /\b(psa|bgs|cgc|sgc|ace|hga|gma)[\s-]*(gem|black|pristine|mint)?[\s-]*\d/i, // presence of any grader = NOT raw
+  raw:   /\b(psa|bgs|cgc|sgc|ace|hga|gma|tag)[\s-]*(gem|black|pristine|mint)?[\s-]*\d/i, // presence of any grader = NOT raw
 };
 
 // Word-boundary grade match. "PSA 10" requires the title to contain literal "PSA 10",
@@ -188,7 +193,7 @@ function makeGradeMatcher(gradeStr) {
   if (!gradeStr) return null;
   const s = String(gradeStr).trim().toLowerCase();
   // Extract grader + number
-  const m = s.match(/^(psa|bgs|cgc|sgc|ace|hga|gma)\s*(\d+(?:\.\d+)?)$/);
+  const m = s.match(/^(psa|bgs|cgc|sgc|ace|hga|gma|tag)\s*(\d+(?:\.\d+)?)$/);
   if (!m) return null;
   const grader = m[1];
   const num = m[2];
@@ -201,6 +206,46 @@ function stripPromoTitle(title) {
   return PROMO_PATTERNS.some(p => p.test(title));
 }
 
+// A retrieval timestamp is not a sale date. Only explicit, valid sold dates
+// enter the recent-sale sample. Never infer a date from ranking or cache age.
+export function parseSoldDate(text, now = Date.now()) {
+  const m = String(text).match(/\bSold\s+([A-Z][a-z]{2,8})\.?\s+(\d{1,2}),?\s+(\d{4})\b/i);
+  if (!m) return null;
+  const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  const month = months.indexOf(m[1].slice(0,3).toLowerCase());
+  const day = Number(m[2]), year = Number(m[3]);
+  const stamp = Date.UTC(year, month, day), date = new Date(stamp);
+  if (month < 0 || date.getUTCMonth() !== month || date.getUTCDate() !== day || date.getUTCFullYear() !== year
+      || stamp > now || year < 2000) return null;
+  return date.toISOString().slice(0,10);
+}
+
+export function recentSoldItems(html, {days = 30, now = Date.now()} = {}) {
+  const blocks = html.split(/<li[^>]*class="[^"]*\bs-item\b[^"]*"[^>]*>/i).slice(1);
+  const seen = new Set(), items = [];
+  const plain = value => value.replace(/<[^>]*>/g,' ').replace(/&amp;/g,'&').replace(/&nbsp;|&#160;/g,' ').replace(/\s+/g,' ').trim();
+  for (const rawBlock of blocks) {
+    const block = rawBlock.split(/<\/li>/i)[0];
+    const text = plain(block);
+    const soldDate = parseSoldDate(text, now);
+    if (!soldDate || now - Date.parse(soldDate) > days * 86400000) continue;
+    // Accepted offers often display the original ask, not the amount paid.
+    if (/best offer accepted|accepted offer|original price|approximately|C \$|AU \$|CAD|AUD|GBP|EUR|£|€/i.test(text)) continue;
+    const title = plain(block.match(/class="s-item__title"[^>]*>([\s\S]*?)<\/(?:span|h3|div)>/i)?.[1] || '');
+    if (!title || stripPromoTitle(title) || /\b(lot|bundle|proxy|replica|reprint|digital|custom|pack|booster)\b/i.test(title)) continue;
+    const priceText = plain(block.match(/class="s-item__price"[^>]*>([\s\S]*?)<\/span>/i)?.[1] || '');
+    if (!/^(?:US\s*)?\$[\d,]+(?:\.\d{2})?$/.test(priceText)) continue;
+    const price = Number(priceText.replace(/[^\d.]/g,''));
+    if (!Number.isFinite(price) || price <= 0) continue;
+    const url = block.match(/href="(https:\/\/www\.ebay\.com\/itm\/[^"?]+)/i)?.[1];
+    const itemId = url?.match(/\/(\d+)(?:\/|$)/)?.[1];
+    if (!itemId || seen.has(itemId)) continue;
+    seen.add(itemId);
+    items.push({title,price,url,itemId,soldDate,currency:'USD',shippingIncluded:false});
+  }
+  return items.sort((a,b)=>b.soldDate.localeCompare(a.soldDate));
+}
+
 // ── Main handler ────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -210,11 +255,14 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
   const query = req.query || {};
-  if (['q', 'grade', 'limit', 'tcgMarket'].some(key => query[key] != null && typeof query[key] !== 'string')) {
+  if (['q', 'grade', 'limit', 'tcgMarket', 'game', 'days'].some(key => query[key] != null && typeof query[key] !== 'string')) {
     return res.status(400).json({ error: 'Query parameters must be single values' });
   }
   const q = (query.q || '').trim();
   const grade = (query.grade || '').trim();
+  const days = query.days == null ? 30 : Number(query.days);
+  if (![7,30,90].includes(days) || (grade && !makeGradeMatcher(grade))) return res.status(400).json({error:'Use 7, 30 or 90 days and a complete grader/grade such as PSA 10'});
+  const category = query.game === 'sports' ? '261328' : ['pokemon','pokemonjp','pokemon_jp','mtg','yugioh','lorcana','onepiece'].includes(query.game) ? '183454' : '0';
   const parsedLimit = Number.parseInt(query.limit, 10);
   const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(parsedLimit, 50)) : 15;
   const market = Number(query.tcgMarket);
@@ -225,7 +273,7 @@ export default async function handler(req, res) {
   const keywords = grade ? `${q} ${grade}` : q;
   // Separate grade filtering from keywords. Confidence is recalculated using
   // this request's comparison price, so raw comps remain reusable across prices.
-  const cacheKey = `v5|${JSON.stringify([q.toLowerCase(), grade.toLowerCase(), limit])}`;
+  const cacheKey = `v6|${JSON.stringify([q.toLowerCase(), grade.toLowerCase(), limit, category, days])}`;
 
   const kvUrl   = process.env.KV_REST_API_URL;
   const kvToken = process.env.KV_REST_API_TOKEN;
@@ -238,7 +286,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(keywords)}&LH_Complete=1&LH_Sold=1&LH_BIN=1&_sacat=2536`;
+  const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(keywords)}&LH_Complete=1&LH_Sold=1&_sacat=${category}&_sop=13`;
   const fetchedAt = new Date(Date.now()).toISOString();
 
   const emptyResp = (extra = {}) => ({
@@ -246,6 +294,7 @@ export default async function handler(req, res) {
     trueLow: null, trueHigh: null, outliersRemoved: 0,
     confidence: 'insufficient', confidenceScore: 0, confidenceReasons: ['no comps found'],
     fetchedAt, cacheAgeSec: 0, items: [], searchUrl: ebaySearchUrl,
+    windowDays:days, matchReviewRequired:true, shippingIncluded:false,
     ...extra,
   });
 
@@ -259,7 +308,7 @@ export default async function handler(req, res) {
   if (cooldownUntil > Date.now()) return res.status(200).json(unavailable());
 
   try {
-    const searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(keywords)}&LH_Complete=1&LH_Sold=1&LH_BIN=1&_sacat=2536&_ipg=${limit}`;
+    const searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(keywords)}&LH_Complete=1&LH_Sold=1&_sacat=${category}&_sop=13&_ipg=${limit}`;
 
     // Identify the service honestly. A denied request pauses future lookups;
     // it must not trigger attempts to evade the provider's access controls.
@@ -290,30 +339,15 @@ export default async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    const rawItems = [];
-    for (const block of blocks) {
-      const priceM = block.match(/class="s-item__price"[^>]*>[^<$]*\$?([\d,]+\.?\d*)/);
-      if (!priceM) continue;
-      const price = parseFloat(priceM[1].replace(/,/g, ''));
-      if (!(price > 0.5 && price < 50000)) continue;
-
-      const titleM = block.match(/class="s-item__title"[^>]*>(?:<span[^>]*>NEW LISTING<\/span>)?\s*([^<]{5,200})/);
-      const title  = titleM ? titleM[1].replace(/&amp;/g, '&').trim() : '';
-      if (!title) continue;
-      if (stripPromoTitle(title)) continue;
-
-      // Watch for eBay's "$8.50 to $12.99" ranges — parsePrice grabbed only the first, which is fine,
-      // but drop any listing whose block also contains " to $" near the price (auction range = untrustworthy).
-      if (/\$[\d.,]+\s+to\s+\$[\d.,]+/i.test(block.slice(0, 400))) continue;
-
-      const urlM = block.match(/href="(https:\/\/www\.ebay\.com\/itm\/[^"?]+)/);
-      const url  = urlM ? urlM[1] : ebaySearchUrl;
-
-      rawItems.push({ title, price, url });
-    }
-
+    const rawItems = recentSoldItems(html, {days});
+    // Some search results may be dated but unsuitable; zero usable candidates
+    // does not prove that this card has no recent sales.
     if (!rawItems.length) {
-      throw new Error('upstream_response_unreadable');
+      const data = emptyResp({available:false,reason:'no_verifiable_recent_sales',
+        confidenceReasons:['No verifiable recent sale prices in the returned listings']});
+      if (!blocks.length || !/s-item__price/.test(html)) throw new Error('upstream_response_unreadable');
+      await setCache(kvUrl, kvToken, cacheKey, data);
+      return res.status(200).json(data);
     }
 
     // Grade filtering: word-boundary match
@@ -359,15 +393,9 @@ export default async function handler(req, res) {
     const { confidence, confidenceScore, confidenceReasons } =
       scoreConfidence({ count, prices: finalPrices, med, outliersRemoved, tcgMarket });
 
-    // Return the items closest to the median first (most representative comps),
-    // capped at 8 for payload size
-    const itemsWithDist = filtered
-      .filter(it => finalPrices.includes(it.price))
-      .map(it => ({ ...it, dist: Math.abs(it.price - med) }));
-    itemsWithDist.sort((a, b) => a.dist - b.dist);
-    const items = itemsWithDist.slice(0, 8).map(({ title, price, url }, i) => ({
-      title, price, currency: 'USD', url, soldDate: '', imgUrl: '', itemId: String(i),
-    }));
+    // Keep real listing IDs/dates and most recent first; never fabricate IDs
+    // or replace an unknown sale date with the time we fetched the page.
+    const items = filtered.filter(it=>finalPrices.includes(it.price)).slice(0,8);
 
     const data = {
       count,
@@ -378,7 +406,11 @@ export default async function handler(req, res) {
       high: kept.length >= 2 ? Math.round(high * 100) / 100 : trueHigh,
       trueLow, trueHigh,
       outliersRemoved,
-      confidence, confidenceScore, confidenceReasons,
+      confidence: confidence === 'high' ? 'medium' : confidence,
+      confidenceScore: Math.min(Math.max(0,confidenceScore - 20),74),
+      confidenceReasons: [...confidenceReasons,'Verify exact printing and condition'],
+      available:true, windowDays:days, matchReviewRequired:true, shippingIncluded:false,
+      oldestSoldDate:filtered.filter(it=>finalPrices.includes(it.price)).at(-1)?.soldDate || null, newestSoldDate:items[0]?.soldDate || null,
       fetchedAt, cacheAgeSec: 0,
       items, searchUrl: ebaySearchUrl, _prices: finalPrices,
     };

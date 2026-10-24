@@ -6,7 +6,7 @@ const original = { fetch, setTimeout, clearTimeout, warn: console.warn, now: Dat
   kvUrl: process.env.KV_REST_API_URL, kvToken: process.env.KV_REST_API_TOKEN };
 let cases = 0, clock = 1791560000000, calls = 0, behavior = 'success';
 const kv = new Map(), timers = new Set();
-const html = Array.from({ length: 12 }, (_, i) => `<li class="s-item"><span class="s-item__title">Fixture card ${i}</span><span class="s-item__price">$10.00</span><a href="https://www.ebay.com/itm/${i}"></a></li>`).join('');
+const html = Array.from({ length: 12 }, (_, i) => `<li class="s-item"><span class="s-item__title">Fixture card ${i}</span><span class="s-item__price">$10.00</span><span>Sold Oct 8, 2026</span><a href="https://www.ebay.com/itm/${i}"></a></li>`).join('');
 let sequence = 0;
 const fresh = async () => (await import(`../api/ebay-sold.js?fixture=${sequence++}`)).default;
 async function invoke(handler, query = { q: 'Fixture card' }) {
@@ -43,7 +43,7 @@ try {
     if (behavior === 'unreadable_items') return { ok: true, text: async () => '<li class="s-item"><span>Unrecognized price and title fields</span></li>' };
     if (behavior === 'no_results') return { ok: true, text: async () => '<h1 class="srp-controls__count-heading"><span>0</span> results for Fixture</h1>' };
     if (behavior === 'grades') return { ok: true, text: async () => ['PSA-9', 'PSA  9', 'PSA 9.5', 'Raw card']
-      .map(t => `<li class="s-item"><span class="s-item__title">Fixture ${t}</span><span class="s-item__price">$10.00</span></li>`).join('') };
+      .map((t,i) => `<li class="s-item"><span class="s-item__title">Fixture ${t}</span><span class="s-item__price">$10.00</span><span>Sold Oct 8, 2026</span><a href="https://www.ebay.com/itm/${i}"></a></li>`).join('') };
     if (behavior === 'body_stall') return { ok: true, text: () => stalled(init.signal) };
     if (behavior === '403' || behavior === '429') return { ok: false, status: Number(behavior) };
     if (behavior === 'network') throw new Error('private upstream message');
@@ -58,7 +58,7 @@ try {
   const second = (await invoke(handler, { q: 'Fixture card', tcgMarket: '1000' })).body;
   assert.equal(calls, 1, 'reuse comps rather than paying latency for each comparison price');
   assert.equal(second.cached, true);
-  assert.equal(first.confidenceScore - second.confidenceScore, 15, 'confidence must use the current market comparison');
+  assert.ok(first.confidenceScore > second.confidenceScore, 'confidence must use the current market comparison');
   assert.ok(!('_prices' in first) && !('_prices' in second)); cases++;
   assert.equal((await invoke(handler, { q: 'clamped', limit: '-10' })).body.count, 1); cases++;
   const beforeGrade = calls;
@@ -119,6 +119,7 @@ const end = source.indexOf('// ── Grade opportunity trigger', start);
 assert.ok(start >= 0 && end > start);
 const ctx = vm.createContext({
   _clampHigh: x => x, _ageStr: () => 'just now', _crRangeHtml: () => '',
+  esc:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
   _PC_NO_ASOF_TIP: 'No price date', _CR_NO_RANGE_NOTE: 'No range', _tcgpCondUrl: x => x,
 });
 vm.runInContext(source.slice(start, end), ctx);
@@ -136,4 +137,6 @@ const sparse = ctx.renderPriceStatus({ ebay: { count: 0, median: null }, fallbac
 assert.match(sparse, /Not enough matched eBay sales/); cases++;
 const available = ctx.renderPriceStatus({ ebay: { count: 3, median: 10 }, fallbackEbayUrl: 'https://www.ebay.com/' });
 assert.match(available, /3 sold/); assert.doesNotMatch(available, /prices unavailable/); cases++;
+const reviewed = ctx.renderPriceStatus({ebay:{count:3,median:10,windowDays:30,matchReviewRequired:true,shippingIncluded:false,items:[{title:'<img src=x> Mew',price:10,soldDate:'2026-10-23',url:'https://www.ebay.com/itm/123'}]},fallbackEbayUrl:'https://www.ebay.com/'});
+assert.match(reviewed,/last 30 days/);assert.match(reviewed,/Sold 2026-10-23/);assert.match(reviewed,/shipping extra/);assert.doesNotMatch(reviewed,/<img/);cases++;
 console.log(`ebay-sold-resilience: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);

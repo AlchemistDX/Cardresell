@@ -42,8 +42,9 @@ try {
   ok(r.rows >= 2, 'a pill row per rendered venue: ' + r.rows);
   ok(r.items.every(i => i.text === 'Report a fee problem' && i.href.startsWith('mailto:will@cardresell.org?subject=')), 'every row has the report link');
   const ago = d => d === 0 ? ' · today' : d === 1 ? ' · 1 day ago' : ` · ${d} days ago`;
-  for (const pid of ['tcgplayer', 'poshmark', 'fanatics', 'whatnot', 'mercari', 'manapool'])
+  for (const pid of ['poshmark', 'fanatics', 'whatnot', 'mercari', 'manapool'])
     ok(r.audited[pid] === '2026-10-11', pid + ' re-audited Oct 11');
+  ok(r.audited.tcgplayer === '2026-10-24', 'TCGplayer re-audited Oct 24');
   ok(r.audited.comc === '2026-10-14', 'COMC re-audited Oct 14');
   ok(r.audited.ebay === '2026-10-14', 'eBay re-audited Oct 14');
   for (const pid of ['cardsphere', 'cardkingdom', 'scg', 'cardnexus', 'tcgbulk'])

@@ -40,12 +40,13 @@ try {
  const overrides=await page.evaluate(()=>buildEbaySearchUrl('Mew','76/214',{game:'pokemon',category:'183454',sold:false,graded:'PSA 10'}));
  check(!new URL(overrides).searchParams.has('LH_Sold')&&new URL(overrides).searchParams.get('_nkw').includes('PSA 10'),'active and graded search options remain supported');
  await page.evaluate(()=>{
-  localStorage.setItem('cardsell_portfolio',JSON.stringify([{id:'fixture-pokemon',card:'Mew',game:'pokemon',number:'76/214',buyPrice:1,currentValue:2},{id:'fixture-sports',card:'Example player',game:'sports',buyPrice:1,currentValue:2}]));
+  localStorage.setItem('cardsell_portfolio',JSON.stringify([{id:'fixture-pokemon',card:'Mew',game:'pokemon',number:'76/214',grader:'psa',grade:'9',set:'Unbroken Bonds',buyPrice:1,currentValue:2},{id:'fixture-sports',card:'Example player',game:'sports',buyPrice:1,currentValue:2}]));
   renderCollectionView();
  });
  for(const [id,category] of [['fixture-pokemon','183454'],['fixture-sports','261328']]) {
   const link=await page.evaluate(id=>{openCollectionCardDetail(id);return document.getElementById('ccmSellBtn').href;},id);
   check(new URL(link).searchParams.get('_sacat')===category,'saved collection detail preserves '+id+' game');
+  if(id==='fixture-pokemon')check(new URL(link).searchParams.get('_nkw').includes('PSA 9')&&new URL(link).searchParams.get('_nkw').includes('Unbroken Bonds'),'saved slab retains grader, grade and set');
  }
  check(errors.length===0,'no browser errors: '+errors.join('; '));
 }finally{await browser.close();await new Promise(r=>server.close(r));}
