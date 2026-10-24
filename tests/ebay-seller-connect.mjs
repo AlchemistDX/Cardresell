@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,sign} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {createHandler} from '../api/ebay-connect.js';
-import {config,keys,hash,seal,unseal,STATE_COOKIE,PENDING_COOKIE} from '../api/_ebaySeller.js';
+import {config,keys,hash,seal,unseal,STATE_COOKIE,PENDING_COOKIE,scripts} from '../api/_ebaySeller.js';
 import {verifyNotification,readNotificationBody,deleteSellerData} from '../api/_ebayDeletion.js';
 import notificationHandler from '../api/ebay-notifications.js';
 import {redisCommand,redisRest} from './_idRedis.mjs';
@@ -90,6 +90,44 @@ try {
  const pilot=createHandler({env:{...env,EBAY_SELLER_PILOT_UIDS:other},store:kv,verify,fetcher});check((await call('status','GET',{h:pilot})).data.available===false,'pilot is restricted to explicit account IDs');
  await kv('SET',k.prefix+'start-rate:'+hash(owner),10,'EX',3600);check((await call('start','POST')).code===429,'authorization starts are rate limited');
  check(calls.every(c=>c.method==='GET'||c.url.endsWith('/identity/v1/oauth2/token')),'no listing mutations sent to eBay');
+
+ // Provider/storage failures used to collapse into an invisible generic return.
+ // Exercise real callbacks and encryption/Lua with injected failures only at
+ // external boundaries; no production accounts, tokens or stores are used.
+ await kv('DEL',k.prefix+'start-rate:'+hash(owner));await connected();
+ const beforeFailure=await kv('GET',k.connection),diagnostics=[];
+ const privateText='PRIVATE-AUTH-CODE TOKEN cookie account';
+ const failureCases=[
+  {stage:'state',issue:'state',command:scripts.consume},
+  {stage:'token',issue:'token',reply:()=>Response.json({error:'invalid_grant',error_description:privateText},{status:400}),providerStatus:400,providerCode:'invalid_grant'},
+  {stage:'token',issue:'application',reply:()=>Response.json({error:'invalid_client',error_description:privateText},{status:401}),providerStatus:401,providerCode:'invalid_client'},
+  {stage:'token',issue:'token',reply:()=>Response.json({error:privateText},{status:403}),providerStatus:403},
+  {stage:'token',issue:'token',reply:()=>new Response(privateText,{status:502}),providerStatus:502},
+  {stage:'token',issue:'token',reply:()=>Response.json({access_token:'PRIVATE-ACCESS',expires_in:7200})},
+  {stage:'token',issue:'token',reply:()=>{throw new DOMException(privateText,'TimeoutError')},timeout:true},
+  {stage:'identity',issue:'identity',reply:()=>Response.json({errors:[{errorId:1100,message:privateText,parameters:[{value:privateText}]}]},{status:403}),providerStatus:403,providerErrorId:1100},
+  {stage:'identity',issue:'identity',reply:()=>Response.json({username:'PRIVATE-NAME'})},
+  {stage:'identity',issue:'identity',reply:()=>{throw Error(privateText)}},
+  {stage:'storage',issue:'storage',command:scripts.pending},
+ ];
+ for(const failure of failureCases) {
+  await kv('DEL',k.prefix+'start-rate:'+hash(owner));const attempt=await start();
+  const failing=createHandler({env,verify,
+   store:async(...args)=>{if(args[1]===failure.command)throw Error(privateText);return kv(...args);},
+   fetcher:async(url,opts)=>{if((failure.stage==='token'&&url.endsWith('/identity/v1/oauth2/token'))||(failure.stage==='identity'&&url.includes('/commerce/identity/')))return failure.reply();return fetcher(url,opts);},
+   reportFailure:details=>diagnostics.push(details)});
+  r=await call('callback','GET',{who:null,h:failing,cookies:attempt.cookies,query:{state:attempt.state,code:privateText}});
+  const location=new URL(r.headers.location),detail=diagnostics.at(-1);
+  check(r.code===303&&location.searchParams.get('ebay_connection')==='error'&&location.searchParams.get('ebay_issue')===failure.issue,'failed '+failure.stage+' returns an actionable outcome');
+  check(/^[a-f\d]{12}$/.test(detail.reference)&&location.searchParams.get('ebay_ref')===detail.reference&&detail.stage===failure.stage,'safe reference connects the visible failure to diagnostics');
+  check(['providerStatus','providerCode','providerErrorId','timeout'].every(key=>detail[key]===failure[key]),'diagnostics retain only the expected machine codes');
+  check(!JSON.stringify({detail,headers:r.headers}).includes('PRIVATE')&&!JSON.stringify(detail).includes(owner),'diagnostics and redirect exclude tokens, codes, messages and account identity');
+  check((await kv('GET',k.connection))===beforeFailure,'failed reconnect leaves the existing connection intact');
+ }
+ await kv('DEL',k.prefix+'start-rate:'+hash(owner));const failedReport=await start();
+ const badReporter=createHandler({env,store:kv,verify,fetcher:async()=>{throw Error(privateText);},reportFailure:()=>{throw Error('report unavailable');}});
+ r=await call('callback','GET',{who:null,h:badReporter,cookies:failedReport.cookies,query:{state:failedReport.state,code:privateText}});
+ check(r.code===303&&new URL(r.headers.location).searchParams.get('ebay_issue')==='token','diagnostic failure cannot break recovery');
 
  // Verify real ECDSA signatures over exact bytes, with a synthetic eBay key.
  const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'prime256v1'});

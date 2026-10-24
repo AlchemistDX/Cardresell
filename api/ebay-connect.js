@@ -4,14 +4,15 @@ import {config,hash,random,keys,seal,unseal,parseRecord,cookie,cookieHeader,STAT
 
 const safeText=v=>typeof v==='string'&&v.length<=200&&!/[\x00-\x1f]/.test(v)?v:'';
 const tokenTTL=data=>Math.max(1,Math.floor((data.refreshExpiresAt-Date.now())/1000));
-export function createHandler({env=process.env,verify=verifyTokenFlexible,store,fetcher=fetch}={}) {
+export function createHandler({env=process.env,verify=verifyTokenFlexible,store,fetcher=fetch,reportFailure=details=>console.warn('ebay_connection_failed',JSON.stringify(details))}={}) {
  return async function handler(req,res) {
   res.setHeader('Cache-Control','private, no-store');res.setHeader('Referrer-Policy','no-referrer');
   const cfg=config(env),environment=cfg?.environment||(env.EBAY_SELLER_ENVIRONMENT==='sandbox'?'sandbox':'production');
   const kv=store||kvFromEnv(env),action=typeof req.query?.action==='string'?req.query.action:'status';
   if(!['GET','POST','DELETE'].includes(req.method))return res.status(405).json({error:'Method not allowed'});
   const origin=cfg?.origin||'https://www.cardresell.org';
-  const redirect=outcome=>{res.setHeader('Location',origin+'/?ebay_connection='+outcome);return res.status(303).end();};
+  const redirect=(outcome,details={})=>{res.setHeader('Location',origin+'/?'+new URLSearchParams({ebay_connection:outcome,...details}));return res.status(303).end();};
+  let callbackStage='state';
   try {
    if(action==='callback'&&req.method==='GET') {
     if(!cfg||!kv)return redirect('unavailable');
@@ -25,11 +26,14 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
     if(String(await kv('GET',k.epoch)||'0')!==ctx.epoch)return redirect('expired');
     if(req.query.error)return redirect('denied');
     if(typeof req.query.code!=='string'||!req.query.code||req.query.code.length>2048)return redirect('expired');
+    callbackStage='token';
     const tokens=await mint(cfg,{grant_type:'authorization_code',code:req.query.code,redirect_uri:cfg.ruName},fetcher);
     if(typeof tokens.refresh_token!=='string'||!tokens.refresh_token||!Number.isFinite(tokens.refresh_token_expires_in)||tokens.refresh_token_expires_in<=0||tokens.refresh_token_expires_in>63_072_000)throw Error('seller_refresh_token_missing');
+    callbackStage='identity';
     const identity=await ebayJson(cfg,'/commerce/identity/v1/user/',tokens.access_token,fetcher,true);
     const userId=safeText(identity.userId);if(!userId)throw Error('seller_identity_missing');
     const username=safeText(identity.username)||'eBay account ending '+userId.slice(-6);
+    callbackStage='storage';
     const now=Date.now(),accountHash=hash(userId),ticket=random();
     const data={userId,username,accessToken:tokens.access_token,refreshToken:tokens.refresh_token,accessExpiresAt:now+tokens.expires_in*1000,refreshExpiresAt:now+tokens.refresh_token_expires_in*1000,connectedAt:now};
     const pending={owner:ctx.owner,epoch:ctx.epoch,previousVersion:ctx.previousVersion,accountHash,expiresAt:now+600000,cipher:seal(data,cfg,ctx.owner)};
@@ -99,8 +103,19 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
    }
    return res.status(400).json({error:'Unknown connection action'});
   } catch(error) {
-   // Never log request URLs, authorization codes, token bodies, or user IDs.
-   if(action==='callback')return redirect('error');
+   // Never log request URLs, exceptions, authorization codes, token bodies,
+   // cookies or user IDs. A random reference joins the UI to safe diagnostics.
+   if(action==='callback') {
+    const reference=random().slice(0,12),details={reference,stage:callbackStage};
+    if(Number.isInteger(error?.providerStatus)&&error.providerStatus>=100&&error.providerStatus<=599)details.providerStatus=error.providerStatus;
+    if(['invalid_request','invalid_client','invalid_grant','unauthorized_client','unsupported_grant_type','invalid_scope','access_denied','server_error','temporarily_unavailable'].includes(error?.providerCode))details.providerCode=error.providerCode;
+    if(Number.isSafeInteger(error?.providerErrorId)&&error.providerErrorId>=0&&error.providerErrorId<=1_000_000_000)details.providerErrorId=error.providerErrorId;
+    if(['TimeoutError','AbortError'].includes(error?.name))details.timeout=true;
+    try{reportFailure(details);}catch{/* Diagnostics must not prevent recovery. */}
+    const issue=callbackStage==='token'&&['invalid_client','unauthorized_client','invalid_scope'].includes(details.providerCode)?'application':callbackStage;
+    res.setHeader('Set-Cookie',cookieHeader(STATE_COOKIE,'',0));
+    return redirect('error',{ebay_issue:issue,ebay_ref:reference});
+   }
    return res.status(error.status||503).json({error:error.status?error.message:'Could not confirm the eBay connection. Try again.'});
   }
  };
