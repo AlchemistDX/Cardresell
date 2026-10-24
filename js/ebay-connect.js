@@ -22,11 +22,11 @@
     if(!current)return;
     try{const data=await request('status','GET',current);if(n!==requestNumber||owner()!==current)return;b.hidden=!data.available&&!data.connected;b.textContent=data.connected?'eBay connected':'Connect eBay';}catch{checkedOwner=null;}
   }
-  async function open(outcome) {
+  async function open(outcome,diagnostic={}) {
     if(active){active.dialog.focus();return;}
     if(!document.getElementById('ebayConnectStyle')) {
       const s=el('style');s.id='ebayConnectStyle';s.textContent=`
-.ebay-connect{color:var(--text,#eee);background:var(--bg,#111);border:1px solid var(--border,#444);border-radius:16px;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 32px);box-sizing:border-box;padding:20px;overflow:auto;overscroll-behavior:contain}
+.ebay-connect{color:var(--text,#eee);background:var(--bg,#111);border:1px solid var(--border,#444);border-radius:16px;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 32px);box-sizing:border-box;margin:auto;padding:20px;overflow:auto;overscroll-behavior:contain}
 .ebay-connect::backdrop{background:rgba(0,0,0,.75)}.ebay-connect header,.ebay-connect-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}.ebay-connect h2{margin:0;font-size:1.2rem}.ebay-connect p{font-size:.9rem;line-height:1.6}.ebay-connect button{min-height:44px;padding:10px 14px;font:inherit;color:var(--text,#eee);background:var(--surface-2,#222);border:1px solid var(--border,#555);border-radius:8px;cursor:pointer}.ebay-connect button:disabled{opacity:.5;cursor:default}.ebay-connect button:focus-visible{outline:2px solid var(--gold,#d4af37);outline-offset:2px}.ebay-connect [data-primary]{background:var(--gold,#d4af37);color:#171108;font-weight:700}.ebay-connect [role=alert]{color:var(--danger-text,#ff9999)}.ebay-connect dl{display:grid;grid-template-columns:1fr auto;gap:12px;font-size:.85rem}.ebay-connect dd{margin:0;text-align:right}.ebay-connect [hidden]{display:none!important}
 `;document.head.append(s);
     }
@@ -35,6 +35,10 @@
     const header=el('header'),title=el('h2','eBay seller connection');title.id='ebayConnectTitle';header.append(title,button('Close',()=>dialog.close()));dialog.append(header);
     dialog.append(el('p','Check your eBay seller registration, policies, and inventory locations. This connection is read-only. Listing publication and automatic inventory sync are not enabled.'));
     const status=el('p','Checking connection…');status.setAttribute('role','status');dialog.append(status);
+    // The return result is independent of errors from refreshing account status.
+    // Keep it visible until a fresh authorization or confirmation succeeds.
+    const outcomeNote=el('p');outcomeNote.dataset.oauthOutcome='';outcomeNote.setAttribute('role','alert');dialog.append(outcomeNote);
+    const reference=el('p');reference.dataset.oauthReference='';dialog.append(reference);
     const error=el('p');error.setAttribute('role','alert');dialog.append(error);
     const details=el('div');dialog.append(details);
     const actions=el('div');actions.className='ebay-connect-actions';dialog.append(actions);
@@ -43,7 +47,10 @@
     dialog.addEventListener('close',()=>{state.closed=true;clearInterval(closeOnChange);if(active===state)active=null;dialog.remove();document.getElementById('ebayConnectionBtn')?.focus();},{once:true});
     document.body.append(dialog);dialog.showModal();
     const notes={denied:'You declined eBay authorization. Your existing connection was not changed.',expired:'That authorization expired. Start again from this dialog.',error:'eBay authorization could not be completed. Try connecting again.',unavailable:'Direct eBay connection is not available yet.'};
-    if(notes[outcome])error.textContent=notes[outcome];
+    const issues={state:'CardResell could not check this connection attempt. Please try again.',token:'eBay returned to CardResell, but we could not finish its approval. Start a fresh connection from this dialog.',application:'eBay could not verify CardResell’s application settings. Please share the connection reference with CardResell support.',identity:'eBay returned to CardResell, but we could not verify your seller account. Please share the connection reference with CardResell support.',storage:'CardResell could not save this eBay connection. Please try again in a moment.'};
+    if(Object.hasOwn(notes,outcome))outcomeNote.textContent=outcome==='error'&&Object.hasOwn(issues,diagnostic.issue)?issues[diagnostic.issue]:notes[outcome];
+    if(outcome==='error'&&/^[a-f\d]{12}$/.test(diagnostic.reference||''))reference.textContent='Connection reference: '+diagnostic.reference;
+    const clearOutcome=()=>{outcomeNote.textContent='';reference.textContent='';};
     async function run(work) {
       if(!current())return;actions.querySelectorAll('button').forEach(b=>b.disabled=true);error.textContent='';
       try{await work();}catch(e){if(current()){error.textContent=e.message||'Could not complete this action. Try again.';if(!actions.children.length)actions.append(button('Retry',()=>run(refresh)));}}
@@ -59,14 +66,16 @@
         return;
       }
       status.textContent=(data.environment==='sandbox'?'eBay Sandbox · ':'')+(data.connected?'Connected to '+data.username+(data.reconnectRequired?' · Authorization expired. Reconnect to continue.':'.'):'No eBay account connected.');
+      if(outcome==='review'&&!data.pending&&!outcomeNote.textContent)outcomeNote.textContent='That eBay approval is no longer available. Start a fresh connection from this dialog.';
       if(data.pending) {
         details.append(el('p','Finish connecting '+data.pending.username+' to your current CardResell account. Confirm only if this is the seller account you intended to use.'));
-        const confirm=button('Confirm eBay connection',()=>run(async()=>{await request('confirm','POST',state.owner);if(current())await refresh();}));confirm.dataset.primary='';actions.append(confirm);
+        const confirm=button('Confirm eBay connection',()=>run(async()=>{await request('confirm','POST',state.owner);if(current()){outcome=null;clearOutcome();await refresh();}}));confirm.dataset.primary='';actions.append(confirm);
       } else {
         const connect=button(data.connected?'Reconnect eBay':'Continue to eBay',()=>run(async()=>{
           const result=await request('start','POST',state.owner);if(!current())return;
           const url=new URL(result.url);
           if(!['https://auth.ebay.com','https://auth.sandbox.ebay.com'].includes(url.origin)||url.pathname!=='/oauth2/authorize')throw Error('The eBay authorization link could not be confirmed.');
+          clearOutcome();
           window.location.assign(url.href);
         }));connect.dataset.primary='';actions.append(connect);
       }
@@ -92,9 +101,10 @@
   mount();
   const url=new URL(window.location.href),outcome=url.searchParams.get('ebay_connection');
   if(['review','denied','expired','error','unavailable'].includes(outcome)) {
-    url.searchParams.delete('ebay_connection');history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+    const diagnostic={issue:url.searchParams.get('ebay_issue'),reference:url.searchParams.get('ebay_ref')};
+    ['ebay_connection','ebay_issue','ebay_ref'].forEach(key=>url.searchParams.delete(key));history.replaceState(history.state,'',url.pathname+url.search+url.hash);
     // Give the existing Firebase session restoration a chance to finish. The
     // dialog still offers sign-in if restoration does not complete promptly.
-    let tries=0;const timer=setInterval(()=>{if(owner()||++tries>=20){clearInterval(timer);open(outcome);}},250);
+    let tries=0;const timer=setInterval(()=>{if(owner()||++tries>=20){clearInterval(timer);open(outcome,diagnostic);}},250);
   }
 })();

@@ -49,14 +49,25 @@ export async function limited(kv,key,maximum,seconds) {
   const n=await kv('EVAL',`local n=redis.call('INCR',KEYS[1]);if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end;return n`,1,key,seconds);
   if(!Number.isFinite(Number(n))||Number(n)>maximum){const e=Error('Please wait before trying again.');e.status=429;throw e;}
 }
+async function providerFailure(response,message,status) {
+  const error=Error(message);error.status=status;error.providerStatus=response.status;
+  // Keep only documented machine codes. Provider messages/bodies may contain
+  // authorization codes or account details and must never reach logs or URLs.
+  const body=await response.json().catch(()=>null);
+  const codes=['invalid_request','invalid_client','invalid_grant','unauthorized_client','unsupported_grant_type','invalid_scope','access_denied','server_error','temporarily_unavailable'];
+  if(codes.includes(body?.error))error.providerCode=body.error;
+  const id=body?.errors?.[0]?.errorId;
+  if(Number.isSafeInteger(id)&&id>=0&&id<=1_000_000_000)error.providerErrorId=id;
+  return error;
+}
 export async function ebayJson(cfg,path,token,fetcher=fetch,identity=false) {
   const r=await fetcher((identity?cfg.identity:cfg.api)+path,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},signal:AbortSignal.timeout(12000)});
-  if(!r.ok){const e=Error(r.status===401?'eBay authorization expired. Reconnect your account.':'eBay could not confirm your seller setup. Try again.');e.status=r.status===401?409:502;throw e;}
+  if(!r.ok)throw await providerFailure(r,r.status===401?'eBay authorization expired. Reconnect your account.':'eBay could not confirm your seller setup. Try again.',r.status===401?409:502);
   return r.json();
 }
 export async function mint(cfg,values,fetcher=fetch) {
   const r=await fetcher(cfg.api+'/identity/v1/oauth2/token',{method:'POST',headers:{Authorization:'Basic '+Buffer.from(cfg.appId+':'+cfg.certId).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values).toString(),signal:AbortSignal.timeout(12000)});
-  if(!r.ok){const e=Error('eBay authorization could not be renewed. Reconnect your account.');e.status=409;throw e;}
+  if(!r.ok)throw await providerFailure(r,'eBay authorization could not be renewed. Reconnect your account.',409);
   const data=await r.json();
   if(typeof data.access_token!=='string'||!data.access_token||!Number.isFinite(data.expires_in)||data.expires_in<=0||data.expires_in>86400)throw Error('seller_token_response_invalid');
   return data;
