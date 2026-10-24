@@ -1,6 +1,7 @@
 import {mint,ebayJson,hash} from './_ebaySeller.js';
 import {fail} from './_ebaySubmission.js';
 import {checkPhotoId} from './_photoAuth.js';
+import {sellerSetupIssue} from './_ebaySetup.js';
 
 const appTokens=new WeakMap();
 async function applicationToken(cfg,fetcher) {
@@ -30,7 +31,12 @@ export async function listingReference(cfg,token,categoryId,conditionId,fetcher=
     ['/sell/inventory/v1/location?limit=100'],
   ];
   const results=await Promise.allSettled(paths.map(([path,t])=>get(path,t)));
-  const failure=results.find(r=>r.status==='rejected');if(failure)throw failure.reason;
+  const failed=results.findIndex(r=>r.status==='rejected');
+  if(failed>=0) {
+    const error=results[failed].reason;
+    if(failed>=2)throw fail(sellerSetupIssue(['registration','fulfillment','payment','return','location'][failed-2],error).message,error.status||502);
+    throw error;
+  }
   const [aspects,conditions,privilege,fulfillment,payment,returns,location]=results.map(r=>r.value);
   const policies=conditions.itemConditionPolicies?.filter(p=>String(p.categoryId)===String(categoryId));
   if(policies?.length!==1||!Array.isArray(aspects.aspects))throw fail('eBay returned incomplete category requirements.',502);

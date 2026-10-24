@@ -24,7 +24,7 @@ const fetcher=async(url,opts={})=>{
  if(String(url).includes('/commerce/identity/')) {if(identityHook){const h=identityHook;identityHook=null;await h();}return Response.json({userId:sellerId,username:sellerName,email:'not-stored@example.test'});}
  if(String(url).endsWith('/privilege'))return Response.json({sellerRegistrationCompleted:true});
  if(String(url).includes('/fulfillment_policy'))return Response.json({fulfillmentPolicies:[{}]});
- if(String(url).includes('/payment_policy'))return failPolicy?new Response('',{status:failPolicy===401?401:503}):Response.json({paymentPolicies:[{}]});
+ if(String(url).includes('/payment_policy'))return failPolicy?Response.json({errors:[{errorId:20403,message:'PRIVATE-PROVIDER-DETAILS',parameters:[{value:'PRIVATE-ACCESS'}]}]},{status:failPolicy===401?401:503}):Response.json({paymentPolicies:[{}]});
  if(String(url).includes('/return_policy'))return Response.json({returnPolicies:[]});
  if(String(url).includes('/location?'))return Response.json({locations:[{merchantLocationStatus:'ENABLED'},{merchantLocationStatus:'DISABLED'}]});
  throw Error('unexpected external request');
@@ -67,7 +67,9 @@ try {
  check((await call('confirm','POST',{cookies:pendingCookies})).code===409,'confirm replay cannot create a second connection');
  const stored=await kv('GET',k.connection);check(!stored.includes('PRIVATE')&&!stored.includes(sellerName)&&!stored.includes('not-stored'),'tokens and identity encrypted; unnecessary email discarded');
  r=await call('readiness','POST');check(r.data.sellerRegistered===true&&r.data.inventoryLocations===1&&r.data.returnPolicies===0&&!r.data.publishingEnabled,'read-only seller readiness reflects actual responses');
- failPolicy=true;r=await call('readiness','POST');check(r.data.partial&&r.data.paymentPolicies===null,'failed provider lookup is unknown, not zero or ready');failPolicy=false;
+ failPolicy=true;r=await call('readiness','POST');check(r.data.partial&&r.data.paymentPolicies===null,'failed provider lookup is unknown, not zero or ready');
+ check(r.data.issues[0].check==='payment'&&r.data.issues[0].providerStatus===503&&r.data.issues[0].providerErrorId===20403&&r.data.issues[0].message.includes('Business Policies'),'unavailable policies carry actionable safe details');
+ check(!JSON.stringify(r.data).includes('PRIVATE'),'seller checks never reflect provider messages, parameters or credentials');failPolicy=false;
  failPolicy=401;r=await call('readiness','POST');check(r.data.reconnectRequired&&r.data.paymentPolicies===null,'revoked authorization asks for reconnection instead of repeated setup retries');failPolicy=false;
  await call('disconnect','DELETE',{who:other});check(await kv('GET',k.connection)===stored,'one user cannot disconnect another');
  const awaiting=await pending();await call('disconnect','DELETE');check((await call('confirm','POST',{cookies:awaiting.cookies})).code===409&&!await kv('GET',k.connection),'disconnect invalidates pending authorization');

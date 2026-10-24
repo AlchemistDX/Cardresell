@@ -33,7 +33,7 @@ export function selections(value={}) {
   return out;
 }
 
-export function buildSubmissionReview({read,owner,environment='production',selected={},reference=null,photos=[],photoIssue=null,now=Date.now()}) {
+export function buildSubmissionReview({read,owner,environment='production',connected=false,selected={},reference=null,photos=[],photoIssue=null,now=Date.now()}) {
   const d=read.draft,p=read.packet,chosen=selections(selected),issues=[];
   const add=(code,message,severity='error')=>issues.push({code,message,severity});
   const validation=validateDraftForSlot(d);
@@ -54,7 +54,7 @@ export function buildSubmissionReview({read,owner,environment='production',selec
   if(photos.length!==chosen.photoIds.length)add('PHOTO_SELECTION','Every selected photo needs a verified hosted copy.');
 
   const base={...(p?.aspects?.required||{}),...(p?.aspects?.optional||{})},aspects={},descriptors=[];
-  if(!reference)add('CONNECTION','A verified eBay connection is needed to check current category rules and seller settings.');
+  if(!reference)add(connected?'REQUIREMENTS_PENDING':'CONNECTION',connected?'Your eBay account is connected. Load current eBay requirements to review category rules and seller settings.':'Connect your eBay seller account to check current category rules and seller settings.');
   else {
     if(reference.sellerRegistered!==true)add('SELLER_SETUP','eBay has not confirmed that seller registration is complete.');
     if(String(reference.categoryId)!==String(p?.category?.id)||!Array.isArray(reference.aspects)||!reference.aspects.length)add('METADATA','Current eBay item-specific rules could not be confirmed.');

@@ -21,7 +21,7 @@
   const header=el('header'),heading=el('h2','eBay listing review');heading.id='ebayListingReviewTitle';header.append(heading,button('Close',()=>dialog.close()));dialog.append(header);
   dialog.append(el('p','Check what this physical card still needs before it can be listed on eBay. Direct publishing is not enabled.'));
   const status=el('p','Loading your draft…');status.setAttribute('role','status');const error=el('p');error.setAttribute('role','alert');
-  const content=el('div'),actions=el('div'),result=el('div');actions.className='ebay-review-actions';dialog.append(status,error,content,actions,result);document.body.append(dialog);dialog.showModal();
+  const setup=el('div'),content=el('div'),actions=el('div'),result=el('div');actions.className='ebay-review-actions';dialog.append(status,error,setup,content,actions,result);document.body.append(dialog);dialog.showModal();
   const interval=setInterval(()=>{if(owner()!==who)dialog.close();},250);
   dialog.addEventListener('close',()=>{state.closed=true;clearInterval(interval);dialog.remove();if(active===state)active=null;document.querySelector('[data-ebay-review-open]')?.focus();},{once:true});
   async function request(body) {
@@ -58,8 +58,18 @@
    result.append(el('p','Shipping and returns follow your selected eBay policies. Estimated draft postage and profit do not change those policies. No listing was created or changed.'));
   }
   function render() {
-   content.replaceChildren();actions.replaceChildren();const data=state.data,ref=state.reference;
+   setup.replaceChildren();content.replaceChildren();actions.replaceChildren();const data=state.data,ref=state.reference;
    status.textContent=data.baseline.summary.title+' · '+(data.baseline.summary.price==null?'Price missing':'$'+Number(data.baseline.summary.price).toFixed(2)+' USD')+' · One physical copy';
+   if(data.connected) {
+    setup.append(el('p',ref?'eBay requirements loaded. Review the fields below, then confirm and save your review.':'Your eBay account is connected. First, load its current category requirements and selling policies.'));
+    setup.append(button('Load current eBay requirements',()=>run(async()=>{
+     const r=await request({action:'requirements'});
+     if(!r.connected||!r.reference)throw Error('Your eBay connection is no longer available. Reopen the connection from Collection.');
+     state.reference=r.reference;state.requirementsFingerprint=r.requirementsFingerprint;state.selected.detailsConfirmed=false;render();
+     status.textContent='Current eBay requirements loaded. Review your selections below.';
+     if(!data.saved)result.replaceChildren(el('p','Review the current fields and photos, then check and save.'));
+    })));
+   }
    if(!data.connected)content.append(el('p',data.available?'Connect your eBay seller account from Collection to check current category rules and selling policies.':'Direct eBay connection is awaiting setup. You can save this preparation check and continue using the existing listing export.'));
    if(data.conditionIntent?.length)content.append(el('p','Saved condition: '+data.conditionIntent.map(x=>x.name+': '+(x.intendedValue||'seller choice')).join('; ')+'. Check these against your card or slab.'));
    if(ref) {
@@ -87,20 +97,25 @@
    }
    content.append(el('p',state.photos.length?`${state.photos.length} hosted seller photo(s) available on this device. Choose the photos to check.`:'No hosted seller photos are available on this device. Add your photos to the draft and prepare an export to host them before checking again.'));
    for(const p of state.photos)checkbox('Use '+(p.name||p.photoId),state.selected.photoIds.includes(p.photoId),checked=>{state.selected.photoIds=checked?[...state.selected.photoIds,p.photoId]:state.selected.photoIds.filter(id=>id!==p.photoId);});
-   checkbox('I confirm this physical copy is still available to sell.',state.selected.copyAvailable,v=>state.selected.copyAvailable=v);
-   checkbox('I reviewed the card identity, condition, photos and eBay selling terms.',state.selected.detailsConfirmed,v=>state.selected.detailsConfirmed=v,true);
-   if(data.connected)actions.append(button('Load current eBay requirements',()=>run(async()=>{const r=await request({action:'requirements'});state.reference=r.reference;state.requirementsFingerprint=r.requirementsFingerprint;state.selected.detailsConfirmed=false;render();status.textContent='Current eBay requirements loaded. Review your selections below.';})));
-   actions.append(button('Check and save review',()=>run(async()=>{
+   if(ref||!data.connected) {
+    checkbox('I confirm this physical copy is still available to sell.',state.selected.copyAvailable,v=>state.selected.copyAvailable=v);
+    checkbox('I reviewed the card identity, condition, photos and eBay selling terms.',state.selected.detailsConfirmed,v=>state.selected.detailsConfirmed=v,true);
+   }
+   const check=button('Check and save review',()=>run(async()=>{
     if(data.connected&&!state.reference)throw Error('Load the current eBay requirements before checking this draft.');
     saveLocal();const r=await request({action:'check',expectedReviewRev:data.reviewRev,requirementsFingerprint:state.requirementsFingerprint,selected:state.selected,photos:state.photos.map(({photoId,sha256,contentType,byteLength})=>({photoId,sha256,contentType,byteLength}))});
     data.reviewRev=r.record.rev;data.saved=r.record;showReport(r.report);status.textContent='Review saved. No eBay listing was created or changed.';
-   })));
+   }));check.dataset.saveReview='';actions.append(check);
    actions.append(button('Reload saved review',()=>run(load)));
    if(window.CardResellEbayListingOperations)actions.append(button('Listing plan and recovery',()=>{dialog.close();window.CardResellEbayListingOperations.open({draftId});}));
+   updateButtons();
+  }
+  function updateButtons() {
+   for(const b of [...setup.querySelectorAll('button'),...actions.querySelectorAll('button')])b.disabled=state.busy||('saveReview' in b.dataset&&state.data?.connected&&!state.reference);
   }
   async function run(fn) {
-   if(state.busy||!valid())return;state.busy=true;error.textContent='';content.inert=true;for(const b of actions.querySelectorAll('button'))b.disabled=true;
-   try{await fn();}catch(e){if(valid())error.textContent=e.message;}finally{state.busy=false;if(valid()){content.inert=false;for(const b of actions.querySelectorAll('button'))b.disabled=false;}}
+   if(state.busy||!valid())return;state.busy=true;error.textContent='';content.inert=true;updateButtons();
+   try{await fn();}catch(e){if(valid())error.textContent=e.message;}finally{state.busy=false;if(valid()){content.inert=false;updateButtons();}}
   }
   async function load() {
    const data=await request();state.data=data;state.reference=null;

@@ -51,7 +51,14 @@ try {
   check((await dialog.textContent()).includes('awaiting setup')&&await dialog.getByRole('button',{name:'Load current eBay requirements'}).count()===0,'unconfigured customer sees honest setup state');
   await dialog.getByRole('button',{name:'Check and save review',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#ebayListingReview [role=status]').textContent.includes('Review saved.'));
   check((await dialog.textContent()).includes('No listing was created or changed.'),'saved blocked review does not imply publication');
-  await dialog.getByRole('button',{name:'Close',exact:true}).click();configured=true;await launch.click();await dialog.getByRole('button',{name:'Load current eBay requirements'}).click();await dialog.getByLabel('Card Condition (required)',{exact:true}).waitFor({timeout:6000}).catch(async e=>{console.log(await dialog.textContent(),errors,requests);throw e;});
+  await dialog.getByRole('button',{name:'Close',exact:true}).click();configured=true;await launch.click();await dialog.getByRole('button',{name:'Load current eBay requirements'}).waitFor();
+  check(await dialog.getByRole('button',{name:'Check and save review',exact:true}).isDisabled(),'checking waits for current requirements');
+  check(await dialog.getByLabel('I reviewed the card identity, condition, photos and eBay selling terms.').count()===0,'seller cannot confirm unseen policies');
+  check((await dialog.textContent()).includes('Your eBay account is connected.'),'review acknowledges existing connection');
+  check(await dialog.getByRole('button',{name:'Load current eBay requirements'}).evaluate(b=>b.getBoundingClientRect().top<b.closest('dialog').getBoundingClientRect().top+400),'first action is visible near the top');
+  failNext=true;await dialog.getByRole('button',{name:'Load current eBay requirements'}).click();await dialog.getByRole('alert').filter({hasText:'temporary failure'}).waitFor();
+  check(await dialog.getByRole('button',{name:'Check and save review',exact:true}).isDisabled(),'failed requirements request cannot enable a check');
+  await dialog.getByRole('button',{name:'Load current eBay requirements'}).click();await dialog.getByLabel('Card Condition (required)',{exact:true}).waitFor({timeout:6000}).catch(async e=>{console.log(await dialog.textContent(),errors,requests);throw e;});
   check(await dialog.getByLabel('Card Condition (required)',{exact:true}).inputValue()==='','condition is a deliberate seller selection');
   await dialog.getByLabel('Card Condition (required)',{exact:true}).selectOption('400010');
   await dialog.getByLabel('Shipping policy',{exact:true}).selectOption('fp1');await dialog.getByLabel('Payment policy',{exact:true}).selectOption('pp1');await dialog.getByLabel('Return policy',{exact:true}).selectOption('rp1');await dialog.getByLabel('Inventory location',{exact:true}).selectOption('shelf1');
