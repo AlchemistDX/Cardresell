@@ -1,0 +1,10 @@
+import {readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const root=new URL('../',import.meta.url),source=await readFile(new URL('js/listing-availability.js',root));
+const path='js/listing-availability.'+createHash('sha256').update(source).digest('hex').slice(0,8)+'.js';
+let html=await readFile(new URL('index.html',root),'utf8');
+const pattern=/js\/listing-availability\.[a-f0-9]{8}\.js/g;
+if([...html.matchAll(pattern)].length>1)throw Error('Expected at most one availability asset');
+html=pattern.test(html)?html.replace(pattern,path):html.replace(/(<script defer src="\/js\/collection-drafts\.[a-f0-9]{8}\.js"><\/script>)/,`<script defer src="/${path}"></script>\n$1`);
+if(!html.includes(path))throw Error('Collection asset not found');
+await writeFile(new URL(path,root),source);await writeFile(new URL('index.html',root),html);console.log(path);

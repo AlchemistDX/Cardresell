@@ -12,6 +12,7 @@
  * the acquisition and fencing tests exist to check.
  */
 import { ACQUIRE_SCRIPT, FENCED_SET_SCRIPT } from '../api/_draftLifecycle.js';
+import { availabilitySnapshot } from '../api/listing-availability.js';
 
 const UNLOCK_MARKER = "redis.call('del',KEYS[1])";
 
@@ -24,6 +25,12 @@ export function evalScript(io, rest) {
   const nk = Number(rest[1]);
   const KEYS = rest.slice(2, 2 + nk).map(String);
   const ARGV = rest.slice(2 + nk).map(String);
+
+  if (script === availabilitySnapshot) return KEYS.map(k=>{
+    const value=io.get(k);
+    if(value!=null&&typeof value!=='string')throw Error('WRONGTYPE');
+    return value;
+  });
 
   if (script === ACQUIRE_SCRIPT) {
     // exists → incr → set, indivisibly. The whole point of the script is that

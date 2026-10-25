@@ -21,14 +21,19 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
    try{if(!token)throw Error();identity=await verify(token);}catch{return res.status(401).json({error:'Sign in required'});}
    const uid=identity?.uid;if(!uid)return res.status(401).json({error:'Sign in required'});
    if(isSyntheticTestSub(uid))return res.status(403).json({error:'Reserved account namespace'});
-   const cfg=config(env),environment=cfg?.environment||(env.EBAY_SELLER_ENVIRONMENT==='sandbox'?'sandbox':'production'),kv=store||kvFromEnv(env);
+   const cfg=config(env),kv=store||kvFromEnv(env);
    if(req.method==='POST'&&req.headers?.origin!==(cfg?.origin||'https://www.cardresell.org'))throw fail('Open this action on CardResell to continue.',403);
    if(!kv)throw fail('Listing operation storage is unavailable. Your reservations remain held.',503);
    let body=req.body||{};
    if(typeof body==='string'){if(Buffer.byteLength(body)>40000)throw fail('Listing request is too large.',413);try{body=JSON.parse(body);}catch{throw fail('Invalid listing request.');}}
    if(!body||typeof body!=='object'||Array.isArray(body)||Buffer.byteLength(JSON.stringify(body))>40000)throw fail('Invalid or oversized listing request.',413);
+   const requestedEnvironment=req.method==='GET'?req.query?.environment:body.environment;
+   if(requestedEnvironment!==undefined&&!['production','sandbox'].includes(requestedEnvironment))throw fail('Choose a valid eBay environment.');
+   // Reading a hold and cancelling an unsent local plan must stay possible
+   // after configuration changes. Provider calls require the matching config.
+   const environment=requestedEnvironment||cfg?.environment||(env.EBAY_SELLER_ENVIRONMENT==='sandbox'?'sandbox':'production');
    const k=keys(environment,hash(uid)),connectionRaw=await kv('GET',k.connection),connection=connectionRaw?JSON.parse(connectionRaw):null;
-   const pilots=String(env.EBAY_SELLER_PILOT_UIDS||'').split(',').map(v=>v.trim()).filter(Boolean),available=!!cfg&&(!pilots.length||pilots.includes(uid));
+   const pilots=String(env.EBAY_SELLER_PILOT_UIDS||'').split(',').map(v=>v.trim()).filter(Boolean),available=!!cfg&&cfg.environment===environment&&(!pilots.length||pilots.includes(uid));
    const project=r=>publicListing(r,{id:hash(r.instanceId),accountHash:connection?.accountHash});
    const input=req.method==='GET'?req.query||{}:body;
    let key=null;
