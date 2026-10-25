@@ -253,9 +253,10 @@ console.log('\n[Sol remediation 2026-09-04]');
           signedOut === 'cardsell_portfolio' && !signedOut.includes('uid-A'));
   }
 
-  // The early return must now require the absence of a deliberate sign-out.
-  check('the null-auth early return is conditional on there being no sign-out intent',
-        /if \(_currentAuthUid && !window\._signOutIntent\) \{/.test(index));
+  // Only an actually active SDK user can make a null callback stale.
+  // An absent in-tab intent flag must not defeat sign-out from another tab.
+  check('the null-auth early return requires an active SDK user and no sign-out intent',
+        /if \(auth\.currentUser && !window\._signOutIntent\) \{/.test(index));
   check('the unconditional early return is gone',
         !/\n        if \(_currentAuthUid\) \{\n          \/\/ A real user was set/.test(index));
 
