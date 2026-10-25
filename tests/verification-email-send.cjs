@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const {parse} = require('acorn');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -12,17 +13,22 @@ const ui = fs.readFileSync(path.join(root, uiPath), 'utf8');
 const resend = ui.slice(ui.indexOf('async function doAuthResendVerification()'), ui.indexOf('async function doAuthCheckVerified()'));
 const corePath = html.match(/src="\/(js\/core\.[a-f0-9]+\.js)"/)[1];
 const core = fs.readFileSync(path.join(root, corePath), 'utf8');
+const sessionHelpers = parse(authSource,{ecmaVersion:'latest',sourceType:'module'}).body
+  .filter(n=>n.type==='ExpressionStatement'&&n.expression.type==='AssignmentExpression'&&['_captureAuthSession','_beginVerificationAction'].includes(n.expression.left.property?.name))
+  .map(n=>authSource.slice(n.start,n.end)).join('\n');
+const tokenNode = parse(core,{ecmaVersion:'latest'}).body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='_crIdToken');
 const legacy = core.slice(core.indexOf('async function _verifySendCode()'), core.indexOf('async function _verifyConfirmCode()'));
 function setup(codes = [], user = {}) {
+  if (user) Object.assign(user,{uid:'verification-fixture',getIdToken:async()=> 'synthetic-token'});
   const elements = new Map();
   const calls = [];
   const context = {
-    window: { _googleIdToken: 'synthetic-token' }, auth: { currentUser: user },
+    window: { _googleIdToken: 'synthetic-token',googleUser:user?{uid:user.uid,sub:user.uid}:null,_fbCurrentUser:user }, auth: { currentUser: user },_authGeneration:0,
     document: { getElementById(id) {
       if (!elements.has(id)) elements.set(id, { style: {}, textContent: '', value: 'test@example.invalid' });
       return elements.get(id);
     } },
-    console: { warn() {}, error() {} }, setTimeout() {},
+    console: { warn() {}, error() {} }, setTimeout() {}, clearTimeout() {},
     _fbErrMsg: e => e.code,
     sendEmailVerification: async (...args) => {
       calls.push(args);
@@ -32,7 +38,7 @@ function setup(codes = [], user = {}) {
     fetch: async () => ({ json: async () => ({ fallback: 'firebase_link' }) }),
   };
   vm.createContext(context);
-  vm.runInContext(helper + resend + legacy, context);
+  vm.runInContext(sessionHelpers + core.slice(tokenNode.start,tokenNode.end) + helper + resend + legacy, context);
   return { context, elements, calls };
 }
 (async () => {
