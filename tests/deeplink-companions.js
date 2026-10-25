@@ -44,7 +44,7 @@ console.log('\n[eBay companion sell links]');
 check('gradedSellLink element exists in HTML',              /id="gradedSellLink"/.test(INDEX));
 // 2026-08-14: sell links now route to buyer's-eye search view (sold comps)
 // so users can see market price + use eBay's native 'Sell one like this' flow.
-check('gradedSellLink JS wires eBay search URL',           /gradedSellLink[\s\S]{0,300}buildEbaySearchUrl/.test(INDEX));
+check('gradedSellLink uses the shared selected-card eBay URL', /function _crRefreshSellingLinks\(\)[\s\S]*?const url = _crSelectedEbayUrl\(\);[\s\S]*?gradedSellLink[\s\S]*?link\.href = url/.test(INDEX));
 check('jpEbaySellLink element exists in HTML',              /id="jpEbaySellLink"/.test(INDEX));
 check('jpEbaySellLink JS sets URL for both JP branches',    (INDEX.match(/jpEbaySellLink\.href = buildEbaySearchUrl/g) || []).length >= 2);
 check('Scan-miss panel has ebaySellUrl variable',           /const ebaySellUrl = /.test(INDEX));
@@ -155,7 +155,7 @@ check('Poshmark search query includes card number',          INDEX.includes("${s
 check('Fanatics search query includes card number',          INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));
 check('Fanatics search query includes card number',          INDEX.includes("const fanaticsQ") && INDEX.includes("${numTail}${isPokemon ? ' pokemon' : ''}"));
 check('JP EN-ref ebay/PC/sell all use jpRefNum',             INDEX.includes("const jpRefNum = card.number ? ' ' + card.number : '';"));
-check('Graded comps banner ebay query includes number',      INDEX.includes("${cardName}${cardNum} ${graderLabel} ${grade} pokemon card"));
+check('Graded comps use the selected card number and grade', /function _crSelectedEbayUrl\(\)[\s\S]*?buildEbaySearchUrl\(x\.card\.name, x\.card\.number, \{game:x\.card\.game, graded:x\.gradeLabel/.test(INDEX));
 
 console.log('\n[Raw price restoration + faster card display 2026-08-13]');
 check('Card-wide raw median cache cannot override a selected printing', !INDEX.includes('window._rawMedianCache = window._rawMedianCache || {}'));

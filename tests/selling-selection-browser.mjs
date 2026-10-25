@@ -39,6 +39,8 @@ try {
   await page.waitForFunction(()=>isGradedVariant());
   link=new URL(await page.locator('#ebayListBtn').getAttribute('href'));
   check(/PSA 10/i.test(link.searchParams.get('_nkw'))&&!/moderately played|\bMP\b/i.test(link.searchParams.get('_nkw')),'graded research uses the selected grader and grade at '+width);
+  check(/Mew/.test(link.searchParams.get('_nkw'))&&/76\/214/.test(link.searchParams.get('_nkw'))&&/reverse/i.test(link.searchParams.get('_nkw')),'graded research retains the exact card number and printing at '+width);
+  for(const id of ['gradedCompsLink','gradedSellLink'])check(await page.locator('#'+id).getAttribute('href')===link.href,id+' matches the current research selection at '+width);
   await page.locator('#gradedPills [data-val="no"]').click();
   check(await page.locator('#printingSelect').inputValue()==='reverseHolofoil','Raw → Graded → Raw preserves finish at '+width);
   check(await page.evaluate(()=>getEffectivePrice())===13,'returning raw restores matching condition-adjusted value at '+width);

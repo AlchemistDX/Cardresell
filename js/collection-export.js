@@ -7,7 +7,9 @@
     let text = value == null ? '' : typeof value === 'number'
       ? ([2, 3, 4].includes(column) ? value.toFixed(2) : column === 5 ? value.toFixed(1) : String(value)) : String(value);
     // User-entered names and identifiers are text, never spreadsheet formulas.
-    if (typeof value !== 'number' && (/^\s*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text))) text = "'" + text;
+    // Escape literal leading apostrophes too so a marked export can remove
+    // exactly one protective prefix without changing the original text.
+    if (typeof value !== 'number' && (/^\s*[=+\-@]/.test(text) || /^['\t\r\n]/.test(text))) text = "'" + text;
     return '"' + text.replace(/"/g, '""') + '"';
   };
   window.exportCollection = function (selectedIds) {
@@ -28,7 +30,7 @@
     }
     const rows = [['Card','Set','Cost Basis','Current Value','Unrealized P/L','P/L %','Finish','Finish confirmed',
       'Collection ID','Game','Card Number','Set Code','Condition','Grader','Grade','Certificate','Quantity',
-      'Added Date','Value Source','Last Refreshed','Value Status','Currency','Profit Basis','Storage Location','Source SKU']];
+      'Added Date','Value Source','Last Refreshed','Value Status','Currency','Profit Basis','Storage Location','Source SKU','CardResell CSV Format']];
     for (const p of cards) {
       const cost = amount(p.buyPrice), value = amount(p.currentValue);
       const gain = cost !== null && value !== null ? value - cost : null;
@@ -42,7 +44,7 @@
         p.finish || '',p.finishReviewRequired ? (p.finishConfirmed ? 'Yes' : 'No') : '',p.id ?? '',
         p.game || p.cardType || '',p.number || '',p.setCode || '',p.condition || '',p.grader || '',p.grade ?? '',
         p.cert || '',1,p.addedDate || '',value === null ? '' : source,p.lastRefreshed || '',status,'USD',
-        'Unrealized estimate before selling fees, shipping, grading and other expenses',p.location||'',p.sku||'']);
+        'Unrealized estimate before selling fees, shipping, grading and other expenses',p.location||'',p.sku||'','1']);
     }
     const csv = rows.map(row => row.map(cell).join(',')).join('\r\n');
     const link = document.createElement('a');
