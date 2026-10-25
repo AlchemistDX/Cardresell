@@ -17,7 +17,7 @@
   }
   const dialog=el('dialog');dialog.id='ebayListingOperations';dialog.className='ebay-operations';dialog.setAttribute('aria-labelledby','ebayOperationsTitle');
   const state={dialog,who,closed:false,busy:false,data:null};active=state;
-  const valid=()=>!state.closed&&active===state&&owner()===who;
+  const valid=()=>!state.closed&&dialog.open&&active===state&&owner()===who;
   const header=el('header'),title=el('h2','eBay listing operations');title.id='ebayOperationsTitle';header.append(title,button('Close',()=>dialog.close()));
   const status=el('p','Loading saved operations…');status.setAttribute('role','status');const error=el('p');error.setAttribute('role','alert');const content=el('div'),actions=el('div');actions.className='ebay-operation-actions';
   dialog.append(header,status,error,content,actions);document.body.append(dialog);dialog.showModal();
@@ -25,7 +25,8 @@
   dialog.addEventListener('close',()=>{state.closed=true;clearInterval(timer);dialog.remove();if(active===state)active=null;if(returnFocus?.isConnected&&returnFocus.offsetParent)returnFocus.focus();else document.getElementById('collectionDraftTools')?.querySelector('button')?.focus();},{once:true});
   async function request(path,body) {
    if(!valid())throw Error('Your account changed. Reopen listing operations.');
-   const token=await _crIdToken();if(!valid()||!token)throw Error('Sign in again to continue.');
+   const token=await _crIdToken();if(!valid())throw Error('Your account changed. Reopen this dialog.');
+   if(!token)throw Error('Sign-in refresh could not finish. Try again, or sign in again to continue.');
    const r=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(60000)});
    const data=await r.json();if(!valid())throw Error('Your account changed. Reopen listing operations.');
    if(!r.ok)throw Error(data.error||'Could not load the saved operation. Use Reload saved status to recover.');return data;
