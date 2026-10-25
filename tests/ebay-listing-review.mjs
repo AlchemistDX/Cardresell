@@ -33,6 +33,8 @@ for(const field of ['fulfillmentPolicyId','paymentPolicyId','returnPolicyId','me
 let ref=clone();ref.fulfillmentPolicies[0].shippingOptions[0].costType='CALCULATED';check(!build({reference:ref}).payload,'calculated shipping cannot invent package weight');
 ref=clone();ref.locations[0].merchantLocationStatus='DISABLED';check(!build({reference:ref}).payload,'disabled location rejected');
 ref=clone();ref.locations[0].location.address={country:'US'};check(!build({reference:ref}).payload,'incomplete location rejected');
+ref=clone();ref.locations[0].location.address={country:'US',postalCode:' '};check(!build({reference:ref}).payload,'whitespace is not a dispatch address');
+ref=clone();delete ref.fulfillmentPolicies[0].fulfillmentPolicyId;check(!build({reference:ref,selected:{...selected,fulfillmentPolicyId:'undefined'}}).payload,'a missing provider policy ID cannot become a literal undefined policy');
 ref=clone();ref.aspects[0].aspectValues=[];check(!build({reference:ref}).payload,'removed category value rejected');
 ref=clone();ref.aspects[0].aspectConstraint.aspectFormat='YYYY';check(!build({reference:ref}).payload,'unsupported format fails closed');
 ref=clone();ref.aspects[0].aspectValues[0].valueConstraints=[{applicableForLocalizedAspectName:'Language',applicableForLocalizedAspectValues:['Japanese']}];check(!build({reference:ref}).payload,'item-specific dependency honored');
@@ -83,15 +85,24 @@ check((await reviewedPhotos({owner:uid,draftId:draft.draftId,selected,photos:[ph
 await kv('SET',dk,JSON.stringify(draft));
 const record={accountHash:hash('seller1'),version:'connection-v1',cipher:seal({accessToken:'SELLER',refreshToken:'SECRET',accessExpiresAt:Date.now()+3600000,refreshExpiresAt:Date.now()+86400000},cfg,owner)};
 await kv('SET',k.connection,JSON.stringify(record));
-const verify=async t=>({uid:t});let hook=null,storeAfter=false;
-const store=async(...args)=>{const out=await kv(...args);if(storeAfter&&args[0]==='EVAL'&&args[1]===saveReviewScript){storeAfter=false;throw Error('lost storage acknowledgement');}return out;};
-const h=createHandler({env,verify,store,photoHost,referenceLoader:async()=>{if(hook){const fn=hook;hook=null;await fn();}return reference;}});
+const verify=async t=>({uid:t});let hook=null,storeAfter=false,connectionReadHook=null,referenceLoads=0;
+const store=async(...args)=>{const out=await kv(...args);if(connectionReadHook&&args[0]==='GET'&&args[1]===k.connection){const fn=connectionReadHook;connectionReadHook=null;await fn();}if(storeAfter&&args[0]==='EVAL'&&args[1]===saveReviewScript){storeAfter=false;throw Error('lost storage acknowledgement');}return out;};
+const h=createHandler({env,verify,store,photoHost,referenceLoader:async()=>{referenceLoads++;if(hook){const fn=hook;hook=null;await fn();}return reference;}});
 async function call({method='GET',who=uid,body={},handler=h,origin=env.EBAY_SELLER_ORIGIN}={}) {
  const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(v){this.data=v;return this;}};
  await handler({method,headers:{...(who?{authorization:'Bearer '+who}:{}),origin},query:{id:draft.draftId},body:{draftId:draft.draftId,expectedDraftRev:1,expectedReviewRev:0,requirementsFingerprint:hash(JSON.stringify(reference)),selected,photos:[photo],...body}},res);return res;
 }
 check((await call({who:null})).code===401,'unsigned review refused');
 r=await call();check(r.data.connected&&r.data.baseline.issues.some(i=>i.code==='REQUIREMENTS_PENDING')&&!r.data.baseline.issues.some(i=>i.code==='CONNECTION'),'connected GET baseline names the pending requirements step');
+const context=r.data.sellerContext;check(/^[a-f\d]{64}$/.test(context)&&context!==record.accountHash,'preferences receive an opaque seller boundary');
+await kv('SET',k.connection,JSON.stringify({...record,version:'renewed'}));check((await call()).data.sellerContext===context,'same seller reauthorization retains preference scope');
+await kv('SET',k.connection,JSON.stringify({...record,accountHash:hash('other-seller'),version:'other'}));check((await call()).data.sellerContext!==context,'different eBay seller gets a different preference scope');await kv('SET',k.connection,JSON.stringify(record));
+for(const action of ['requirements','check']) {
+ const before=referenceLoads;connectionReadHook=()=>kv('SET',k.connection,JSON.stringify({...record,accountHash:hash('other-seller'),version:'raced'}));
+ r=await call({method:'POST',body:{action,expectedConnectionVersion:record.version}});
+ check(r.code===409&&referenceLoads===before&&!await kv('GET',rk),'seller switch between initial read and token access blocks '+action+' before using other seller settings');
+ await kv('SET',k.connection,JSON.stringify(record));
+}
 check((await call({who:'other-owner'})).code===404,'other owner cannot read draft review');
 check((await call({method:'DELETE'})).code===405,'no destructive verb supported');
 check((await call({method:'POST',origin:'https://other.example'})).code===403,'cross-origin checkpoint refused');

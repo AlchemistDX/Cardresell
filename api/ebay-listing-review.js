@@ -42,25 +42,30 @@ export function createHandler({env=process.env,verify=verifyTokenFlexible,store,
    const k=keys(environment,hash(uid)),connectionRaw=await kv('GET',k.connection),connection=connectionRaw?JSON.parse(connectionRaw):null;
    const pilot=String(env.EBAY_SELLER_PILOT_UIDS||'').split(',').map(s=>s.trim()).filter(Boolean);
    const available=Boolean(cfg)&&(!pilot.length||pilot.includes(uid)),connected=available&&!!connection;
+   // Opaque preference boundary: stable for the same seller after reconnect,
+   // distinct across CardResell users, eBay accounts and environments.
+   const sellerContext=connected?hash(JSON.stringify(['ebay-selling-defaults-v1',environment,uid,connection.accountHash])):null;
    const accountChanged=Boolean(saved?.accountHash && saved.accountHash!==connection?.accountHash);
-   if(req.method==='GET')return res.status(200).json({draftId:id,draftRev:read.draft.rev,available,connected,connectionVersion:connection?.version||null,publishingEnabled:false,
+   if(req.method==='GET')return res.status(200).json({draftId:id,draftRev:read.draft.rev,available,connected,connectionVersion:connection?.version||null,sellerContext,publishingEnabled:false,
      baseline:buildSubmissionReview({read,owner:uid,environment,connected}),
      suggestedAspects:{...(read.packet?.aspects?.required||{}),...(read.packet?.aspects?.optional||{})},conditionIntent:read.packet?.condition?.descriptors||[],
      saved:accountChanged?null:saved,accountChanged,
      stale:!!saved&&(accountChanged||saved.connectionVersion!==(connection?.version||null)||saved.report.draftRev!==read.draft.rev||saved.report.expiresAt<=Date.now()),
      reviewRev:saved?.rev||0});
    const action=body.action||'check';if(!['check','requirements'].includes(action))throw fail('This endpoint only reviews listing requirements. Publishing is not enabled.');
+   if(Object.hasOwn(body,'expectedConnectionVersion')&&body.expectedConnectionVersion!==(connection?.version||null))throw fail('Your eBay connection changed. Reopen this review before continuing.',409);
    if(body.expectedDraftRev!==read.draft.rev)throw fail('This draft changed. Reload it before checking.',409);
    await limited(kv,'ebayreview:rate:'+hash(uid),30,3600);
    let reference=null,session=null;
    if(connected) {
     session=await access(kv,cfg,hash(uid),fetcher);
+    if(session.record.version!==connection.version||session.record.accountHash!==connection.accountHash)throw fail('Your eBay connection changed. Reopen this review before continuing.',409);
     reference=await referenceLoader(cfg,session.data.accessToken,read.packet?.category?.id,read.packet?.condition?.conditionId,fetcher);
     if(await kv('GET',k.connection)!==session.raw)throw fail('Your eBay connection changed. Reopen the review.',409);
    }
    if(action==='requirements') {
     if(await kv('GET',dk)!==draftRaw)throw fail('This draft changed. Reopen it before checking.',409);
-    return res.status(200).json({available,connected,reference,requirementsFingerprint:reference?hash(JSON.stringify(reference)):null,publishingEnabled:false});
+    return res.status(200).json({available,connected,reference,connectionVersion:session?.record.version||null,sellerContext,requirementsFingerprint:reference?hash(JSON.stringify(reference)):null,publishingEnabled:false});
    }
    if(reference&&body.requirementsFingerprint!==hash(JSON.stringify(reference)))throw fail('Load the current eBay requirements and review the selections again before saving.',409);
    if(!Number.isInteger(body.expectedReviewRev)||body.expectedReviewRev!==(saved?.rev||0))throw fail('Another tab updated this review. Reopen it before saving.',409);

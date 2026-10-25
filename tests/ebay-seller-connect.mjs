@@ -12,7 +12,7 @@ const check=(ok,message)=>{assert.ok(ok,message);checks++;};
 const kv=(...args)=>redisCommand(args);
 const env={EBAY_APP_ID:'fixture-app\n',EBAY_CERT_ID:'fixture-cert\n',EBAY_SELLER_CONNECT_ENABLED:'true',EBAY_SELLER_TOKEN_KEY:'41'.repeat(32),EBAY_SELLER_REDIRECT_NAME:'fixture-runame',EBAY_SELLER_ORIGIN:'https://www.cardresell.org'};
 const cfg=config(env),owner='fixture-owner',other='other-owner',k=keys('production',hash(owner));
- let calls=[],sellerId='seller-123',sellerName='Fixture Seller',mintHook=null,identityHook=null,failPolicy=false;
+ let calls=[],sellerId='seller-123',sellerName='Fixture Seller',mintHook=null,identityHook=null,failPolicy=false,locationResponse={locations:[{merchantLocationStatus:'ENABLED'},{merchantLocationStatus:'DISABLED'}]};
 const fetcher=async(url,opts={})=>{
  calls.push({url:String(url),method:opts.method||'GET'});
  if(String(url).endsWith('/identity/v1/oauth2/token')) {
@@ -26,7 +26,7 @@ const fetcher=async(url,opts={})=>{
  if(String(url).includes('/fulfillment_policy'))return Response.json({fulfillmentPolicies:[{}]});
  if(String(url).includes('/payment_policy'))return failPolicy?Response.json({errors:[{errorId:20403,message:'PRIVATE-PROVIDER-DETAILS',parameters:[{value:'PRIVATE-ACCESS'}]}]},{status:failPolicy===401?401:503}):Response.json({paymentPolicies:[{}]});
  if(String(url).includes('/return_policy'))return Response.json({returnPolicies:[]});
- if(String(url).includes('/location?'))return Response.json({locations:[{merchantLocationStatus:'ENABLED'},{merchantLocationStatus:'DISABLED'}]});
+ if(String(url).includes('/location?'))return Response.json(locationResponse);
  throw Error('unexpected external request');
 };
 const verify=async(token)=>{if(![owner,other].includes(token))throw Error('invalid');return {uid:token};};
@@ -67,6 +67,12 @@ try {
  check((await call('confirm','POST',{cookies:pendingCookies})).code===409,'confirm replay cannot create a second connection');
  const stored=await kv('GET',k.connection);check(!stored.includes('PRIVATE')&&!stored.includes(sellerName)&&!stored.includes('not-stored'),'tokens and identity encrypted; unnecessary email discarded');
  r=await call('readiness','POST');check(r.data.sellerRegistered===true&&r.data.inventoryLocations===1&&r.data.returnPolicies===0&&!r.data.publishingEnabled,'read-only seller readiness reflects actual responses');
+ check(r.data.usableInventoryLocations===0,'an enabled location without a key and address is not usable');
+ locationResponse={locations:[{merchantLocationKey:'one',merchantLocationStatus:'ENABLED',location:{address:{country:'US',postalCode:'12345'}}},{merchantLocationKey:'two',merchantLocationStatus:'ENABLED',location:{address:{country:'US',city:'Test City',stateOrProvince:'FL'}}},{merchantLocationKey:'blank',merchantLocationStatus:'ENABLED',location:{address:{country:'US',postalCode:' '}}},{merchantLocationKey:'off',merchantLocationStatus:'DISABLED',location:{address:{country:'US',postalCode:'12345'}}}]};
+ r=await call('readiness','POST');check(r.data.inventoryLocations===3&&r.data.usableInventoryLocations===2,'basic address alternatives count while whitespace and disabled locations do not');
+ locationResponse={...locationResponse,total:101,next:'https://api.ebay.com/next'};r=await call('readiness','POST');
+ check(r.data.inventoryLocations===null&&r.data.usableInventoryLocations===null&&r.data.partial&&r.data.issues.some(i=>i.check==='location'),'truncated locations remain unknown and cannot imply readiness');
+ locationResponse={locations:[]};r=await call('readiness','POST');check(r.data.usableInventoryLocations===0&&!r.data.partial,'a verified empty list is distinct from a failed location lookup');
  failPolicy=true;r=await call('readiness','POST');check(r.data.partial&&r.data.paymentPolicies===null,'failed provider lookup is unknown, not zero or ready');
  check(r.data.issues[0].check==='payment'&&r.data.issues[0].providerStatus===503&&r.data.issues[0].providerErrorId===20403&&r.data.issues[0].message.includes('Business Policies'),'unavailable policies carry actionable safe details');
  check(!JSON.stringify(r.data).includes('PRIVATE'),'seller checks never reflect provider messages, parameters or credentials');failPolicy=false;
