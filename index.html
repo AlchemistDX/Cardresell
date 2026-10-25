@@ -641,7 +641,7 @@ img{display:block;max-width:100%;height:auto}
 .qp-tier:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .qp-tier[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:var(--surface)}
 .qp-tier-amt{font-size:1rem;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}
-.qp-tier-label{font-size:.68rem;font-weight:600;opacity:.82;line-height:1.2;white-space:nowrap}
+.qp-tier-label{font-size:.68rem;font-weight:600;opacity:.82;line-height:1.2;white-space:normal;overflow-wrap:anywhere;max-width:100%}
 .qp-tier[aria-pressed="true"] .qp-tier-label{opacity:.9}
 
 .qp-bar-wrap{margin:1.55rem 0 .5rem;position:relative}
@@ -2580,11 +2580,10 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
 
           <div id="qpInfo" class="qp-info-panel" style="display:none">
-            <p><strong>Sell Now</strong> is an estimate 15% below the displayed comp.</p>
-            <p><strong>Comp</strong> is the displayed source value for this card, condition, and grade.</p>
-            <p><strong>Patient</strong> is an estimate 15% above the displayed comp.</p>
-            <p class="qp-info-caveat">Sell Now and Patient are calculated, not observed sales. Active listings are skipped because they mix conditions and the cheapest ask is often a beat-up copy.</p>
-            <p class="qp-info-caveat">These are prices, not timelines. No marketplace publishes how long a card takes to sell, so we don&#8217;t estimate it.</p>
+            <p><strong>Lower ask / Upper ask</strong> use reported TCGplayer endpoints only when they match your selected condition and were updated within 7 days. These are asking prices, not completed sales.</p>
+            <p><strong>Reference / Comp</strong> is the displayed source value. It is not necessarily the midpoint of the asking range.</p>
+            <p><strong>Lower ask −15% / Higher ask +15%</strong> are calculated suggestions when no usable asking range is available. The percentages do not measure market spread.</p>
+            <p class="qp-info-caveat">Check recent sales for the same printing, finish, condition and grade. These choices do not predict a sale price or how quickly a card will sell.</p>
           </div>
 
           <div class="qp-tiers" id="qpTiers" role="group" aria-label="Quick pricing options"></div>
@@ -3969,7 +3968,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
 <script defer src="/js/sale-corrections.ba658815.js"></script>
 <script defer src="/js/inventory-edits.827690a8.js"></script>
-<script defer src="/js/core.22a43581.js"></script>
+<script defer src="/js/price-evidence.58976d9a.js"></script>
+<script defer src="/js/core.6413c984.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }

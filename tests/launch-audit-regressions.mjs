@@ -1584,10 +1584,10 @@ try {
   // arguments. Both now pass `midBasis` as a fifth. Same reasoning as above:
   // what is being protected is that neither writer builds its own `Low $...`
   // string, not the argument count. The four positional arguments stay pinned.
-  check('Basis headline range routes through _rangeParts',
-    /priceRange\.textContent = _rangeParts\(b\.low, b\.mid, b\.high, m[,)]/.test(idx));
-  check('Clamped headline range routes through _rangeParts',
-    /_rangeParts\(clamped\.low, clamped\.mid, clamped\.high, condMult[,)]/.test(idx));
+  check('Basis headline range routes through comparability gate and shared fallback',
+    idx.includes("_crPriceRangeCaption(_rangeParts(b.low,b.mid,b.high,m,b.midBasis)"));
+  check('Clamped headline range routes through comparability gate and shared fallback',
+    idx.includes("_crPriceRangeCaption(_rangeParts(clamped.low,clamped.mid,clamped.high,condMult,clamped.midBasis)"));
 
   // T2.10: the label is a function of provenance, not of the number. A derived
   // centre must not be presented under a noun that claims a measured median.
@@ -1628,9 +1628,9 @@ try {
   const rqp = index.slice(_rs, index.indexOf('\nfunction ', _rs + 10));
   check('band: disclosure says not observed sales', /not observed sales/.test(rqp));
   check('band: disclosure survives showStrategy(true)',
-        /_bandActive && note\) note\.style\.display = ''/.test(rqp));
+        /\(_bandActive \|\| askingRangeActive\) && note\) note\.style\.display = ''/.test(rqp));
   check('band: payout rows stay hidden under a derived band',
-        /_bandActive && rowsEl\) rowsEl\.style\.display = 'none'/.test(rqp));
+        /\(_bandActive \|\| askingRangeActive\) && rowsEl\) rowsEl\.style\.display = 'none'/.test(rqp));
   // Tightened 2026-09-04: a derived band alone no longer keeps the ladder,
   // since raw cards get a band too and a grade axis over a raw selection
   // describes something different from the strategy bar above it.
@@ -1798,12 +1798,12 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 {
   const info = index.slice(index.indexOf('<div id="qpInfo"'),
                            index.indexOf('</div>', index.indexOf('<div id="qpInfo"')));
-  check('qpInfo defines Sell Now as 15% below comp',
-        /<strong>Sell Now<\/strong> is an estimate 15% below/.test(info));
-  check('qpInfo defines Comp as the displayed source value',
-        /<strong>Comp<\/strong> is the displayed source value/.test(info));
-  check('qpInfo defines Patient as 15% above comp',
-        /<strong>Patient<\/strong> is an estimate 15% above/.test(info));
+  check('qpInfo separates observed asking endpoints from completed sales',
+        /Lower ask \/ Upper ask/.test(info) && /asking prices, not completed sales/.test(info));
+  check('qpInfo defines reference without inventing a midpoint',
+        /Reference \/ Comp/.test(info) && /not necessarily the midpoint/.test(info));
+  check('qpInfo defines percentage choices as calculated suggestions',
+        /Lower ask −15% \/ Higher ask \+15%/.test(info) && /calculated suggestions/.test(info));
   check('qpInfo no longer says Sell Now undercuts the cheapest listing',
         !/undercuts the cheapest/.test(info));
   check('qpInfo no longer names Top of Book', !/Top of Book/.test(info));
@@ -2016,7 +2016,7 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
   const ra = index.slice(index.indexOf('function _qpReapplyChosenTier'),
                          index.indexOf('function toggleQpInfo'));
   check('re-apply is a no-op when no tier was chosen', /if \(!id\) return;/.test(ra));
-  check('re-apply looks the tier up by id', /tiers\.find\(x => x\.id === id\)/.test(ra));
+  check('re-apply looks the tier up by id', /tiers\?\.find\(x => x\.id === id\)/.test(ra));
 }
 
 // ---- Condition scales the source basis unconditionally (2026-09-04) -----

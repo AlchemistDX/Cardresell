@@ -225,10 +225,10 @@ console.log('\n[Quick Pricing — honest labelling]');
 
   const zone = markup + logic;
 
-  // The core rule. No day counts, no sell-through, no "sells in".
-  check('no day-count claim anywhere in the widget',
-        !/\b\d+\s*[-\u2013]?\s*\d*\s*days?\b/i.test(zone),
-        'no venue publishes time-to-sell; a day range here would be invented');
+  // A provider freshness window is permitted; a promised selling window is not.
+  check('no sale-timing day-count claim in the widget',
+        !/(?:sell|sold|sale|cash)\s+(?:in|within)\s+\d+\s*(?:[-–]\s*\d+)?\s*days?/i.test(zone),
+        'the seven-day data freshness window must not become a sale prediction');
 
   check('no sell-through or velocity claim',
         !/sell[-\s]?through|velocity|days? to (cash|sell)|typically sells/i.test(zone),
@@ -244,8 +244,7 @@ console.log('\n[Quick Pricing — honest labelling]');
         !/beta/i.test(zone));
 
   check('the info panel states we do not estimate timelines',
-        /No marketplace publishes/i.test(markup) &&
-        /don&#8217;t estimate it|do not estimate it/i.test(markup),
+        /do not predict a sale price or how quickly a card will sell/i.test(markup),
         'the caveat is the thing that makes the tier names honest');
 }
 
@@ -687,7 +686,7 @@ console.log('\n[Quick Pricing — wiring]');
 
   // Sell Now / Comp / Patient survive, relabelled.
   check('Q7: the three suggestions are still offered',
-        /label:'Sell Now −15%'/.test(core) && /label:'Comp'/.test(core) && /label:'Patient \+15%'/.test(core),
+        /label:'Lower ask −15%'/.test(core) && /label:'Comp'/.test(core) && /label:'Higher ask \+15%'/.test(core),
         'option (iii) keeps them -- it changes what they are called');
   check('Q7: they are labelled calculated suggestions, not estimates of a market',
         (core.match(/calculated suggestion/g) || []).length >= 2,
@@ -1190,9 +1189,9 @@ console.log('\n[Quick Pricing — wiring]');
   // ---- 6. the copy claim: Comp keeps its basis label ----
   check('Comp retains a source/basis label rather than being called calculated',
         core.includes('Comp is the displayed source value'),
-        'only Sell Now and Patient are calculated suggestions');
+        'only Lower ask and Higher ask are calculated suggestions');
   check('only the two outer tiers are called calculated suggestions',
-        /Sell Now and Patient are calculated/.test(core) &&
+        /Lower ask and Higher ask are calculated/.test(core) &&
         !/Comp[^.]{0,40}calculated suggestion/.test(core));
 }
 
@@ -1507,9 +1506,11 @@ console.log('\n[Quick Pricing — wiring]');
   const basisDepsSrc   = [retrievedAtSrc, intentSrc, bindBasisSrc].join('\n');
 
   // ---- the render call site, verbatim.
-  const _rsA = core.indexOf('priceRange.textContent = _rangeParts(');
+  const _rsA = core.indexOf("priceRange.textContent = typeof _crPriceRangeCaption");
   const renderSrc = core.slice(_rsA, core.indexOf(';', _rsA) + 1);
   const rangeSrc  = _fnSrc(core, 'function _rangeParts(');
+  const captionSrc = _fnSrc(core, 'function _crPriceRangeCaption(');
+  const evidenceModule = new Function('window', readFileSync(new URL('../js/price-evidence.js',import.meta.url),'utf8')+';return window.CardResellPriceEvidence;')({});
 
   /* 2026-09-08: this block CRASHED, it did not fail, for six revisions
      (`a8dc3d6`..`ffa735d`) -- ReferenceError: _crRetrievedAtFrom is not
@@ -1523,7 +1524,7 @@ console.log('\n[Quick Pricing — wiring]');
      fragments, so a future rename fails HERE instead of crashing 8 lines down. */
   check('every hop of the chain is locatable',
         !!(mainSrc && fbSrc && clampSrc && divSrc && clampHighSrc
-           && sentSrc && _adA > -1 && _adE > _adB && _cbA > -1 && _rsA > -1 && rangeSrc
+           && sentSrc && _adA > -1 && _adE > _adB && _cbA > -1 && _rsA > -1 && rangeSrc && captionSrc
            && retrievedAtSrc && bindBasisSrc && intentSrc),
         'if this fails the integration checks below are silently testing nothing');
 
@@ -1536,13 +1537,17 @@ console.log('\n[Quick Pricing — wiring]');
                                  basisDepsSrc + '\n' + clampHighSrc
                                  + '\nlet bestPrice = null, _basisMeta = null;\n'
                                  + adapterSrc + '\n' + crBasisSrc + '\nreturn window._crBasis;');
-  const renderRange = new Function('b', 'm', 'priceRange',
-                                   rangeSrc + '\n' + renderSrc + '\nreturn priceRange.textContent;');
+  const renderRange = new Function('b', 'm', 'priceRange', 'evidence',
+                                   'const _crSelectedPriceEvidence=()=>evidence;\n'
+                                   +captionSrc+'\n'+rangeSrc + '\n' + renderSrc + '\nreturn priceRange.textContent;');
 
   // One call = server JSON -> wire -> basis -> rendered string.
   const CHAIN_CARD = { game: 'pokemon', set: 'Base Set', number: '4/102' };
   const wire   = (data) => toBasis(JSON.parse(JSON.stringify(data)), {}, CHAIN_CARD);
-  const render = (basis) => renderRange(basis, 1, { textContent: '' });
+  // These legacy endpoint feeds lack an exact-condition key and provider date.
+  // They retain provenance internally but no longer imply a usable selling range.
+  const render = (basis) => renderRange(basis, 1, { textContent: '' },
+    evidenceModule.assess({row:{...basis,market:basis.value},key:'holofoil',condition:'nm'}));
   const chain  = (data) => { const b = wire(data); return { basis: b, text: render(b) }; };
 
   const HEAD = { basis: 'sales' };
@@ -1563,12 +1568,11 @@ console.log('\n[Quick Pricing — wiring]');
   check('main path, no provider mid: the tag survives to window._crBasis',
         noMid.basis.mid === 40 && noMid.basis.midBasis === 'derived',
         'this is the hop that was dropping it -- the wire read into _basisMeta');
-  check('main path, no provider mid: it RENDERS as a calculated reference',
-        noMid.text === 'Low $30.00 \u00b7 Ref $40.00 (calculated) \u00b7 High $60.00',
-        'end to end: a substituted midpoint reaches the seller labelled as ours');
-  check('main path, no provider mid: low and high still render',
-        /Low \$30\.00/.test(noMid.text) && /High \$60\.00/.test(noMid.text),
-        'a derived centre must not cost the seller a usable range');
+  check('main path, no provider mid: headline discloses no measured selection range',
+        noMid.text === 'Single reference price · no measured range for this selection');
+  check('main path, no provider mid: unscoped low and high remain withheld',
+        !/Low \$|High \$/.test(noMid.text),
+        'endpoint presence alone cannot establish selected-condition comparability');
 
   /* ── MAIN PATH, provider sends a midpoint ──────────────────────────────
      Attribution survives and the neutral label is kept. */
@@ -1577,22 +1581,21 @@ console.log('\n[Quick Pricing — wiring]');
                                  40, HEAD, 'pokemon', 3, 'X', 'Y'));
   check('main path, provider mid: attribution survives the chain',
         hasMid.basis.midBasis === 'observed' && hasMid.basis.mid === 44);
-  check('main path, provider mid: it renders as Mid',
-        hasMid.text === 'Low $30.00 \u00b7 Mid $44.00 \u00b7 High $60.00');
+  check('main path, provider mid: an unscoped midpoint does not create a range',
+        hasMid.text === 'Single reference price · no measured range for this selection');
 
   /* ── FALLBACK PATH ─────────────────────────────────────────────────────
      Different vocabulary ('provider'), same decision. This is the path
      whose honest tag used to die at the wire. */
   const fbNoMid = chain(serveFb({ market: 12, low: 9, mid: null, high: 20,
                                   source: 'scryfall' }, 'mtg', 1, 'A', 'B'));
-  check('fallback path, no provider mid: tagged derived, renders calculated',
+  check('fallback path, no provider mid: tag survives, unscoped range is withheld',
         fbNoMid.basis.midBasis === 'derived'
-        && /Ref \$12\.00 \(calculated\)/.test(fbNoMid.text));
+        && /no measured range/.test(fbNoMid.text));
   const fbHasMid = chain(serveFb({ market: 12, low: 9, mid: 13, high: 20,
                                    source: 'scryfall' }, 'mtg', 1, 'A', 'B'));
-  check("fallback path, provider mid: 'provider' is NOT downgraded to calculated",
-        fbHasMid.basis.midBasis === 'provider' && /Mid \$13\.00/.test(fbHasMid.text),
-        "the consumer contract is `=== 'derived'`, so a third token must render as Mid");
+  check("fallback path, provider mid: attribution survives without inventing comparability",
+        fbHasMid.basis.midBasis === 'provider' && /no measured range/.test(fbHasMid.text));
 
   /* ── The claim narrowed: mid === market AFTER the clamp, on these paths.
      Producer assignments alone do not establish this, because the clamp
