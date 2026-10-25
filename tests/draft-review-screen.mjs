@@ -2907,7 +2907,7 @@ try {
         while (Date.now() < DEADLINE) {
           const lv = document.getElementById('lookupView');
           if (!lv || lv.classList.contains('hidden')) { try { switchView('lookup'); } catch (_) {} }
-          window._crSellApproved = A;
+          window._crSellApproved = selectedCard;
           const row = document.getElementById('crSellRow');
           if (row) row.style.display = '';
           const b = document.getElementById('crSellBtn');
@@ -2928,7 +2928,7 @@ try {
     // ── 1. The panel path: card B priced, then card A loaded, no new read.
     await priceCardB(FOREIGN);
     const switched = await page.evaluate((A) => {
-      try { loadCardUI(A); } catch (e) { return 'threw: ' + e.message; }
+      try { setSelectedCard(A); loadCardUI(A); } catch (e) { return 'threw: ' + e.message; }
       return window._crBasis === null ? 'cleared' : 'kept';
     }, CARD_A);
     T.check('loading a card discards the previous card\u2019s basis',
@@ -2936,7 +2936,7 @@ try {
 
     newCase('1-panel');
     await page.evaluate((A) => {
-      window._crSellApproved = A;                    // what applySellGate leaves behind
+      window._crSellApproved = selectedCard;                    // the exact rendered row, as applySellGate records it
       const row = document.getElementById('crSellRow');
       if (row) row.style.display = '';               // the gate's own show, without the round trip
     }, CARD_A);
@@ -3017,7 +3017,7 @@ try {
       window._crBasis = _crBindBasis({ value: 400, label: 'TCGplayer market',
         sourceUrl: 'https://www.tcgplayer.com/CARD-A', low: 380, mid: 400, high: 430,
         retrievedAt: '2026-09-08T20:30:00.000Z' }, A);
-      window._crSellApproved = A;
+      window._crSellApproved = selectedCard;
       // Re-arm the in-page capture so what follows is THIS create's instant,
       // not case 2's leftover value.
       window.__basisAtPost = null;
@@ -3060,7 +3060,7 @@ try {
     await page.evaluate((A) => {
       window._crBasis = { value: 400, label: 'unbound read', sourceUrl: 'https://x.test/UNBOUND',
         retrievedAt: '2026-09-08T20:45:00.000Z' };
-      window._crSellApproved = A;
+      window._crSellApproved = selectedCard;
     }, CARD_A);
     await backToPanel();   // the previous create left us on the review screen
     await page.click('#crSellBtn');
