@@ -51,6 +51,7 @@
  * Run: node tests/photo-download-gating-2026-09-13.mjs (CR_CHROMIUM may select a browser)
  */
 
+import {clearListingAvailability} from './_listingAvailabilityFixture.mjs';
 import http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
@@ -134,9 +135,11 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (u.pathname === '/api/listing-availability') return send(200, clearListingAvailability(await readBody(req)));
+
   if (u.pathname === '/api/drafts') {
     return send(200, {
-      draft: { draftId: DRAFT_ID, sku: SKU,
+      draft: { draftId: DRAFT_ID, rev: 1, sku: SKU,
                title: 'Charizard TG03 Base Set',
                price: 32.84, quantity: 1 },
       packet: { category: { id: '183454' },
@@ -167,7 +170,7 @@ await page.waitForFunction(
      && typeof window._draftDownloadGo === 'function'
      && typeof window.ensureExportablePhotos === 'function'
 );
-await page.evaluate((tok) => { window._googleIdToken = tok; }, token);
+await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; }, token);
 
 /* ── helpers driven inside the page ───────────────────────────────────────── */
 
@@ -300,7 +303,7 @@ await T.section('SUCCESS: hosted URL lands in Item photo URL when the button is 
     for (const pid of (rows.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
   }, DRAFT_ID);
   await seedOneUsablePhoto();
-  await page.evaluate((tok) => { window._googleIdToken = tok; }, token);
+  await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; }, token);
 
   const out = await driveDownloadButton();
 
@@ -394,7 +397,7 @@ await T.section('FAILURE (SIGNED_OUT + local photo): no CSV, specific reason', a
 
 await T.section('FAILURE (NOT_CONFIGURED + local photo): no CSV, hosting-off reason', async () => {
   mode = 'not_configured';
-  await page.evaluate((tok) => { window._googleIdToken = tok; }, 'stub-id-token');
+  await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; }, 'stub-id-token');
   await page.evaluate(async (id) => {
     const rows = await window.photosList(id).catch(() => ({ order: [] }));
     for (const pid of (rows.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }

@@ -41,6 +41,7 @@
  * Run: node tests/photo-export-wiring-2026-09-13.mjs (CR_CHROMIUM may select a browser)
  */
 
+import {clearListingAvailability} from './_listingAvailabilityFixture.mjs';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
@@ -234,9 +235,11 @@ const server = http.createServer(async (req, res) => {
      from the list row. Returns the same two fixtures the CSV assertions use, so
      the file produced through the button is the file the rest of the suite
      inspects. */
+  if (u.pathname === '/api/listing-availability') return send(200, clearListingAvailability(await readBody(req)));
+
   if (u.pathname === '/api/drafts') {
     return send(200, {
-      draft: { draftId: DRAFT_ID, sku: 'PKMBASE30', title: 'Ivysaur 30/102 Base Set',
+      draft: { draftId: DRAFT_ID, rev: 1, sku: 'PKMBASE30', title: 'Ivysaur 30/102 Base Set',
                price: 12.34, quantity: 1 },
       packet: { category: { id: '183454' }, title: { text: 'Ivysaur 30/102 Base Set' },
                 description: { text: 'Ivysaur, Base Set, number 30.' } },
@@ -285,7 +288,7 @@ await page.waitForFunction(
    real token check is covered by the endpoint suite; here the point is that
    the client SENDS the header it claims to. */
 await page.evaluate(() => {
-  window._fbCurrentUser = { getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
+  window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = { getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
 });
 
 const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
@@ -617,7 +620,7 @@ await T.section('a signed-out seller is told that, not shown an empty column sil
   const line = owed.find((o) => /photo/i.test(o)) || '';
   T.check('the disclosure says the seller is signed out', /signed out/i.test(line), line);
   await page.evaluate(() => {
-    window._fbCurrentUser = { getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
+    window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = { getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
     window._googleIdToken = '';
   });
 });

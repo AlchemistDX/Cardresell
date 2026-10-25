@@ -6,7 +6,8 @@
  const button=(text,fn)=>{const b=el('button',text);b.type='button';b.onclick=fn;return b;};
  const labels={planned:'Plan saved · not sent',inventory_saved:'Inventory confirmed · offer not created',offer_saved:'Unpublished offer confirmed',pending:'Request outcome uncertain',live:'Last confirmed active',ended:'Offer ended · copy held',cancelled:'Unsent plan cancelled',account_changed:'Original seller connection required',account_deleted:'Account data erased · copy held'};
  let active=null;
- async function open({draftId}={}) {
+ async function open({draftId,id,environment}={}) {
+  const returnFocus=document.activeElement;
   if(active)active.dialog.close();
   const who=owner();if(!who){window.showToast?.('Sign in to recover your eBay listing operations.');return;}
   if(!document.getElementById('ebayOperationsStyle')) {
@@ -21,7 +22,7 @@
   const status=el('p','Loading saved operations…');status.setAttribute('role','status');const error=el('p');error.setAttribute('role','alert');const content=el('div'),actions=el('div');actions.className='ebay-operation-actions';
   dialog.append(header,status,error,content,actions);document.body.append(dialog);dialog.showModal();
   const timer=setInterval(()=>{if(owner()!==who)dialog.close();},250);
-  dialog.addEventListener('close',()=>{state.closed=true;clearInterval(timer);dialog.remove();if(active===state)active=null;document.getElementById('ebayOperationsBtn')?.focus();},{once:true});
+  dialog.addEventListener('close',()=>{state.closed=true;clearInterval(timer);dialog.remove();if(active===state)active=null;if(returnFocus?.isConnected&&returnFocus.offsetParent)returnFocus.focus();else document.getElementById('collectionDraftTools')?.querySelector('button')?.focus();},{once:true});
   async function request(path,body) {
    if(!valid())throw Error('Your account changed. Reopen listing operations.');
    const token=await _crIdToken();if(!valid()||!token)throw Error('Sign in again to continue.');
@@ -38,17 +39,18 @@
    const b=button(label,()=>run(async()=>{if(!input.checked)throw Error('Confirm this action first.');await fn();}));b.disabled=true;input.onchange=()=>b.disabled=!input.checked;wrap.append(row,b);host.append(wrap);
   }
   async function act(record,action) {
-   await request('/api/ebay-listing-operations',{action,id:record.id,expectedRev:record.rev,confirmed:true});await load();
+   await request('/api/ebay-listing-operations',{action,id:record.id,environment:state.data?.environment,expectedRev:record.rev,confirmed:true});window.dispatchEvent(new Event('cr:listing-availability-changed'));await load();
   }
   function navigation() {
    actions.replaceChildren(button('Reload saved status',()=>run(load)));
-   if(draftId)actions.append(button('View all saved operations',()=>{
+   if(draftId||id)actions.append(button('View all saved operations',()=>{
     if(state.busy||!valid())return;
-    dialog.close();open();
+    dialog.close();open({environment});
    }));
   }
   async function load() {
-   const data=await request('/api/ebay-listing-operations'+(draftId?'?draftId='+encodeURIComponent(draftId):''));state.data=data;
+   const query=new URLSearchParams({...id?{id}:draftId?{draftId}:{},...environment?{environment}:{}});
+   const data=await request('/api/ebay-listing-operations'+(query.size?'?'+query:''));state.data=data;
    content.replaceChildren();navigation();
    status.textContent=data.notice;
    if(!data.records.length)content.append(el('p',draftId?'No saved eBay listing plan for this copy.':'No saved eBay listing operations. Open a draft, check direct eBay readiness, then save its listing plan when the checks pass.'));
@@ -73,7 +75,7 @@
      confirmation(card,'Reserve this physical copy for the reviewed eBay listing.','Save listing plan',async()=>{
       const manifest=await photosList(draftId);if(!valid())return;
       const photos=review.saved.report.selected.photoIds.map(id=>({...manifest.hosted?.[id],photoId:id}));
-      await request('/api/ebay-listing-operations',{action:'plan',draftId,expectedReviewRev:review.reviewRev,confirmed:true,photos});await load();
+      await request('/api/ebay-listing-operations',{action:'plan',environment:state.data?.environment,draftId,expectedReviewRev:review.reviewRev,confirmed:true,photos});window.dispatchEvent(new Event('cr:listing-availability-changed'));await load();
      });content.append(card);
     } else content.append(button('Review eBay requirements',()=>{dialog.close();window.CardResellEbayListingReview?.open(draftId);}));
    }

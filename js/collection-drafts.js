@@ -37,6 +37,14 @@
         status.replaceChildren(); const result = results.get(id);
         if (result) { status.append(el('span', result.message)); if (result.draftId) status.append(button('Open draft', () => openDraftReview(result.draftId))); }
       }
+      const availability = tr.querySelector('.collection-listing-status');
+      if (availability) {
+        availability.replaceChildren();
+        const saved = window.CardResellListingAvailability?.peek(id);
+        availability.dataset.state = saved?.state || 'unknown';
+        availability.append(el('span', saved?.label || (owner ? 'Listing status not checked' : 'Sign in to check saved listing status')));
+        if (saved?.operationId) availability.append(button('Review eBay plan', () => window.CardResellEbayListingOperations?.open({id:saved.operationId,environment:'production'})));
+      }
     });
     const hiddenSelected = [...selected].filter(id => !byId.get(id) || !visible(byId.get(id))).length;
     bar.querySelector('[data-count]').textContent = `${selected.size} selected · ${count} of ${rows.length} shown`
@@ -55,6 +63,8 @@
     const move = bar.querySelector('[data-set-location]'); if(move)move.disabled=busy||!selected.size;
     const exportSelected = bar.querySelector('[data-export-selected]');
     if (exportSelected) exportSelected.disabled = busy || !selected.size;
+    const checked=window.CardResellListingAvailability?.checkedAt?.(),checkNote=bar.querySelector('[data-listing-check-note]');
+    if(checkNote)checkNote.textContent=(checked?'Last checked at '+new Date(checked).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})+'. ':'Saved sales and eBay plans are checked in CardResell. ')+'Check other marketplaces before listing.';
     create.textContent = busy ? 'Preparing drafts…' : !owner ? 'Sign in to prepare drafts' : `Prepare ${selected.size || ''} draft${selected.size === 1 ? '' : 's'}`;
   }
   function mount(next) {
@@ -91,6 +101,10 @@
 .collection-draft-select{display:flex;align-items:center;gap:.5rem;min-height:44px;font-size:.8rem;cursor:pointer}
 .collection-draft-check{width:22px;height:22px;accent-color:var(--gold)}
 .collection-draft-result{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;white-space:normal;font-size:.75rem;line-height:1.4;margin-top:.3rem}
+.collection-listing-status{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;white-space:normal;font-size:.75rem;line-height:1.5;margin-top:.5rem;color:var(--text-muted)}
+.collection-listing-status[data-state=held],.collection-listing-status[data-state=sold],.collection-listing-status[data-state=unknown]{color:var(--gold)}
+.collection-listing-status button{min-height:44px;white-space:normal;font:inherit;padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);cursor:pointer}
+.collection-listing-status button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(max-width:600px){.collection-plan-actions{display:grid;grid-template-columns:1fr 1fr}.collection-plan-actions [data-create]{grid-column:1/-1;grid-row:1}.collection-plan-selection{gap:.35rem}.collection-plan-selection button{flex:1 1 auto}.collection-plan-filters .collection-plan-search{flex-basis:100%}}
 `;
       document.head.append(style);
@@ -127,6 +141,9 @@
     const actions = el('div','','collection-plan-actions'); actions.setAttribute('role','group'); actions.setAttribute('aria-label','Use selected Collection cards'); actions.append(compare, exportSelected, move, button('View drafts', () => switchView('drafts')), create);
     bar.append(selection,actions);
     bar.append(el('p', 'Values are saved estimates. Refresh prices before deciding; “Under $5” does not include cards with missing values.','collection-plan-note'));
+    const availabilityTools=el('div','','collection-plan-selection');
+    const refresh=button('Check listing status',()=>refreshAvailability(true));refresh.disabled=!owner;
+    const checkNote=el('p','','collection-plan-note');checkNote.dataset.listingCheckNote='';availabilityTools.append(refresh,checkNote);bar.append(availabilityTools);
     const status = el('div'); status.dataset.status = ''; status.setAttribute('role','status'); bar.append(status);
     window.CardResellDraftBatch?.mount(bar);
     document.getElementById('collectionWrap').before(bar);
@@ -135,9 +152,14 @@
       const id = tr.dataset.entryId, cell = tr.querySelector('[data-label="Card"]'); if (!cell) return;
       const label = el('label','','collection-draft-select'); const input = el('input','','collection-draft-check'); input.type = 'checkbox'; input.setAttribute('aria-label','Select '+(byId.get(id)?.card || 'card'));
       label.onclick = ev => ev.stopPropagation(); input.onchange = () => { syncOwner(); input.checked ? selected.add(id) : selected.delete(id); paint(); };
-      label.append(input,el('span','Select')); const result = el('div','','collection-draft-result'); result.onclick = ev => ev.stopPropagation(); const details=button('Inventory details',ev=>{ev.stopPropagation();window.CardResellInventoryDetails.open([id]);});details.className='fl-sub-btn';cell.append(label,details,result);
+      label.append(input,el('span','Select')); const result = el('div','','collection-draft-result'); result.onclick = ev => ev.stopPropagation(); const details=button('Inventory details',ev=>{ev.stopPropagation();window.CardResellInventoryDetails.open([id]);});details.className='fl-sub-btn';
+      const availability=el('div','','collection-listing-status');availability.onclick=ev=>ev.stopPropagation();cell.append(label,details,availability,result);
     });
-    paint();
+    paint();refreshAvailability();
+  }
+  function refreshAvailability(force=false) {
+    const bar=document.getElementById('collectionDraftTools');if(!bar||!bar.isConnected)return;
+    return window.CardResellListingAvailability?.refresh(rows.filter(p=>p?.id!=null).map(key),{force});
   }
   function batchState() {
     const flow=window.CardResellDraftBatch;if(!flow)return;
@@ -152,5 +174,8 @@
   window.addEventListener('cr:collection-draft-progress',()=>{
     syncOwner();batchState();paint();const bar=document.getElementById('collectionDraftTools');if(bar)window.CardResellDraftBatch?.mount(bar);
   });
+  window.addEventListener('cr:listing-availability',paint);
+  window.addEventListener('cr:listing-availability-changed',()=>refreshAvailability(true));
+  window.addEventListener('focus',()=>{if(document.getElementById('collectionDraftTools')?.offsetParent)refreshAvailability();});
   window.CardResellCollectionDrafts = {mount};
 })();
