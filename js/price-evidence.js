@@ -21,7 +21,7 @@
     const salesAverage=matches&&positive(average?.value)&&[1,7,30].includes(average?.days)?{value:average.value,days:average.days}:null;
     const low=positive(row.low),high=positive(row.high);
     const comparable=exactCondition&&row.lowBasis==='tcgplayer'&&row.highBasis==='tcgplayer'&&!row.highClamped;
-    const range=comparable&&low!==null&&high!==null&&low<high?{low,high,kind:'ask',source:'TCGplayer'}:null;
+    const range=comparable&&low!==null&&high!==null&&cents(low)>0&&cents(low)<cents(high)?{low:cents(low),high:cents(high),kind:'ask',source:'TCGplayer'}:null;
     const usableRange=range&&dated&&!stale?range:null;
     let note=graded?'One reference for this grade is not a measured sale-price range.':
       !exactCondition?'No condition-specific range is available for this selection. Condition adjustments are estimates.':
@@ -33,10 +33,12 @@
   }
   function tiers(evidence) {
     const range=evidence?.usableRange;if(!range)return null;
-    const choices=[{id:'ask-low',amt:cents(range.low),label:'Lower ask',hint:'Reported TCGplayer low for this condition; not a fast-sale guarantee',observedAsk:true}];
-    const reference=evidence.reference;
+    const choices=[{id:'ask-low',amt:cents(range.low),label:'Listed low',hint:'Reported TCGplayer low for this condition; not a fast-sale guarantee',observedAsk:true}];
+    // Round before comparing so a near-endpoint reference cannot hide the
+    // actual listed high when duplicate display amounts are removed.
+    const reference=positive(evidence.reference)===null?null:cents(evidence.reference);
     if(reference>range.low&&reference<range.high)choices.push({id:'ask-reference',amt:cents(reference),label:'Reference',hint:'Selected provider reference; not the midpoint of the range',observedAsk:true});
-    choices.push({id:'ask-high',amt:cents(range.high),label:'Upper ask',hint:'Reported TCGplayer high for this condition; not an expected sale',observedAsk:true});
+    choices.push({id:'ask-high',amt:cents(range.high),label:'Listed high',hint:'Reported TCGplayer high for this condition; not an expected sale',observedAsk:true});
     const unique=choices.filter((row,i)=>choices.findIndex(other=>other.amt===row.amt)===i);
     return unique.length>=2?unique:null;
   }

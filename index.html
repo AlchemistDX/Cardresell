@@ -647,7 +647,7 @@ img{display:block;max-width:100%;height:auto}
 .qp-bar-wrap{margin:1.55rem 0 .5rem;position:relative}
 .qp-bar{position:relative;height:7px;border-radius:99px;overflow:visible}
 .qp-bar-fill{position:absolute;inset:0;border-radius:99px;
-  background:linear-gradient(90deg,var(--qp-green) 0%,var(--qp-green) 58%,var(--qp-amber) 72%,var(--qp-red) 86%,var(--qp-red) 100%)}
+  background:var(--gold)}
 .qp-bar-tick{position:absolute;top:-4px;bottom:-4px;width:1.5px;background:var(--text);opacity:.5;border-radius:2px}
 .qp-bar-marker{position:absolute;top:50%;width:13px;height:13px;margin-left:-6.5px;
   transform:translateY(-50%);border-radius:50%;background:var(--surface);
@@ -655,11 +655,7 @@ img{display:block;max-width:100%;height:auto}
 :root{--qp-green:#128a4b;--qp-amber:#d9a412;--qp-red:#c8342a}
 [data-theme="dark"]{--qp-green:#1faa5e;--qp-amber:#e8b528;--qp-red:#e0483c}
 
-/* Grade-ladder bar (graded selections). Deliberately NOT the green-amber-red
-   ramp used by .qp-bar-fill: that ramp encodes "cheap and quick" through to
-   "overpriced", which is a judgement about an ask. The ladder axis is value by
-   grade, where the top end is simply worth more -- painting PSA 10 red would
-   read as a warning it is not. Neutral gold ramp instead. */
+/* Published values by grade; this axis does not predict a grading outcome. */
 .qp-lad-wrap{margin:.15rem 0 .1rem}
 .qp-lad-title{font-size:.72rem;font-weight:700;letter-spacing:.02em;
   text-transform:uppercase;opacity:.62;margin-bottom:.85rem}
@@ -2555,23 +2551,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
         </div>
 
-        <!-- ── Quick Pricing ─────────────────────────────────────────────
-             Three anchor prices from the TCGplayer ask book plus the last
-             sale figure. Every number here is a real data point, labelled
-             with what it actually is:
-
-               Sell Now    = undercut the cheapest active listing by $0.01
-               Market      = TCGplayer market price (from completed sales)
-               Top of Book = the median active listing (ask)
-
-             Deliberately absent: any "sells in N days" or sell-through
-             claim. No venue publishes that data, so we would be inventing
-             it. The tier names describe the PRICE, not a promised speed.
-        ────────────────────────────────────────────────────────────────── -->
+        <!-- Price evidence: reported listing endpoints for this selection,
+             or one reference when comparable endpoints are unavailable. -->
         <div id="sportsConfirm" class="sports-confirm" style="display:none"></div>
         <div id="quickPricing" class="qp" style="display:none">
           <div class="qp-head">
-            <span class="qp-title">Quick Pricing</span>
+            <span class="qp-title">Price evidence</span>
             <button type="button" class="qp-info" onclick="toggleQpInfo()"
                     aria-label="What do these prices mean?" aria-expanded="false">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -2580,13 +2565,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           </div>
 
           <div id="qpInfo" class="qp-info-panel" style="display:none">
-            <p><strong>Lower ask / Upper ask</strong> use reported TCGplayer endpoints only when they match your selected condition and were updated within 7 days. These are asking prices, not completed sales.</p>
-            <p><strong>Reference / Comp</strong> is the displayed source value. It is not necessarily the midpoint of the asking range.</p>
-            <p><strong>Lower ask −15% / Higher ask +15%</strong> are calculated suggestions when no usable asking range is available. The percentages do not measure market spread.</p>
-            <p class="qp-info-caveat">Check recent sales for the same printing, finish, condition and grade. These choices do not predict a sale price or how quickly a card will sell.</p>
+            <p><strong>Listed low / Listed high</strong> are reported TCGplayer prices for your selected condition, updated within 7 days. They describe active listings, not completed sales or a promised sale range.</p>
+            <p><strong>Reference</strong> is the selected provider value, not necessarily the midpoint. A condition estimate remains an estimate.</p>
+            <p><strong>Missing endpoints stay unavailable.</strong> One guide value or a rolling sold average cannot establish a low and high. No percentage range is calculated.</p>
+            <p class="qp-info-caveat">Check recent sales for the same printing, finish, condition and grade before choosing an asking price.</p>
           </div>
 
-          <div class="qp-tiers" id="qpTiers" role="group" aria-label="Quick pricing options"></div>
+          <div class="qp-tiers" id="qpTiers" role="group" aria-label="Evidence-based asking price options"></div>
 
           <div class="qp-bar-wrap" id="qpBarWrap">
             <div class="qp-bar" aria-hidden="true">
@@ -2598,10 +2583,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
           <div class="qp-rows" id="qpRows"></div>
 
-          <!-- Shown INSTEAD of the tiers/bar when a graded slab is selected.
-               A slab is priced from a single guide value per grade, so there is
-               no active listing book to position against and no Sell Now /
-               Top of Book to offer. Saying that is better than vanishing. -->
+          <!-- Always explains the source, or why the range is unavailable. -->
           <p class="qp-graded-note" id="qpGradedNote" style="display:none"></p>
 
           <!-- Grade-ladder bar. Shown for graded selections in place of the
@@ -3968,8 +3950,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
 <script defer src="/js/sale-corrections.ba658815.js"></script>
 <script defer src="/js/inventory-edits.827690a8.js"></script>
-<script defer src="/js/price-evidence.58976d9a.js"></script>
-<script defer src="/js/core.d1d643f9.js"></script>
+<script defer src="/js/price-evidence.02c7df5f.js"></script>
+<script defer src="/js/core.b49297a3.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
