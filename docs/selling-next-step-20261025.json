@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-25",
+  "base_commit": "e8406b4f911bc06a7b2124870633a9abc04abd06",
+  "scope": "Goal-driven selling recommendations and exact selected-copy draft handoff",
+  "full_regression": {
+    "slots": 167,
+    "executed": 165,
+    "skipped": [
+      "live managed Redis probe",
+      "production mutation smoke"
+    ],
+    "result": "passed",
+    "condition_browser_enabled": true,
+    "log_sha256": "44ff6a368d8d03bb7d365f8a4ed625c5a7404c39cca5c7d36b521605545bc1a6"
+  },
+  "additional_checks": {
+    "next-step": "Selling next step: 114 passed -- SUITE COMPLETE, exit=0",
+    "advice": "Selling advice: 65 passed -- SUITE COMPLETE, exit=0",
+    "plan": "Selling plan: 186 checks passed; no provider calls. -- SUITE COMPLETE, exit=0",
+    "selection": "selling-selection-browser: 48 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "journey": "SUITE COMPLETE: customer-journey-browser: 170 passed, 0 failed",
+    "fee-pill": "fee-pill-report-browser: 47 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "buyer-tax": "eBay buyer-tax browser: 75 passed -- SUITE COMPLETE, exit=0"
+  },
+  "asset_sha256": {
+    "js/core.d1d643f9.js": "d1d643f9c8115b8b1cf957e3a59eae4cb8b0e91fd1c4c17f071463946c735bc4",
+    "js/selling-advice.b7470777.js": "b74707775687309e42478b1e05f4521a23c90a750dc8c8357efa4b77d46b3ab2",
+    "js/selling-plan.73244ca5.js": "73244ca59c4c37bc2ae1c2af425bf8f8efe4c81380302b46968efb1cf853dbb2"
+  },
+  "visual_review": [
+    "320px single-card light theme",
+    "390px batch dark theme",
+    "1280px batch light theme"
+  ],
+  "boundaries": [
+    "Local synthetic cards and accounts; external provider traffic blocked.",
+    "No customer inventory changes, paid scans, or marketplace publication.",
+    "eBay remains a read-only account connection with draft review and CSV export."
+  ],
+  "notes": [
+    "Existing fee formula assertions are unchanged. Buyer-tax browser now opens optional comparisons before reading visible payout amounts.",
+    "Maintained selling-plan source resynchronized with the already-shipped asset; existing buyer programs and rules were preserved.",
+    "No recognition or pricing-provider algorithms, API permissions, or marketplace-write gates changed."
+  ]
+}

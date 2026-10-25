@@ -18,10 +18,12 @@ ok(recommend({...card,price:4,best:{name:'Example',net:3}},{...p,goal:'money'}).
 ok(recommend({...card,price:4,best:{name:'Example',net:3},costsConfirmed:true},{...p,goal:'money',minimum:4}).route==='hold-for-lot','personal minimum changes low-value advice');
 for(const net of [-3,0,1.99])ok(recommend({...card,price:10,best:{name:'Example',net},costsConfirmed:true},p).route==='review-costs','unprofitable singles do not become bulk');
 ok(recommend(card,{...p,goal:'quick',local:true}).route==='dealer','quick local route');
-ok(recommend(card,{...p,goal:'easy'}).route==='buylist','least work favors one shipment');
+ok(recommend(card,{...p,goal:'easy'}).route==='ebay-draft','least work uses CardResell’s eBay workflow');
 ok(recommend(card,{...p,ship:false,local:true}).route==='local-lot','no-shipping preference honored');
 ok(recommend(card,{...p,ship:false}).route==='hold','no available sale route means hold for convenience');
 ok(recommend({...card,graded:true},p).route==='single','slabs never become raw bulk');
+ok(new Set(['balanced','money','quick','easy'].map(goal=>recommend({...card,price:10,graded:true},{...p,goal}).title)).size===4,'graded cards also respond to all four selling priorities');
+ok(recommend({...card,price:10,best:{name:'Unverified'}},{...p,goal:'money'}).title.includes('Check'),'missing fee evidence cannot become a zero-dollar payout');
 ok(recommend({...card,graded:true},{...p,ship:false,local:true}).title.includes('local'),'no-shipping slab stays local');
 for(const price of [null,undefined,NaN,Infinity,-1,'1'])ok(recommend({...card,price},p).route==='check','missing or invalid price cannot become cheap card');
 ok(recommend(card,{...p,minimum:null}).route==='check','blank preference is not silently zero');

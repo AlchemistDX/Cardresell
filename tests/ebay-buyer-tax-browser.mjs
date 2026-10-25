@@ -27,6 +27,7 @@ try{for(const width of [320,390,1280]){
     const el=document.createElement('section');el.id='tax-grade-fixture';document.body.append(el);
     renderGradingUpside(el,{source:'pricecharting',prices:{raw:100,psa_10:300}},9,9,{analysis_id:'tax-fixture',card_name:'Example card'});
   });
+  await page.locator('#sellingFeeComparison > summary').click();
   const input=page.getByRole('combobox',{name:'eBay buyer-tax assumption'});
   const ebay=page.locator('.plat-card').filter({has:page.locator('.plat-name').filter({hasText:'eBay'})}).first();
   const payout=()=>ebay.locator('.plat-payout').innerText();
@@ -72,6 +73,7 @@ try{for(const width of [320,390,1280]){
     CardResellSellingPlan.openCollection([{card:'Tax example A',game:'pokemon',currentValue:100},{card:'Tax example B',game:'pokemon',currentValue:10}]);
   });
   const sellingPlan=page.locator('#sellingPlan');
+  await sellingPlan.locator('#sellingPlanComparison > summary').click();
   ok((await sellingPlan.textContent()).includes('8% buyer tax'),'bulk comparison discloses current tax assumption');
   ok((await sellingPlan.locator('table').nth(0).getByRole('row').filter({hasText:'eBay'}).innerText()).includes('$93.86'),'lot uses tax-inclusive eBay fees');
   ok((await sellingPlan.locator('table').nth(1).getByRole('row').filter({hasText:'eBay'}).innerText()).includes('$93.46'),'singles each include tax and their own order fee');
