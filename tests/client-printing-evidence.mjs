@@ -17,8 +17,9 @@ function walk(node) {
   }
 }
 walk(parse(source, {ecmaVersion:'latest'}));
-const names = ['_clientPrintingText','_clientPrintingNumber','_clientPrintingGame','_clientPrintingMatches','_clientPrintingMatch','scanFile','processScanImage'];
-const sandbox = { console:{log(){},warn(){},error(...x){throw new Error(x.join(' '))}}, performance,
+const names = ['_clientPrintingText','_clientPrintingNumber','_clientPrintingGame','_clientPrintingMatches','_clientPrintingMatch','scanFile','processScanImage',
+  '_scanReviewOwner','_scanReviewCurrent','_guardScanCandidateReview','_clearScanCandidateReview','_endSingleScanRun','_singleScanCurrent'];
+const sandbox = { console:{log(){},warn(){},error(...x){throw new Error(x.join(' '))}}, performance,AbortController,
   URL:{createObjectURL:()=> 'blob:fixture',revokeObjectURL(){}},
   Image:class{naturalWidth=900;naturalHeight=1200;set src(v){this.onload?.()}},
   detectCardBounds:()=>null,computePHash:()=> 'same',computeDHash:()=> 'same',

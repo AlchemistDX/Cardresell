@@ -4,20 +4,36 @@
   'use strict';
   const pending = new WeakMap();
   const owner = () => String(window.googleUser?.sub || '');
-  const token = () => window._googleIdToken || '';
   let dialog, dialogOwner = '', requestGeneration = 0;
   const el = (tag, text) => { const n = document.createElement(tag); if (text != null) n.textContent = text; return n; };
-  const button = (label, action) => { const n = el('button', label); n.type = 'button'; n.className = 'fl-sub-btn'; n.addEventListener('click', action); return n; };
+  const button = (label, action) => { const n = el('button', label); n.type = 'button'; n.className = 'fl-sub-btn'; n.style.minHeight = '44px'; n.addEventListener('click', action); return n; };
   async function request(method, id, body, expectedOwner) {
-    if (!expectedOwner || owner() !== expectedOwner || !token()) throw new Error('Sign in to your grading account first.');
-    const response = await fetch('/api/grade-history' + (id ? '?id=' + encodeURIComponent(id) : ''), {
-      method, headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' },
-      ...(body ? { body: JSON.stringify(body) } : {})
-    });
-    const value = await response.json();
-    if (owner() !== expectedOwner) throw new Error('Account changed. Reopen grade history.');
-    if (!response.ok) throw new Error(value.error || 'Could not access grade history. Please retry.');
-    return value;
+    if (!expectedOwner || owner() !== expectedOwner) throw new Error('Sign in to your grading account first.');
+    const auth=window._fbAuth?.currentUser, controller=new AbortController();
+    const current=()=>owner()===expectedOwner&&auth===window._fbAuth?.currentUser;
+    let timer,expired=false;
+    const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>{
+      expired=true;controller.abort();reject(new Error('Grade history timed out. Try again. Retrying a save will not create a duplicate.'));
+    },15000)});
+    try {
+      const perform=async()=>{
+        const user=auth?.getIdToken?auth:window.googleUser?.getIdToken?window.googleUser:window._fbCurrentUser;
+        if(user?.uid&&String(user.uid)!==expectedOwner)throw new Error('Account changed. Reopen grade history.');
+        const token=user?.getIdToken?await user.getIdToken(true):window._googleIdToken||'';
+        if(!current())throw new Error('Account changed. Reopen grade history.');
+        if(expired)throw new Error('Grade history timed out. Try again.');
+        if(!token)throw new Error('Sign in to your grading account first.');
+        const response=await fetch('/api/grade-history'+(id?'?id='+encodeURIComponent(id):''),{
+          method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},signal:controller.signal,
+          ...(body?{body:JSON.stringify(body)}:{})
+        });
+        const value=await response.json();
+        if(!current())throw new Error('Account changed. Reopen grade history.');
+        if(!response.ok)throw new Error(value.error||'Could not access grade history. Please retry.');
+        return value;
+      };
+      return await Promise.race([perform(),deadline]);
+    } finally {expired=true;clearTimeout(timer);}
   }
   window.saveAiGradeReport = async (data, id, expectedOwner) => {
     // Recovered responses identify the same analysis across sessions. Saving
@@ -131,7 +147,7 @@
         save.textContent = 'Grade saved'; status.textContent = 'Saved privately to your account. Find it in Collection → Saved AI grades.';
       } catch(e) { status.textContent = e.message; save.disabled = false; }
     });
-    save.id = 'saveAiGradeBtn'; save.style.cssText = 'width:100%;margin-top:.6rem;padding:.7rem';
+    save.id = 'saveAiGradeBtn'; save.style.cssText = 'width:100%;min-height:44px;margin-top:.6rem;padding:.7rem';
     const history = button('View saved grades', window.openAiGradeHistory);
     share.after(save, history, status);
   }

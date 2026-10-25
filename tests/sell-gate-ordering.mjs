@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
+import { parse } from 'acorn';
 import { harness } from './_assert.mjs';
 import { readCoreBundle } from './_assetRefs.mjs';
 
@@ -30,6 +31,10 @@ const at = SRC.indexOf(MARK);
 check('the D1 block is still findable in core.js', at > 0,
       'if this fails the banner moved and this whole file is testing nothing');
 const BLOCK = SRC.slice(SRC.lastIndexOf('/*', at));
+const helperNames=['_crSellingSelection','isGradedVariant','_scanPhotoSnapshot'];
+const helperFunctions=parse(SRC,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&helperNames.includes(n.id.name));
+check('draft entry uses the shipped pricing and photo helpers',helperFunctions.length===helperNames.length);
+const HELPERS=helperFunctions.map(n=>SRC.slice(n.start,n.end)).join('\n');
 
 // ── The smallest DOM that the block actually touches ────────────────────────
 function fakeEl(id) {
@@ -64,6 +69,7 @@ function makeSandbox() {
     document: {
       getElementById: (id) => els.get(id) || null,
       createElement: (t) => Object.assign(fakeEl('new-' + t), { tagName: t }),
+      querySelector: () => null,
     },
     fetch: async () => { throw new Error('no fetch stub installed'); },
     crypto: { randomUUID: () => 'uuid-' + Math.random().toString(16).slice(2) },
@@ -72,11 +78,12 @@ function makeSandbox() {
     renderCollectionView: () => {},
     getEffectivePrice: () => 10,
     selectedCard: null,
+    printSelect: {value:'raw'}, currentPrices: {},
     console,
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(BLOCK, sandbox);
+  vm.runInContext(HELPERS+'\n'+BLOCK, sandbox);
   return { sandbox, els, toasts, win };
 }
 
@@ -347,6 +354,7 @@ console.log('\nthe idempotency key follows the instance, so replays are safe');
   const sent = [];
   sandbox._crCreateDraft = async (p) => { sent.push(p); };
   sandbox.window._crSellApproved = CARD_A;
+  sandbox.selectedCard = CARD_A;
 
   // A double tap: two starts with no new scan in between.
   await sandbox.startListingDraft();
@@ -385,6 +393,7 @@ console.log('\nthe idempotency key follows the instance, so replays are safe');
   // first card's draft and the seller would never get a listing for it.
   sandbox.window._crScanInstance = null;
   sandbox.window._crSellApproved = CARD_A;
+  sandbox.selectedCard = CARD_A;
   await sandbox.startListingDraft();
   const last = sent[sent.length - 1];
   check('🔴 a new scan of the same card gets a fresh key',
@@ -400,6 +409,7 @@ console.log('\nan unpriced card still starts a draft, claiming no provenance');
   const sent = [];
   sandbox._crCreateDraft = async (p) => { sent.push(p); };
   sandbox.window._crSellApproved = CARD_A;
+  sandbox.selectedCard = CARD_A;
   sandbox.getEffectivePrice = () => 0;
 
   await sandbox.startListingDraft();
@@ -418,5 +428,13 @@ console.log('\nan unpriced card still starts a draft, claiming no provenance');
         && ['seller', 'comp'].includes(sent[1].priceSource), JSON.stringify(sent[1].priceSource));
 }
 
+{
+  const {sandbox}=makeSandbox();let created=0,checked=null;
+  sandbox._crCreateDraft=async()=>created++;
+  sandbox.applySellGate=async card=>{checked=card};
+  sandbox.window._crSellApproved=CARD_A;sandbox.selectedCard=CARD_B;
+  await sandbox.startListingDraft();
+  check('a stale approval cannot create a draft for the new card',created===0&&checked===CARD_B);
+}
 
 done();

@@ -102,7 +102,7 @@
 .collection-draft-check{width:22px;height:22px;accent-color:var(--gold)}
 .collection-draft-result{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;white-space:normal;font-size:.75rem;line-height:1.4;margin-top:.3rem}
 .collection-listing-status{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;white-space:normal;font-size:.75rem;line-height:1.5;margin-top:.5rem;color:var(--text-muted)}
-.collection-listing-status[data-state=held],.collection-listing-status[data-state=sold],.collection-listing-status[data-state=unknown]{color:var(--gold)}
+.collection-listing-status[data-state=held],.collection-listing-status[data-state=sold],.collection-listing-status[data-state=unknown]{color:var(--gold-text)}
 .collection-listing-status button{min-height:44px;white-space:normal;font:inherit;padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);cursor:pointer}
 .collection-listing-status button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 @media(max-width:600px){.collection-plan-actions{display:grid;grid-template-columns:1fr 1fr}.collection-plan-actions [data-create]{grid-column:1/-1;grid-row:1}.collection-plan-selection{gap:.35rem}.collection-plan-selection button{flex:1 1 auto}.collection-plan-filters .collection-plan-search{flex-basis:100%}}

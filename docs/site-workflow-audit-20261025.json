@@ -1,0 +1,1759 @@
+{
+  "date": "2026-10-25",
+  "baseCommit": "b34d1dca85166ce6d0a9abc8c8c5b211f2b0651e",
+  "branch": "codex/site-workflow-audit-20261025",
+  "runtimeScope": [
+    "index.html",
+    "collection import/export",
+    "collection actions and status",
+    "saved grade history",
+    "brand CSS"
+  ],
+  "mainRunner": {
+    "command": "COND_PILLS_BROWSER=1 DRAFT_KV_LIVE=0 tests/run-all.sh --local",
+    "exitCode": 0,
+    "registered": 158,
+    "passed": 156,
+    "skipped": 2,
+    "logSha256": "89c0479881727b45771397d0865e61a3064b7d2065aa02752cb15d318f7a74b4",
+    "suites": [
+      {
+        "slot": 1,
+        "name": "Asset fingerprints (referenced bundles named after their bytes)",
+        "status": "passed",
+        "completion": [
+          "asset-fingerprints: 260 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 2,
+        "name": "membership-venue-access",
+        "status": "passed",
+        "completion": [
+          "membership-venue-access: 41 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 3,
+        "name": "scan-input-reset",
+        "status": "passed",
+        "completion": [
+          "scan-input-reset: 1 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 4,
+        "name": "scan-request-recovery",
+        "status": "passed",
+        "completion": [
+          "scan-request-recovery: 1 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 5,
+        "name": "Syntax check (all inline <script> blocks)",
+        "status": "passed",
+        "completion": []
+      },
+      {
+        "slot": 6,
+        "name": "Auth stack integrity",
+        "status": "passed",
+        "completion": []
+      },
+      {
+        "slot": 7,
+        "name": "Scan-miss regression checks",
+        "status": "passed",
+        "completion": []
+      },
+      {
+        "slot": 8,
+        "name": "Deeplink + companion links (TCGplayer product URL, eBay sell CTAs)",
+        "status": "passed",
+        "completion": []
+      },
+      {
+        "slot": 9,
+        "name": "Copy truth checks",
+        "status": "passed",
+        "completion": [
+          "copy-truth-offline: 224 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 10,
+        "name": "Fee truth checks",
+        "status": "passed",
+        "completion": [
+          "fee-truth-offline: 132 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 11,
+        "name": "Stripe webhook P0 checks",
+        "status": "passed",
+        "completion": [
+          "webhook-p0-offline: 4 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 12,
+        "name": "Launch-audit regressions",
+        "status": "passed",
+        "completion": [
+          "launch-audit-regressions: 440 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 13,
+        "name": "Variant selection (premium-printing bias)",
+        "status": "passed",
+        "completion": [
+          "variant-selection: 16 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 14,
+        "name": "Sports price guard (host + parallel discipline)",
+        "status": "passed",
+        "completion": [
+          "sports-price-guard: 60 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 15,
+        "name": "Quick Pricing + headline price",
+        "status": "passed",
+        "completion": [
+          "quick-pricing: 233 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 16,
+        "name": "Sports parallel matching",
+        "status": "passed",
+        "completion": [
+          "sports-parallel: 11 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 17,
+        "name": "Scanner fastpath + miss-logging",
+        "status": "passed",
+        "completion": [
+          "scanner-fastpath: 16 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 18,
+        "name": "eBay auth + taxonomy (offline)",
+        "status": "passed",
+        "completion": [
+          "ebay-auth-offline: 57 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 19,
+        "name": "Card identity + SKU golden tests",
+        "status": "passed",
+        "completion": [
+          "sku-identity: 85 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 20,
+        "name": "Sell entry point eligibility (D1 gate, offline)",
+        "status": "passed",
+        "completion": [
+          "sell-eligibility: 113 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 21,
+        "name": "Sell gate: out-of-order responses + wire size (D1, offline)",
+        "status": "passed",
+        "completion": [
+          "sell-gate-ordering: 41 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 22,
+        "name": "Listing packet: title + condition + target-net + metadata (offline)",
+        "status": "passed",
+        "completion": [
+          "listing-packet-offline: 487 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 23,
+        "name": "Draft index recovery + packet schema version (offline)",
+        "status": "passed",
+        "completion": [
+          "draft-index-recovery: 265 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 24,
+        "name": "C1 draft store \u2014 revisions, tombstones, schema safety (offline)",
+        "status": "passed",
+        "completion": [
+          "draft-store: 147 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 25,
+        "name": "C1 draft CRUD end-to-end \u2014 create/read/edit/delete (offline)",
+        "status": "passed",
+        "completion": [
+          "draft-crud-e2e: 246 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 26,
+        "name": "C2/C3 draft list + cap \u2014 hydration, paging, severity (offline)",
+        "status": "passed",
+        "completion": [
+          "draft-list-cap: 130 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 27,
+        "name": "C1 real-store pass \u2014 SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)",
+        "status": "skipped",
+        "completion": []
+      },
+      {
+        "slot": 28,
+        "name": "Prod endpoint smoke \u2014 SKIPPED (--local)",
+        "status": "skipped",
+        "completion": []
+      },
+      {
+        "slot": 29,
+        "name": "Condition-applicability interaction (real browser)",
+        "status": "passed",
+        "completion": [
+          "condition-applicability: 17 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 30,
+        "name": "D2.1 draft-list readiness (derivation + copy ownership)",
+        "status": "passed",
+        "completion": [
+          "draft-readiness: 115 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 31,
+        "name": "D2.1 draft-list focus parameter (offset resolution + refusal)",
+        "status": "passed",
+        "completion": [
+          "draft-focus: 56 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 32,
+        "name": "D2.1 drafts screen in a real browser (rows, blockers, stubs, no-nav)",
+        "status": "passed",
+        "completion": [
+          "draft-list-screen: 102 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 33,
+        "name": "D3 draft review screen (fields, fee breakdown, freshness, TRS withholding)",
+        "status": "passed",
+        "completion": [
+          "draft-review-screen: 422 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 34,
+        "name": "Top Rated Plus confirmation is scoped to one listing (4 acceptance states)",
+        "status": "passed",
+        "completion": [
+          "trs-listing-scope: 60 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 35,
+        "name": "Theme token contrast meets AA in both themes (runtime-resolved)",
+        "status": "passed",
+        "completion": [
+          "contrast-tokens: 14 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 36,
+        "name": "accuracy.html and the fee model agree on venues and audit dates",
+        "status": "passed",
+        "completion": [
+          "accuracy-fee-parity: 42 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 37,
+        "name": "Review-screen fee rows are a dt/dd list with the withheld pair intact",
+        "status": "passed",
+        "completion": [
+          "review-fee-dl: 23 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 38,
+        "name": "SOL-PLAT-007 asset extraction \u2014 inline JS/CSS stays split and hashed",
+        "status": "passed",
+        "completion": [
+          "asset-extraction-2026-09-05: 94 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 39,
+        "name": "Sol-audit blockers \u2014 executes the shipped logic, not its text",
+        "status": "passed",
+        "completion": [
+          "sol-remediation-2026-09-04: 63 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 40,
+        "name": "Sol majors \u2014 flip and pack",
+        "status": "passed",
+        "completion": [
+          "majors-flip-and-pack-2026-09-04: 100 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 41,
+        "name": "Sol majors \u2014 data durability and tombstones",
+        "status": "passed",
+        "completion": [
+          "durability-tombstones-2026-09-04: 154 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 42,
+        "name": "Sol majors \u2014 scan hygiene",
+        "status": "passed",
+        "completion": [
+          "scan-hygiene-2026-09-04: 182 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 43,
+        "name": "Sol majors \u2014 entitlements and session integrity",
+        "status": "passed",
+        "completion": [
+          "entitlements-2026-09-04: 84 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 44,
+        "name": "Sol majors \u2014 accessibility, mobile targets, honest copy",
+        "status": "passed",
+        "completion": [
+          "a11y-mobile-2026-09-04: 164 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 45,
+        "name": "SOL-PLAT-011/012/013 \u2014 gold text AA, social meta, absolute og:url",
+        "status": "passed",
+        "completion": [
+          "minors-011-012-013-2026-09-04: 106 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 46,
+        "name": "Bulk-scan misfire \u2014 two bugs, four fixes",
+        "status": "passed",
+        "completion": [
+          "bulk-scan-misfire: 21 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 47,
+        "name": "Bulk row regression \u2014 Bulbasaur qualifier",
+        "status": "passed",
+        "completion": [
+          "bulk-bulbasaur-qualifier-2026-09-04: 72 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 48,
+        "name": "Bulk row regression \u2014 Minun set/variant misfire",
+        "status": "passed",
+        "completion": [
+          "bulk-minun-misfire-2026-09-04: 85 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 49,
+        "name": "Grading upside: net comes from the shared fee model (BIAS-1)",
+        "status": "passed",
+        "completion": [
+          "grading-upside-fees: 104 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 50,
+        "name": "Payout honesty: signed payout bars + four-state cost records (BIAS-6)",
+        "status": "passed",
+        "completion": [
+          "payout-honesty: 32 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 51,
+        "name": "Decision restatements \u2014 shipped copy still matches the decisions of record",
+        "status": "passed",
+        "completion": [
+          "decision-restatements: 37 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 52,
+        "name": "TPL proxy contract (offline, mocked upstream) [CH-3]",
+        "status": "passed",
+        "completion": [
+          "tpl-proxy-offline: 65 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 53,
+        "name": "TPL cache + aggregate spending allowance (offline, mocked store) [CH-3/R4]",
+        "status": "passed",
+        "completion": [
+          "tpl-budget-offline: 101 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 54,
+        "name": "eBay notification verification token fails closed [CH-2]",
+        "status": "passed",
+        "completion": [
+          "ebay-notify-token: 22 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 55,
+        "name": "Draft lifecycle pointer \u2014 generations, reservations, fencing (offline)",
+        "status": "passed",
+        "completion": [
+          "draft-lifecycle: 83 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 56,
+        "name": "An omitted generation is legacy generation 0, then compared like any other",
+        "status": "passed",
+        "completion": [
+          "draft-generation-omission: 52 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 57,
+        "name": "Draft delete in a real browser \u2014 410 shows the deleted state, no auto-retry",
+        "status": "passed",
+        "completion": [
+          "draft-delete-browser: 113 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 58,
+        "name": "TPL outcome rendering",
+        "status": "passed",
+        "completion": [
+          "tpl-outcome-render: 150 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 59,
+        "name": "Collection escaping: hostile values stay inside their attributes",
+        "status": "passed",
+        "completion": [
+          "collection-escaping-browser: 23 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 60,
+        "name": "Draft card actions in a real browser \u2014 edit, delete, download, desktop and 375px",
+        "status": "passed",
+        "completion": [
+          "draft-card-actions-browser: 146 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 61,
+        "name": "Batch drafting from Bulk/Rapid Scan in a real browser \u2014 scan identity, copies, retry, cap refusal",
+        "status": "passed",
+        "completion": [
+          "bulk-batch-draft: 126 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 62,
+        "name": "Collector number display \u2014 denominator safeguards, prefixes, leading zeros, SKU-neutrality",
+        "status": "passed",
+        "completion": [
+          "collector-number-format: 49 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 63,
+        "name": "Scan rarity grounding \u2014 the grounded record overrides an invented rarity",
+        "status": "passed",
+        "completion": [
+          "scan-rarity-grounding: 19 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 64,
+        "name": "Catalogue printing evidence \u2014 reject ambiguous or contradictory enrichment",
+        "status": "passed",
+        "completion": [
+          "catalog-printing-evidence: 23 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 65,
+        "name": "Cert generation matcher \u2014 no mislabelled generation, no entered value in output",
+        "status": "passed",
+        "completion": [
+          "cert-generation-compare: 15 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 66,
+        "name": "eBay credential checker output \u2014 no supplied credential or token on any path",
+        "status": "passed",
+        "completion": [
+          "ebay-credential-check: 58 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 67,
+        "name": "Seeder collector numbers \u2014 leading zeros and prefixes survive verbatim",
+        "status": "passed",
+        "completion": [
+          "seeder-collector-number: 30 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 68,
+        "name": "Printed denominator resolves without the filesystem; embedded table matches the seeder record",
+        "status": "passed",
+        "completion": [
+          "printed-totals-runtime: 20 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 69,
+        "name": "Photo hosting contract \u2014 eBay\u2019s documented photo-column limits, and no host configured yet",
+        "status": "passed",
+        "completion": [
+          "photo hosting contract: 105 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 70,
+        "name": "Photo upload endpoint \u2014 a non-owner cannot host another seller\u2019s draft photos",
+        "status": "passed",
+        "completion": [
+          "photo upload endpoints: 115 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 71,
+        "name": "Item photo URL is written, and a blank column is disclosed rather than claimed as sent",
+        "status": "passed",
+        "completion": [
+          "photo export wiring: 125 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 72,
+        "name": "Draft-list Download button: seller photo lands or the file is refused (never blank)",
+        "status": "passed",
+        "completion": [
+          "photo download gating (draft-list button): 37 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 73,
+        "name": "Photo decoding falls back without bypassing quality checks",
+        "status": "passed",
+        "completion": [
+          "Photo decoder fallback: 10 passed, 0 failed -- SUITE COMPLETE, exit=0",
+          "Photo retake history: 8 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 74,
+        "name": "Provider request timers are cleared on failures",
+        "status": "passed",
+        "completion": [
+          "Provider timers and usage: 38 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 75,
+        "name": "Camera cancellation and late callbacks remain isolated",
+        "status": "passed",
+        "completion": [
+          "Photo capture lifecycle: 37 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 76,
+        "name": "Firebase email verification and persistence",
+        "status": "passed",
+        "completion": [
+          "Firebase email claim: 10 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 77,
+        "name": "Acquisition channel tracking and admin report protection",
+        "status": "passed",
+        "completion": [
+          "acquisition-tracking: 29 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 78,
+        "name": "Google provider verification for signed Google sessions",
+        "status": "passed",
+        "completion": [
+          "google-provider-verification: 46 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 79,
+        "name": "Grade model selection keeps the default and allowlist",
+        "status": "passed",
+        "completion": [
+          "grade-model-selection: 43 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 80,
+        "name": "Post-scan ID credit nudge counts included credits",
+        "status": "passed",
+        "completion": [
+          "id-credit-toast: 6 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 81,
+        "name": "Limiting factor keeps defect-driven explanations",
+        "status": "passed",
+        "completion": [
+          "limiting-factor-reconcile: 13 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 82,
+        "name": "Daily welcome-award circuit breaker",
+        "status": "passed",
+        "completion": [
+          "welcome-daily-cap: 27 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 83,
+        "name": "Ximilar grading uses the async job API",
+        "status": "passed",
+        "completion": [
+          "ximilar-grade-async: 54 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 84,
+        "name": "Grading: poor visibility is not damage",
+        "status": "passed",
+        "completion": [
+          "grade-evidence-honesty: 48 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 85,
+        "name": "Grading upside prices the graded printing",
+        "status": "passed",
+        "completion": [
+          "grade-upside-identity: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 86,
+        "name": "Grading capture resolution and body budget",
+        "status": "passed",
+        "completion": [
+          "grade-capture-resolution: 28 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 87,
+        "name": "Client printing identity survives local artwork ambiguity",
+        "status": "passed",
+        "completion": [
+          "client-printing-evidence: 28 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 88,
+        "name": "Catalog search exposes every printing page",
+        "status": "passed",
+        "completion": [
+          "catalog-search: 24 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 89,
+        "name": "Private AI grade report storage",
+        "status": "passed",
+        "completion": [
+          "SUITE COMPLETE: grade-history.mjs: 55 passed, 0 failed"
+        ]
+      },
+      {
+        "slot": 90,
+        "name": "Batch grading browser to ledger and saved reports",
+        "status": "passed",
+        "completion": [
+          "SUITE COMPLETE: batch-grade-browser.mjs: 24 passed, 0 failed"
+        ]
+      },
+      {
+        "slot": 91,
+        "name": "Collection sync failures and concurrent writes",
+        "status": "passed",
+        "completion": [
+          "SUITE COMPLETE: collection-storage.mjs: 46 passed, 0 failed"
+        ]
+      },
+      {
+        "slot": 92,
+        "name": "Local catalog fallback has no invented prices",
+        "status": "passed",
+        "completion": [
+          "SUITE COMPLETE: catalog-outage.mjs: 21 passed, 0 failed"
+        ]
+      },
+      {
+        "slot": 93,
+        "name": "Membership header tier badge",
+        "status": "passed",
+        "completion": [
+          "membership-header-badge: 24 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 94,
+        "name": "Business batch size (25) and plan-derived bulk grade cap",
+        "status": "passed",
+        "completion": [
+          "bulk-grade-plan-cap: 18 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 95,
+        "name": "Bulk photo preflight (no provider calls)",
+        "status": "passed",
+        "completion": [
+          "Bulk photo preflight: 26 checks passed; no provider calls. -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 96,
+        "name": "Catalog read sharing",
+        "status": "passed",
+        "completion": [
+          "catalog-read-sharing: 217 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 97,
+        "name": "Collection drafts (real browser)",
+        "status": "passed",
+        "completion": [
+          "Collection drafts browser: 100 checks passed. -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 98,
+        "name": "Draft plan capacity",
+        "status": "passed",
+        "completion": [
+          "draft-plan-capacity: 69 passed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 99,
+        "name": "eBay sold-comp resilience",
+        "status": "passed",
+        "completion": [
+          "ebay-sold-resilience: 26 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 100,
+        "name": "Pricing request budget",
+        "status": "passed",
+        "completion": [
+          "pricing-request-budget: 73 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 101,
+        "name": "Provider deadlines",
+        "status": "passed",
+        "completion": [
+          "provider-deadlines: 9 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 102,
+        "name": "Rapid Scan (real browser)",
+        "status": "passed",
+        "completion": [
+          "Rapid Scan browser: 88 checks passed across four viewports. -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 103,
+        "name": "Scrydex pilot adapter (default off)",
+        "status": "passed",
+        "completion": [
+          "Scrydex pilot: 87 checks passed; isolated Redis and local HTTP only. -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 104,
+        "name": "TCG Price Lookup body deadline",
+        "status": "passed",
+        "completion": [
+          "TPL deadline: 6 checks passed against stalled headers and body. -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 105,
+        "name": "Grade prompt is cache-ordered (static rules first)",
+        "status": "passed",
+        "completion": [
+          "grade-prompt-cache-order: 19 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 106,
+        "name": "Ximilar sports retry only after a detected-card miss",
+        "status": "passed",
+        "completion": [
+          "ximilar-sport-retry: 54 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 107,
+        "name": "Ximilar match-distance telemetry (numbers only)",
+        "status": "passed",
+        "completion": [
+          "provider-match-distance: 15 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 108,
+        "name": "First-visit demo yields to any other card selection",
+        "status": "passed",
+        "completion": [
+          "example-demo-yields: 13 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 109,
+        "name": "Scan-miss Search by name reaches the real search box (real browser)",
+        "status": "passed",
+        "completion": [
+          "scan-miss-search-browser: 13 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 110,
+        "name": "Binder pockets pre-selected by local detail check (real browser)",
+        "status": "passed",
+        "completion": [
+          "binder-autoselect-browser: 53 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 111,
+        "name": "Bulk rows price the scanned printing; no same-photo retry on a definite miss",
+        "status": "passed",
+        "completion": [
+          "bulk-variant-choice: 73 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 112,
+        "name": "Several binder pages reviewed in turn, one bulk quote (real browser)",
+        "status": "passed",
+        "completion": [
+          "binder-multipage-browser: 57 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 113,
+        "name": "Owner test account: Business features only, credits and billing unchanged",
+        "status": "passed",
+        "completion": [
+          "owner-feature-plan: 28 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 114,
+        "name": "Magic misses rescued from the printed name, only within the batch's sets",
+        "status": "passed",
+        "completion": [
+          "bulk-text-rescue: 104 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 115,
+        "name": "Photo check before a grade is charged: flagged photos named, retake or grade anyway (real browser)",
+        "status": "passed",
+        "completion": [
+          "grade-photo-check-browser: 23 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 116,
+        "name": "Grade results explain moderate/low confidence and show centering beside the overall grade (real browser)",
+        "status": "passed",
+        "completion": [
+          "grade-result-explain-browser: 20 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 117,
+        "name": "Fee pills show schedule age and a pre-filled report link; Poshmark $15 boundary (real browser)",
+        "status": "passed",
+        "completion": [
+          "fee-pill-report-browser: 47 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 118,
+        "name": "Search reuse, cancellation and truthful error handoff",
+        "status": "passed",
+        "completion": [
+          "search-workflow: 20 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 119,
+        "name": "Comp grants: one claim per grant, permanent credits, UID-bound Business features (local Redis)",
+        "status": "passed",
+        "completion": [
+          "membership-comp: 38 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 120,
+        "name": "Scan hash distance and full-catalog ranking parity",
+        "status": "passed",
+        "completion": [
+          "scan-hash-distance: 9 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 121,
+        "name": "Optional eBay buyer-tax assumption across the live UI",
+        "status": "passed",
+        "completion": [
+          "eBay buyer-tax browser: 75 passed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 122,
+        "name": "Collection CSV identity, estimates and selected copies",
+        "status": "passed",
+        "completion": [
+          "collection-export: 17 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 123,
+        "name": "Saved sales report, corrections and CSV downloads (real browser)",
+        "status": "passed",
+        "completion": [
+          "flip-report-browser: 72 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 124,
+        "name": "Bulk miss recovery, partial values and replacement-photo races",
+        "status": "passed",
+        "completion": [
+          "bulk-recovery-browser: 135 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 125,
+        "name": "Reviewed CSV inventory import and honest collection amounts",
+        "status": "passed",
+        "completion": [
+          "collection-import: 102 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 126,
+        "name": "Seller OAuth isolation, token lifecycle and signed deletion",
+        "status": "passed",
+        "completion": [
+          "ebay-seller-connect: 164 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 127,
+        "name": "Seller connection browser consent and setup checks",
+        "status": "passed",
+        "completion": [
+          "ebay-connect-browser: 90 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 128,
+        "name": "Reviewed batch defaults and recovery after interruption",
+        "status": "passed",
+        "completion": [
+          "collection-batch-recovery: 125 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 129,
+        "name": "eBay submission metadata, photo ownership and review recovery",
+        "status": "passed",
+        "completion": [
+          "ebay-listing-review: 114 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 130,
+        "name": "Direct eBay review in mobile and desktop browsers",
+        "status": "passed",
+        "completion": [
+          "ebay-listing-review-browser: 42 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 131,
+        "name": "eBay physical-copy reservations and recoverable listing operations",
+        "status": "passed",
+        "completion": [
+          "ebay-listing-operations: 94 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 132,
+        "name": "eBay operation recovery in mobile and desktop browsers",
+        "status": "passed",
+        "completion": [
+          "ebay-listing-operations-browser: 42 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 133,
+        "name": "Durable sold-copy identity and listing guards",
+        "status": "passed",
+        "completion": [
+          "copy-sales: 28 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 134,
+        "name": "Interrupted sales and cross-tab recovery in browsers",
+        "status": "passed",
+        "completion": [
+          "sale-recovery-browser: 60 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 135,
+        "name": "Sale correction revisions and concurrent device protection",
+        "status": "passed",
+        "completion": [
+          "sale-reconciliation: 20 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 136,
+        "name": "Refunds, expenses and consistent profit in browsers",
+        "status": "passed",
+        "completion": [
+          "sale-reconciliation-browser: 54 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 137,
+        "name": "Explicit sale choices and atomic recovery archives",
+        "status": "passed",
+        "completion": [
+          "sale-conflicts: 28 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 138,
+        "name": "Sale conflict review and recovery through browser, API and Redis",
+        "status": "passed",
+        "completion": [
+          "sale-conflicts-browser: 40 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 139,
+        "name": "Per-field inventory protection and explicit recovery archives",
+        "status": "passed",
+        "completion": [
+          "inventory-details: 52 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 140,
+        "name": "Inventory editing, bulk location and recovery through browser, API and Redis",
+        "status": "passed",
+        "completion": [
+          "inventory-details-browser: 71 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 141,
+        "name": "Reviewed backup recovery and atomic retry receipts",
+        "status": "passed",
+        "completion": [
+          "inventory-backup-recovery: 50 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 142,
+        "name": "Backup recovery through browser, API and Redis",
+        "status": "passed",
+        "completion": [
+          "inventory-backup-recovery-browser: 52 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 143,
+        "name": "Import history, recovery guards and concurrent tabs through browser/API/Redis",
+        "status": "passed",
+        "completion": [
+          "import-history-browser: 45 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 144,
+        "name": "ebay-search-links-browser",
+        "status": "passed",
+        "completion": [
+          "ebay-search-links-browser: 42 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 145,
+        "name": "selling-selection-browser",
+        "status": "passed",
+        "completion": [
+          "selling-selection-browser: 48 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 146,
+        "name": "ebay-recent-sales",
+        "status": "passed",
+        "completion": [
+          "ebay-recent-sales: 11 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 147,
+        "name": "Draft price integrity \u2014 selection recovery, snapshot, quote age and account refresh",
+        "status": "passed",
+        "completion": [
+          "draft-price-integrity-browser: 48 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 148,
+        "name": "Draft selection handoff \u2014 saved choices and grade quote races",
+        "status": "passed",
+        "completion": [
+          "draft-selection-handoff-browser: 58 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 149,
+        "name": "eBay reusable selling defaults and setup recovery",
+        "status": "passed",
+        "completion": [
+          "ebay-selling-defaults-browser: 68 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 150,
+        "name": "Saved copy availability and listing export conflicts",
+        "status": "passed",
+        "completion": [
+          "listing-availability: 47 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 151,
+        "name": "Browser listing export and reservation recovery",
+        "status": "passed",
+        "completion": [
+          "listing-availability-browser: 40 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 152,
+        "name": "Recognition provider contract and unsupported games",
+        "status": "passed",
+        "completion": [
+          "ximilar-contract: 31 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 153,
+        "name": "Scanner refund, printing handoff and picker UI audit",
+        "status": "passed",
+        "completion": [
+          "scanner-audit-browser: 38 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 154,
+        "name": "Catalog deadlines cover response bodies",
+        "status": "passed",
+        "completion": [
+          "scanner-catalog-deadlines: 16 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 155,
+        "name": "Single scan review and cancellation recovery",
+        "status": "passed",
+        "completion": [
+          "single-scan-review-browser: 100 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 156,
+        "name": "Collection CSV round-trip identity and historical receipts",
+        "status": "passed",
+        "completion": [
+          "collection-csv-roundtrip: 26 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 157,
+        "name": "Saved grade authentication and deadline recovery",
+        "status": "passed",
+        "completion": [
+          "grade-history-recovery: 13 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      },
+      {
+        "slot": 158,
+        "name": "Every suite on disk is invoked or declared; slot numbering is derived",
+        "status": "passed",
+        "completion": [
+          "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ]
+      }
+    ]
+  },
+  "additionalReleaseChecks": {
+    "passed": 43,
+    "blockedHistoricalFixture": 2,
+    "suites": [
+      {
+        "suite": "bulk-workflow-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "bulk-workflow-browser: 188 passed, 0 failed -- SUITE COMPLETE"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "bulk-match-review-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "bulk-match-review-browser: 446 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "bulk-text-rescue-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: bulk-text-rescue-browser: 43 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "bulk-lookup-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: bulk-lookup-browser: 100 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "scan-finish-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: scan-finish-browser: 223 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "customer-journey-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: customer-journey-browser: 170 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "search-workflow-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "search-workflow-browser: 36 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "draft-selected-delete-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "draft-selected-delete-browser: 30 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "selling-advice-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "Selling advice: 63 passed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "bulk-venues-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "Bulk venues: 80 passed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "grading-paths-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "grading-paths-browser: 104 checks passed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "selling-plan-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "Selling plan: 186 checks passed; no provider calls. -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "restore-navigation.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "restore-navigation: 20 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "brand-ui-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: brand-ui-browser: 978 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "binder-scan-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: binder-scan-browser: 184 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "binder-interaction-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "SUITE COMPLETE: binder-interaction-browser: 131 passed, 0 failed"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "grade-upload-single-draft-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "Subscription benefits render with live catalogue values, five plans and no horizontal overflow"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "photo-guide-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "Photo guide browser flow: 14 scenarios passed across single capture and Rapid Scan; real worker and canvas; no provider calls."
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-environment.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-environment: 25 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-bootstrap.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-bootstrap: 17 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-reversal-stripe.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-reversal-stripe: 93 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-paid-enrollment.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-paid-enrollment: 14 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-customer.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-customer: 34 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-lifecycle.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-lifecycle: 187 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-lifecycle-stripe.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-lifecycle-stripe: 23 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-account-routes.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-account-routes: 30 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-fulfillment.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-fulfillment: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-purchase-routes.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-purchase-routes: 52 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-shop-identity.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-shop-identity: 286 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-scan-intent.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-scan-intent: 70 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-routes.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-routes: 161 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-consumption.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-consumption: 141 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-checkout-stripe.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-checkout-stripe: 570 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "listing-usage.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "listing-usage: 139 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-photo-policy.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "96 passed, 0 failed. Dormant pure policy only; no storage ledger, atomic admission, provider enforcement or managed upload proof."
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-checkout.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-checkout: 338 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-stripe.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-stripe: 250 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-bindings.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-bindings: 290 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-payments.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-payments: 626 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "membership-ledger.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "membership-ledger: 281 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "launch-membership-config.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "82 passed, 0 failed; configuration only, not activation or live payment proof. -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "billing-release-scope.mjs",
+        "exitCode": 1,
+        "passed": false,
+        "completion": [],
+        "status": "blocked_historical_fixture"
+      },
+      {
+        "suite": "id-confirmation-atomic.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "id-confirmation-atomic: 366 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "billing-release-browser.mjs",
+        "exitCode": 0,
+        "passed": true,
+        "completion": [
+          "billing-release-browser: 34 passed, 0 failed -- SUITE COMPLETE, exit=0"
+        ],
+        "status": "passed"
+      },
+      {
+        "suite": "billing-release-rollback.mjs",
+        "exitCode": 1,
+        "passed": false,
+        "completion": [],
+        "status": "blocked_historical_fixture"
+      }
+    ]
+  },
+  "finalAffectedReruns": [
+    {
+      "suite": "grade-history.mjs",
+      "exitCode": 0,
+      "completion": [
+        "SUITE COMPLETE: grade-history.mjs: 57 passed, 0 failed"
+      ]
+    },
+    {
+      "suite": "grade-history-recovery.mjs",
+      "exitCode": 0,
+      "completion": [
+        "grade-history-recovery: 13 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "asset-fingerprints.mjs",
+      "exitCode": 0,
+      "completion": [
+        "asset-fingerprints: 260 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "minors-011-012-013-2026-09-04.mjs",
+      "exitCode": 0,
+      "completion": [
+        "minors-011-012-013-2026-09-04: 106 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "brand-ui-browser.mjs",
+      "exitCode": 0,
+      "completion": [
+        "SUITE COMPLETE: brand-ui-browser: 978 passed, 0 failed"
+      ]
+    }
+  ],
+  "verificationBoundaries": {
+    "browser": "local Chromium",
+    "dataStore": "isolated Redis plus documented store doubles",
+    "auth": "synthetic identities",
+    "providers": "fixtures; external application traffic blocked",
+    "paidScans": false,
+    "productionInventoryMutations": false,
+    "marketplaceWrites": false,
+    "liveRecognitionAccuracyMeasured": false
+  },
+  "assets": [
+    {
+      "path": "index.html",
+      "sha256": "15990921f5b6c475080e34b02bb0b98e786dbec8567d0611d2af5af6fa3db787"
+    },
+    {
+      "path": "js/core.22a43581.js",
+      "sha256": "22a43581a59854abc19155736b941072c55826a50914c8e55a4aa2176f735225"
+    },
+    {
+      "path": "js/collection-drafts.67c27ab6.js",
+      "sha256": "67c27ab67a4a03d9e832562bdb07331ec021636c6f82e4091f511d608e65a55c"
+    },
+    {
+      "path": "js/collection-import.84b668a4.js",
+      "sha256": "84b668a4dc12e545b962873d5dd599c6e50d989a128e2b406c87d18442d9192d"
+    },
+    {
+      "path": "js/collection-export.84ab2157.js",
+      "sha256": "84ab2157e3a04394990fc0924cdb851eb169cb39651ed3af6796e38cde64ff91"
+    },
+    {
+      "path": "js/grade-history.36bd9579.js",
+      "sha256": "36bd95794b0ba9d844fa23d0277451434c20be14da52a46b8b5f338d5a3583b7"
+    },
+    {
+      "path": "assets/brand-ui.c7c378a9.css",
+      "sha256": "c7c378a919459088aeda1cf9a17164a790d376bede7df5752b8583d0d81c2c17"
+    }
+  ]
+}

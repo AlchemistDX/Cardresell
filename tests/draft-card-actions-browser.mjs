@@ -140,7 +140,12 @@ async function boot({ sub, collection = [], viewport = { width: 1280, height: 90
   await page.waitForFunction(
     () => typeof window.renderDraftsView === 'function' && typeof window.switchView === 'function',
     { timeout: 20000 });
-  await page.evaluate((t) => { window._crIdToken = async () => t; }, tok);
+  // A signed token alone is not a signed-in UI session. Exports also bind the
+  // current owner and run the real listing-availability handler before download.
+  await page.evaluate(({t, sub}) => {
+    window.googleUser = {uid: sub, sub};
+    window._crIdToken = async () => t;
+  }, {t: tok, sub});
   await page.evaluate(() => {
     window.__toasts = [];
     const orig = window.showToast;
@@ -691,7 +696,7 @@ try {
     await page.click('[data-draft-download-selected]');
     await settle(page, 400);
     eq('account change emits no file', downloads.length, 2);
-    await page.evaluate(() => { ensureExportablePhotos = window.__savedPhotoExport; window.googleUser = null; });
+    await page.evaluate(sub => { ensureExportablePhotos = window.__savedPhotoExport; window.googleUser = {uid:sub,sub}; }, sub);
     eq('no page errors', errors.join('|'), '');
     await ctx.close();
   });

@@ -8,6 +8,7 @@
   const fields = [
     ['card','Card name',['card','card name','name','product name']],
     ['set','Set',['set','set name']],
+    ['setCode','Set code',['set code','set abbreviation']],
     ['number','Card number',['card number','number','collector number']],
     ['game','Game',['game','category','product line']],
     ['quantity','Quantity',['quantity','qty','count']],
@@ -92,13 +93,28 @@
     // Share the strict recovery rules rather than treating missing reports as stock.
     const retired=new Set([...recoveryPolicy().backupRetired(history),...Object.keys(marks.flips||{})]);
     const imports=new Set([...existing,...sold].map(p=>p.importKey).filter(Boolean));
+    const legacyImports=new Set([...existing,...sold].filter(p=>!p.setCode).map(p=>p.importKey).filter(Boolean));
     const printKey=p=>[p.card,p.set,p.number,p.game].map(norm).join('|');
     const prints=new Set(existing.map(printKey));
-    const occurrence=new Map(), ids=new Set(), rows=[], errors=[];
+    const occurrence=new Map(), legacyOccurrence=new Map(), ids=new Set(), rows=[], errors=[];
+    const formatColumn=csv.headers.findIndex(h=>norm(h)==='cardresellcsvformat');
+    const oldExport=formatColumn<0&&['Collection ID','Profit Basis','Value Status','Finish confirmed','Value Source','Last Refreshed']
+      .every(h=>csv.headers.some(header=>norm(header)===norm(h)));
     let copies=0, skipped=0, possible=0, missingCost=0, missingValue=0, inputCopies=0;
-    const get=(r,k)=>mapping[k]>=0?String(r[mapping[k]]??'').trim():'';
+    const get=(r,k)=>{
+      if(!(mapping[k]>=0))return '';
+      let value=String(r[mapping[k]]??'');
+      // Only versioned CardResell exports declare reversible spreadsheet
+      // escaping. Ordinary app exports retain their literal apostrophes.
+      if(formatColumn>=0&&r[formatColumn]==='1'&&/^'(?:'|\s*[=+\-@]|[\t\r\n])/.test(value))value=value.slice(1);
+      return value.trim();
+    };
     for (const [index,raw] of csv.rows.entries()) {
       try {
+        if(formatColumn>=0&&raw[formatColumn]!=='1')throw Error('This CardResell CSV version is not supported. Download a current export and try again.');
+        // Older exports did not distinguish a literal apostrophe from a
+        // protective spreadsheet prefix. Do not guess and create a new copy.
+        if(oldExport&&raw.some(value=>/^'(?:\s*[=+\-@]|[\t\r\n])/.test(value)))throw Error('This older CardResell export contains ambiguous spreadsheet-escaped text. Download a current export before importing to preserve card details and copy IDs.');
         const card=textCell(get(raw,'card'),180,'Card name'); if (!card) throw Error('Card name is missing.');
         const gameText=get(raw,'game') || options.game || '';
         const game=gameMap.get(norm(gameText)); if (!game) throw Error(gameText?'Game “'+gameText.slice(0,60)+'” is not recognized. Map the game column or choose a default game.':'Choose a game or map the Game column.');
@@ -118,16 +134,23 @@
         if (id) ids.add(id);
         const date=get(raw,'addedDate');
         if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0,10)!==date)) throw Error('Acquired date must be a real date in YYYY-MM-DD format.');
-        const record={card,set:textCell(get(raw,'set'),180,'Set'),number:textCell(get(raw,'number'),40,'Card number'),game,
+        const setCode=textCell(get(raw,'setCode'),80,'Set code');
+        const record={card,set:textCell(get(raw,'set'),180,'Set'),...(setCode?{setCode}:{}),number:textCell(get(raw,'number'),40,'Card number'),game,
           buyPrice:money(get(raw,'buyPrice'),'Cost'),currentValue:money(get(raw,'currentValue'),'Saved value'),
           condition:condition||null,finish:textCell(get(raw,'finish'),80,'Finish'),grader:grader||null,grade:grade||null,cert:cert||null,addedDate:date||null,
           location:textCell(get(raw,'location'),120,'Storage location'),sku:textCell(get(raw,'sku'),100,'Source SKU')};
         const signature=JSON.stringify({...record,quantity});
+        const {setCode:ignoredSetCode,...legacyRecord}=record;
+        const legacySignature=JSON.stringify({...legacyRecord,quantity});
         const order=(occurrence.get(signature)||0)+1; occurrence.set(signature,order);
+        const legacyOrder=(legacyOccurrence.get(legacySignature)||0)+1;legacyOccurrence.set(legacySignature,legacyOrder);
         const hash=await digest(signature), entries=[];
+        const legacyHash=legacySignature===signature?hash:await digest(legacySignature);
         for(let copy=0;copy<quantity;copy++) {
           const importKey='csv1:'+hash+':'+order+':'+copy;
-          if ((id && (byId.has(id)||retired.has(id))) || (options.mode!=='new' && (imports.has(importKey)||retired.has(copyId(importKey))||byId.has(copyId(importKey))))) { skipped++; continue; }
+          const legacyKey='csv1:'+legacyHash+':'+legacyOrder+':'+copy;
+          const knownLegacy=legacyKey!==importKey&&(legacyImports.has(legacyKey)||retired.has(copyId(legacyKey))||byId.has(copyId(legacyKey)));
+          if ((id && (byId.has(id)||retired.has(id))) || (options.mode!=='new' && (imports.has(importKey)||retired.has(copyId(importKey))||byId.has(copyId(importKey))||knownLegacy))) { skipped++; continue; }
           entries.push({...record,...(id?{id}:{}),importKey});
         }
         copies+=entries.length;
@@ -243,7 +266,7 @@
         preview.replaceChildren();const table=el('table'),head=el('thead'),hr=el('tr');['Card / set','Qty','Adding','Cost each','Value each'].forEach(t=>hr.append(el('th',t)));head.append(hr);table.append(head);const tbody=el('tbody');
         for(const r of result.rows.slice(0,20)){
           const tr=el('tr'),card=el('td',r.record.card+' · '+(r.record.set||'Set unknown'));
-          const details=[r.record.number&&'#'+r.record.number,r.record.condition,r.record.finish,
+          const details=[r.record.setCode&&'Set code: '+r.record.setCode,r.record.number&&'#'+r.record.number,r.record.condition,r.record.finish,
             r.record.grader&&r.record.grader.toUpperCase()+' '+r.record.grade,r.record.cert&&'Cert '+r.record.cert,
             r.record.location&&'Location: '+r.record.location,r.record.sku&&'SKU: '+r.record.sku].filter(Boolean);
           if(details.length)card.append(el('div',details.join(' · ')));

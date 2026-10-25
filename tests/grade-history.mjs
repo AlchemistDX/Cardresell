@@ -104,13 +104,27 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844}});
  const page=await context.newPage();await page.route('**/*',route=>route.request().url().startsWith(origin)?route.continue():route.fulfill({status:503,body:'{}'}));
  await page.goto(origin);
- const signIn=()=>page.evaluate(()=>{window.googleUser={sub:'alice'};window._googleIdToken='alice';});
+ const signIn=()=>page.evaluate(()=>{window.googleUser={sub:'alice'};window._googleIdToken='expired';window._fbAuth={currentUser:{uid:'alice',getIdToken:async force=>{window.gradeTokenForced=force;return 'alice'}}};});
  await signIn();
  await page.evaluate(data=>{window._lastGradeShareData={data};const result=document.getElementById('scanResult');document.body.append(result);result.style.display='block';result.innerHTML='<button id="shareGradeBtn">Share this grade</button>';},data);
  await page.locator('#saveAiGradeBtn').waitFor({state:'visible'});
+ check('save grade has a 44px touch target',(await page.locator('#saveAiGradeBtn').boundingBox()).height>=44,true);
  fail=true;await page.locator('#saveAiGradeBtn').click();await page.getByText('Grade history is unavailable.',{exact:false}).waitFor();
  check('failed save remains retryable',await page.locator('#saveAiGradeBtn').isEnabled(),true);
- fail=false;await page.locator('#saveAiGradeBtn').click();await page.getByRole('button',{name:'Grade saved',exact:true}).waitFor();
+ fail=false;
+ await page.evaluate(()=>{
+  const original=window.fetch,timer=window.setTimeout;window._historyFetch=original;window._historyTimer=timer;window._stallGradeSave=true;
+  window.setTimeout=(fn,ms,...args)=>timer(fn,ms===15000?400:ms,...args);
+  window.fetch=async(...args)=>{const response=await original(...args);
+   if(args[0]==='/api/grade-history'&&args[1]?.method==='POST'&&window._stallGradeSave){const value=await response.json();response.json=()=>new Promise(resolve=>{window.releaseGradeSave=()=>resolve(value)})}return response;
+  };
+ });
+ await page.locator('#saveAiGradeBtn').click();await page.getByText('Grade history timed out.',{exact:false}).waitFor();
+ check('body timeout leaves save retry enabled',await page.locator('#saveAiGradeBtn').isEnabled(),true);
+ check('lost response already stored exactly one report',(await call('GET','alice')).reports.length,1);
+ await page.evaluate(()=>{window._stallGradeSave=false;window.fetch=window._historyFetch;window.setTimeout=window._historyTimer;window.releaseGradeSave?.()});
+ await page.locator('#saveAiGradeBtn').click();await page.getByRole('button',{name:'Grade saved',exact:true}).waitFor();
+ check('expired cached token is replaced by fresh Firebase auth',await page.evaluate(()=>window.gradeTokenForced),true);
  check('save succeeded in real API',(await call('GET','alice')).reports.length,1);
  await page.reload();await signIn();await page.evaluate(()=>switchView('collection'));
  await page.getByRole('button',{name:'View saved grades',exact:true}).click();
@@ -119,11 +133,12 @@ try{
  check('report survives page reload',await page.getByText('AI estimate: 8.5/10 · Deep request · Quick fallback').isVisible(),true);
  check('card title rendered as text',await page.locator('#aiGradeHistoryDialog img').count(),0);
  check('mobile dialog fits',await page.locator('#aiGradeHistoryDialog').evaluate(x=>x.scrollWidth<=x.clientWidth+1),true);
+ check('saved-grade actions have 44px touch targets',await page.locator('#aiGradeHistoryDialog button').evaluateAll(buttons=>buttons.length>=4&&buttons.every(b=>b.getBoundingClientRect().height>=44)),true);
  await page.screenshot({path:'/tmp/cardresell-grade-history.png'});
  await page.evaluate(()=>{
   const dialog=document.getElementById('aiGradeHistoryDialog'),close=dialog.close.bind(dialog);
   dialog.close=()=>{window._gradeContentAtClose=dialog.querySelector('[data-grade-content]').textContent;close()};
-  window.googleUser={sub:'bob'};window._googleIdToken='bob';
+  window.googleUser={sub:'bob'};window._googleIdToken='expired';window._fbAuth={currentUser:{uid:'bob',getIdToken:async()=> 'bob'}};
  });
  await page.waitForFunction(()=>!document.getElementById('aiGradeHistoryDialog').open);
  check('private report is cleared before the native close call',await page.evaluate(()=>window._gradeContentAtClose),'');
