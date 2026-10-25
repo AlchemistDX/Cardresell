@@ -1555,8 +1555,9 @@ try {
   // These two render sites are the ones that were actually broken.
   check('Source-disagreement panel condition-pins its TCG link',
     /tcgUrl:\s*_tcgpCondUrl\(tcg\.url\)/.test(idx));
-  check('Market-price caption condition-pins its TCG link',
-    /const _tu = _tcgpCondUrl\(tcg\.url\);/.test(idx));
+  check('Base-reference research validates and condition-pins its TCG link',
+    /link\(tcg\.url, tcgSite\) \? _tcgpCondUrl\(tcg\.url\)/.test(idx)
+      && /link\(rawUrl, tcgSite\)/.test(idx));
 
   // Both client-side builders route through the normalizer too.
   check('buildTcgpUrl condition-pins before affiliate wrapping',

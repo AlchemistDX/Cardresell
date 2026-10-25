@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-25",
+  "base_commit": "f53fce34491e8b86efbd824a548b37bdc17c21a8",
+  "scope": "Selection-scoped price research, candidate handling and protected saved values",
+  "full_regression": {
+    "slots": 167,
+    "executed": 165,
+    "skipped": [
+      "live managed Redis probe",
+      "production mutation smoke"
+    ],
+    "result": "passed",
+    "condition_browser_enabled": true,
+    "log_sha256": "bd0a55655018d05e6433295d1c7c397cd3256aa782c5d6e61119175e34213d4d"
+  },
+  "focused_checks": {
+    "browser": "selling-selection-browser: 141 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "unit": "ebay-sold-resilience: 47 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "quick": "quick-pricing: 235 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "launch": "launch-audit-regressions: 426 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "evidence": "price-evidence: 40 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "pricing-browser": "selling-price-evidence-browser: 180 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "assets": "asset-fingerprints: 270 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "registry": "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+  },
+  "active_asset": "js/core.c0d8d3c4.js",
+  "asset_sha256": "c0d8d3c43ff651683ecf21439df9d84410b13b24958fa1c550251fc7ca6f6c6c",
+  "visual_review": [
+    "320px single-listing research in dark theme",
+    "1280px single-listing research in light theme"
+  ],
+  "read_only_sold_probe": {
+    "available": false,
+    "reason": "provider_unavailable",
+    "count": 0,
+    "median": null,
+    "low": null,
+    "high": null,
+    "matchReviewRequired": true,
+    "fetchedAt": "2026-10-25T22:31:53.787Z",
+    "cacheAgeSec": 0,
+    "windowDays": 30,
+    "http_status": 200
+  },
+  "limits": [
+    "Browser market values and sold listings are controlled fixtures, not actual market quotes.",
+    "The production sold feed remains unavailable in the recorded read-only probe; no provider access change or workaround was made.",
+    "Research candidates do not establish matching printing, finish or condition. Missing or affirmative review-required metadata cannot auto-price a card or revalue a collection entry.",
+    "Broad TCGplayer and PriceCharting requests do not specify a finish; their replies cannot price that finish or seed its grade ladder.",
+    "No seller listing publication, customer inventory mutation, paid scans, API permissions, or marketplace fee rules were changed."
+  ]
+}

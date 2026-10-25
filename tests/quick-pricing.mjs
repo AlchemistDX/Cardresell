@@ -657,12 +657,13 @@ console.log('\n[Quick Pricing — wiring]');
   check('Q7: the single-reference wording is exactly as decided',
         core.includes("'Single reference price. No observed market range is available.'"),
         'the wording is the disclosure; paraphrasing it changes what is claimed');
-  check('Q7: the withheld-range case says so beside the comp',
-        /noRangeStr = rangeStr \? ''/.test(core),
-        'a comp with no range must not simply render as a bare precise number');
-  check('Q7: the Market price badge line no longer vouches for an ungated range',
-        /rangeStr \+ noRangeStr/.test(core),
-        'badge and range shared a line, so the range borrowed the badge');
+  const research=core.slice(core.indexOf('function renderPriceStatus('),core.indexOf('// ── Grade opportunity trigger'));
+  check('Q7: a broad reference explains its missing selection evidence',
+        research.includes('Base-printing reference') && research.includes('Condition and finish are not verified'),
+        'a card-wide reference must not claim the selected condition or finish');
+  check('Q7: a broad reference cannot vouch for a clamped or unscoped range',
+        !research.includes('_crRangeHtml(tcg.low') && !research.includes('>Market price<'),
+        'condition-specific endpoints belong to the selected-row evidence panel');
 
   check('the percentage policy is removed, not merely relabelled',
         !/_QP_DERIVED_SPREAD|_qpDerivedBand|label:'Lower ask −15%'|label:'Higher ask \+15%'/.test(core));

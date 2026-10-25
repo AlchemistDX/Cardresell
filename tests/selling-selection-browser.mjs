@@ -15,10 +15,24 @@ const origin='http://127.0.0.1:'+server.address().port,browser=await chromium.la
 let passed=0;const failures=[];
 const check=(ok,message)=>{if(ok)passed++;else failures.push(message);};
 try {
- for(const width of [390,1280]) {
+ for(const width of [320,390,1280]) {
   const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];
+  let research={tcg:{},pc:{},ebay:{available:false,count:0,median:null}};
+  let researchDelayMs=0;
+  const researchRequests=[];
   page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/*',r=>!r.request().url().startsWith(origin)||r.request().url().includes('/api/')?r.fulfill({status:204,body:''}):r.continue());
+  await page.route('**/*',r=>{
+    const url=new URL(r.request().url());
+    if(url.origin===origin){
+      const kind={'/api/tcg-price':'tcg','/api/pricecharting':'pc','/api/ebay-sold':'ebay'}[url.pathname];
+      if(kind){
+        researchRequests.push({kind,url:url.href});
+        const body=research[kind],delay=researchDelayMs;
+        return (async()=>{if(delay)await new Promise(resolve=>setTimeout(resolve,delay));return r.fulfill({json:body});})();
+      }
+    }
+    return url.origin!==origin||url.pathname.startsWith('/api/')?r.fulfill({status:204,body:''}):r.continue();
+  });
   await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
   await page.goto(origin+'/index.html');await page.waitForFunction(()=>typeof loadCardUI==='function');
   await page.evaluate(()=>{
@@ -89,6 +103,68 @@ try {
   });
   check(conditionResult.price===81&&conditionResult.key==='lightly_played','a condition-specific quote is not discounted twice at '+width);
   check(/7-day sold average: \$80.00/.test(conditionResult.context)&&/Sale count, individual sale dates/.test(conditionResult.context),'vendor average states its period and evidence limits at '+width);
+  research={tcg:{market:12,low:1,high:999,url:'https://www.tcgplayer.com/product/123'},pc:{},ebay:{available:false,count:0,median:null}};
+  await page.evaluate(()=>fetchAndApplySoldComps(true));
+  const status=page.locator('#ebayCompsStatusText');
+  check((await status.innerText()).includes('Base-printing reference')&&(await status.innerText()).includes('Condition and finish are not verified'),'broad quote does not claim the selected condition at '+width);
+  check(!/range|\$300\.00|\$999\.00/.test(await status.innerText()),'broad or clamped high never becomes a measured endpoint at '+width);
+  research={tcg:{},pc:{},ebay:{available:false,count:0,median:null}};
+  researchDelayMs=500;
+  await page.locator('#ebayCompsRefreshBtn').click();
+  check(await page.locator('#ebayCompsRefreshBtn').isDisabled()&&await page.locator('#ebayCompsStatus').getAttribute('aria-busy')==='true','refresh indicates loading and prevents repeated clicks at '+width);
+  await page.waitForFunction(()=>!document.getElementById('ebayCompsRefreshBtn').disabled&&document.getElementById('ebayCompsStatus').getAttribute('aria-busy')==='false');
+  researchDelayMs=0;
+  check(await status.isVisible()&&(await status.innerText()).includes('eBay sold prices unavailable'),'all-provider failure retains the availability explanation at '+width);
+  let researchLink=new URL(await page.locator('[data-ebay-research]').getAttribute('href'));
+  check(/Lightly Played/.test(researchLink.searchParams.get('_nkw'))&&/76\/214/.test(researchLink.searchParams.get('_nkw')),'empty-state research retains exact card and condition at '+width);
+  const soldDate=new Date().toISOString().slice(0,10);
+  research.ebay={available:true,count:1,median:12.34,low:12.34,high:12.34,matchReviewRequired:true,windowDays:30,shippingIncluded:false,items:[{title:'Mew 76/214 Lightly Played',price:12.34,soldDate,url:'https://www.ebay.com/itm/123',currency:'USD'}]};
+  await page.evaluate(()=>fetchAndApplySoldComps(true));
+  check((await status.innerText()).includes('One listing does not establish a price range')&&!/· median/.test(await status.innerText()),'one listing stays a data point without a range at '+width);
+  await page.locator('[data-ebay-candidates] summary').click();
+  check((await status.innerText()).includes('$12.34')&&(await status.innerText()).includes('Sold '+soldDate),'single recent listing exposes its price and actual sale date at '+width);
+  check(await page.evaluate(()=>getEffectivePrice())===81,'unreviewed listing cannot replace the selected quote at '+width);
+  const shots='/tmp/cardresell-research-price-context/shots';mkdirSync(shots,{recursive:true});
+  for(const theme of ['light','dark']){
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    check(await page.locator('#ebayCompsRefreshBtn').evaluate(el=>el.getBoundingClientRect().height>=44),'refresh has a usable tap target at '+width+' '+theme);
+    await page.locator('#ebayCompsStatus').screenshot({path:shots+'/single-candidate-'+width+'-'+theme+'.png'});
+  }
+  research.ebay={...research.ebay,median:22.56,items:[{...research.ebay.items[0],title:'Mew 76/214 Near Mint',price:22.56,url:'https://www.ebay.com/itm/456'}]};
+  await page.locator('#condPills [data-cond="nm"]').click();
+  check(!(await status.textContent()).includes('Mew 76/214 Lightly Played'),'condition change immediately retracts old comps at '+width);
+  await page.waitForFunction(()=>document.querySelector('[data-ebay-candidates]')?.textContent.includes('Mew 76/214 Near Mint'));
+  const latestQuery=new URL(researchRequests.filter(x=>x.kind==='ebay').at(-1).url).searchParams.get('q');
+  check(/Near Mint/.test(latestQuery)&&!/Lightly Played/.test(latestQuery),'condition change automatically requests matching research at '+width);
+  check(await page.evaluate(()=>getEffectivePrice())===100,'refreshed candidate leaves the selected condition quote intact at '+width);
+  research={tcg:{market:999},pc:{source:'pricecharting',median:9999,productName:'Mew Base Printing',prices:{psa_10:9999},url:'https://www.pricecharting.com/game/pokemon/mew'},ebay:{available:false,count:0,median:null}};
+  await page.evaluate(()=>{
+    const card={id:'finish-fixture',name:'Mew',number:'76/214',game:'pokemon',setName:'Unbroken Bonds',source:'TCGPlayer',priceVariants:[{key:'normal',label:'Normal',market:10},{key:'reverseHolofoil',label:'Reverse Holofoil',market:null},{key:'psa_10',label:'PSA 10',market:null}]};
+    setSelectedCard(card);loadCardUI(card);
+  });
+  await page.locator('#printingSelect').selectOption('reverseHolofoil');
+  await page.evaluate(()=>fetchAndApplySoldComps(true));
+  check(!/\$999|Base-printing reference|Guide value/.test(await status.innerText()),'unscoped provider quote is withheld for a specific finish at '+width);
+  check(await page.evaluate(()=>getEffectivePrice())===0,'broad response cannot fill a missing finish price at '+width);
+  check(await page.evaluate(()=>currentPrices.psa_10?.market==null),'broad response cannot seed that finish’s graded prices at '+width);
+  await page.locator('#gradedPills [data-val="psa"]').click();
+  await page.evaluate(()=>fetchAndApplySoldComps(true));
+  check(await page.evaluate(()=>_crSellingSelection().finish)==='Reverse Holofoil','missing grade quote retains the raw finish at '+width);
+  check(await page.evaluate(()=>getEffectivePrice())===0,'missing finish/grade cannot borrow a base-printing guide at '+width);
+  researchLink=new URL(await page.locator('#gradedCompsLink').getAttribute('href'));
+  check(/Reverse Holofoil/.test(researchLink.searchParams.get('_nkw'))&&/PSA/.test(researchLink.searchParams.get('_nkw')),'graded research retains the finish even without a quote at '+width);
+  await page.locator('#priceOverride').fill('17.25');await page.locator('#priceOverride').dispatchEvent('input');
+  await page.evaluate(()=>fetchAndApplySoldComps(true));
+  check(await page.evaluate(()=>getEffectivePrice())===17.25,'manual price remains owned by the seller through scoped research refresh at '+width);
+  research={tcg:{},pc:{},ebay:{available:true,count:3,median:500,confidence:'high',low:400,high:600}};
+  await page.evaluate(()=>{
+    const card={id:'unpriced-condition',name:'Mew',number:'76/214',game:'pokemon',setName:'Unbroken Bonds',priceVariants:[{key:'near_mint',label:'Near Mint',market:null}]};
+    setSelectedCard(card);loadCardUI(card);
+  });
+  await page.evaluate(()=>fetchAndApplySoldComps(true));
+  check(await page.evaluate(()=>getEffectivePrice())===0,'missing review metadata cannot auto-price an unpriced card at '+width);
+  check((await status.innerText()).includes('Needs review'),'heuristic high confidence does not imply a matched comp at '+width);
+  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'research panel does not overflow the page at '+width);
   check(errors.length===0,'no browser errors at '+width+': '+errors.join('; '));
   mkdirSync('/tmp/cardresell-selling-selection',{recursive:true});await page.locator('#resultsArea').screenshot({path:'/tmp/cardresell-selling-selection/selection-'+width+'.png'});
   await page.close();
