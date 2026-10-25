@@ -1397,6 +1397,7 @@ export default async function handler(req, res) {
           card_name: c.card_name, card_number: c.card_number, set_name: c.set_name,
           set_code: c.set_code || '', hp: c.hp || '', card_type: c.card_type || 'pokemon',
           is_japanese: c.is_japanese === true, rarity: c.rarity || '',
+          jp_name: c.jp_name || '', language: c.language || c.lang || '',
           sport: c.sport || '', year: c.year || '', brand: c.brand || '',
           grounded_id: c.grounded_id || c._grounded_id || null,
         }));

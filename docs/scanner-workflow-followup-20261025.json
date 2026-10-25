@@ -1,0 +1,186 @@
+{
+  "date": "2026-10-25",
+  "baseCommit": "f61ada458a42634696d8fcb75511e2d7c5cc077a",
+  "assets": {
+    "core": {
+      "path": "js/core.22a43581.js",
+      "sha256": "22a43581a59854abc19155736b941072c55826a50914c8e55a4aa2176f735225"
+    },
+    "bulk-match-review": {
+      "path": "js/bulk-match-review.0e9f639e.js",
+      "sha256": "0e9f639e033c48903de4bebf2234479211f2d351d22cf25b9ba28abfa7cae516"
+    }
+  },
+  "checksPassed": 2158,
+  "suites": 20,
+  "externalProviderCalls": 0,
+  "limits": [
+    "Fixture recognition and auth; isolated real Redis and Chromium.",
+    "No live Ximilar accuracy benchmark or native iPhone Safari run.",
+    "No production inventory, listings, seller data, or credits modified.",
+    "The full 156-suite application runner was not repeated."
+  ],
+  "results": [
+    {
+      "suite": "single-scan-review-browser",
+      "checksPassed": 100,
+      "failed": 0,
+      "summaries": [
+        "single-scan-review-browser: 100 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "bulk-match-review-browser",
+      "checksPassed": 446,
+      "failed": 0,
+      "summaries": [
+        "bulk-match-review-browser: 446 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "billing-release-browser",
+      "checksPassed": 34,
+      "failed": 0,
+      "summaries": [
+        "billing-release-browser: 34 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "scanner-audit-browser",
+      "checksPassed": 38,
+      "failed": 0,
+      "summaries": [
+        "scanner-audit-browser: 38 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "scan-finish-browser",
+      "checksPassed": 223,
+      "failed": 0,
+      "summaries": [
+        "SUITE COMPLETE: scan-finish-browser: 223 passed, 0 failed"
+      ]
+    },
+    {
+      "suite": "photo-capture-lifecycle",
+      "checksPassed": 37,
+      "failed": 0,
+      "summaries": [
+        "Photo capture lifecycle: 37 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "photo-decoder-fallback",
+      "checksPassed": 18,
+      "failed": 0,
+      "summaries": [
+        "Photo decoder fallback: 10 passed, 0 failed -- SUITE COMPLETE, exit=0",
+        "Photo retake history: 8 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "scan-input-reset",
+      "checksPassed": 1,
+      "failed": 0,
+      "summaries": [
+        "scan-input-reset: 1 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "scan-request-recovery",
+      "checksPassed": 1,
+      "failed": 0,
+      "summaries": [
+        "scan-request-recovery: 1 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "rapid-scan-browser",
+      "checksPassed": 88,
+      "failed": 0,
+      "summaries": [
+        "Rapid Scan browser: 88 checks passed across four viewports. -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "bulk-workflow-browser",
+      "checksPassed": 188,
+      "failed": 0,
+      "summaries": [
+        "bulk-workflow-browser: 188 passed, 0 failed -- SUITE COMPLETE"
+      ]
+    },
+    {
+      "suite": "asset-fingerprints",
+      "checksPassed": 260,
+      "failed": 0,
+      "summaries": [
+        "asset-fingerprints: 260 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "test-registry",
+      "checksPassed": 12,
+      "failed": 0,
+      "summaries": [
+        "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "id-confirmation-atomic",
+      "checksPassed": 366,
+      "failed": 0,
+      "summaries": [
+        "id-confirmation-atomic: 366 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "membership-scan-intent",
+      "checksPassed": 70,
+      "failed": 0,
+      "summaries": [
+        "membership-scan-intent: 70 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "scan-rarity-grounding",
+      "checksPassed": 19,
+      "failed": 0,
+      "summaries": [
+        "scan-rarity-grounding: 19 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "bulk-photo-preflight",
+      "checksPassed": 26,
+      "failed": 0,
+      "summaries": [
+        "Bulk photo preflight: 26 checks passed; no provider calls. -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "binder-scan-browser",
+      "checksPassed": 184,
+      "failed": 0,
+      "summaries": [
+        "SUITE COMPLETE: binder-scan-browser: 184 passed, 0 failed"
+      ]
+    },
+    {
+      "suite": "scanner-fastpath",
+      "checksPassed": 16,
+      "failed": 0,
+      "summaries": [
+        "scanner-fastpath: 16 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    },
+    {
+      "suite": "ximilar-contract",
+      "checksPassed": 31,
+      "failed": 0,
+      "summaries": [
+        "ximilar-contract: 31 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ]
+    }
+  ]
+}

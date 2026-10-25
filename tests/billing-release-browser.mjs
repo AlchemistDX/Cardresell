@@ -43,7 +43,7 @@ try {
    const page=await ctx.newPage();await page.goto(ORIGIN);
    await page.waitForFunction(()=>typeof _renderScanCandidatesPicker==='function');
    await page.evaluate(payload=>{
-    window._googleIdToken='x'.repeat(40);
+    window._googleIdToken='x'.repeat(40);window.googleUser={uid:'test-confirmation-billing'};window._fbAuth={currentUser:{uid:'test-confirmation-billing',getIdToken:async()=> 'x'.repeat(40)}};
     document.getElementById('scanOverlay').style.display='flex';
     _renderScanCandidatesPicker(payload.candidates,document.getElementById('scanStatus'),document.getElementById('scanResult'),null,payload);
    },offered);

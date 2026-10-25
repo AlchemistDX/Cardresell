@@ -160,6 +160,7 @@
     }
     s.busy = true; s.message = 'Confirming your selected printing…'; refresh(s);
     const controller = new AbortController();
+    const previouslyUncertain = s.uncertain;
     let timeout, watch, expired = false;
     // Include token refresh and response parsing in the deadline. A late
     // continuation must not send a request after the seller retried or left.
@@ -179,7 +180,8 @@
       if (!response.ok || !accepted(body,s)) {
         // Only a recognized no-accept verdict permits changing the selection.
         // Unknown, malformed, and lost replies retain the immutable attempt.
-        const noAccept = body?.ok === false && (response.status === 401 ||
+        // A login failure cannot settle an earlier request with a lost reply.
+        const noAccept = body?.ok === false && (response.status === 401 && !previouslyUncertain ||
           response.status === 402 && body.error === 'no_credits' ||
           response.status === 410 && body.error === 'expired_confirmation');
         if (noAccept) s.uncertain = false;

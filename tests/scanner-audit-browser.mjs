@@ -81,7 +81,7 @@ try {
       const candidates=[{card_name:'<img src=x onerror="window.injected=true">',set_name:'Magic <2010>',card_number:'146',confidence_pct:99},
         {card_name:'Lightning Bolt',set_name:'Magic 2011',card_number:'146',confidence_pct:55}];
       window._setScanBtns=()=>{};
-      _renderScanCandidatesPicker(candidates,status,result,null,{confirmation_id:'fixture'});
+      _renderScanCandidatesPicker(candidates,status,result,null,{confirmation_id:'a'.repeat(64),candidate_set:'b'.repeat(64),scan_id:'fixture'});
       let selected=null;window._pickScanCandidate=i=>{selected=i};result.querySelectorAll('button')[1].click();
       return {text:status.textContent+' '+result.textContent, images:result.querySelectorAll('img').length,
         height:result.querySelector('button').getBoundingClientRect().height, selected,
