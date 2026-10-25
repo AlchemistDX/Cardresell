@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-25",
+  "base_commit": "51c641c2d0bd1ee89bd15ce73cc6bdbaa0afc98e",
+  "scope": "Reported listing highs and lows, single-reference fallback, cents precision and price-selection handoff",
+  "full_regression": {
+    "slots": 167,
+    "executed": 165,
+    "skipped": [
+      "live managed Redis probe",
+      "production mutation smoke"
+    ],
+    "result": "passed",
+    "condition_browser_enabled": true,
+    "log_sha256": "a99f9ee1913fcdae75f372d1dee9118b1f53b7ca31ad63ae5372bdfe0abf652d"
+  },
+  "focused_checks": {
+    "quick": "quick-pricing: 235 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "evidence": "price-evidence: 40 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "browser": "selling-price-evidence-browser: 180 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "assets": "asset-fingerprints: 270 passed, 0 failed -- SUITE COMPLETE, exit=0",
+    "registry": "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+  },
+  "asset_sha256": {
+    "js/core.b49297a3.js": "b49297a3a259666d7724408e1c5fc60a6e030cc00ad4fc373ef3b7d57df1e2c4",
+    "js/price-evidence.02c7df5f.js": "02c7df5f8aa6fb9711f057011adf1ac12ff56ed48e33b9e3c3e8106d38f026c5"
+  },
+  "visual_review": [
+    "320px asking range, dark theme",
+    "390px reference only, light theme",
+    "390px grade reference, dark theme",
+    "1280px one-cent range, dark theme",
+    "320px five-digit prices with cents, dark theme"
+  ],
+  "live_read_only_probe": {
+    "endpoint": "/api/ebay-sold",
+    "available": false,
+    "reason": "provider_unavailable",
+    "count": 0,
+    "low": null,
+    "high": null,
+    "fetchedAt": "2026-10-25T17:46:05.588Z"
+  },
+  "limits": [
+    "Provider-reported TCGplayer endpoints are active listing asks, not sold-price extrema or a predicted sale range.",
+    "Exact-condition, same-source, unclamped endpoints require a valid update timestamp no more than seven days old.",
+    "A rolling sold average or grade guide supplies one reference, not low/high endpoints.",
+    "A live sold-feed lookup was unavailable; no sold-price range was fabricated and no access restriction was bypassed.",
+    "Browser tests use synthetic provider/auth boundaries and validate behavior, not market-price correctness.",
+    "No recognition-provider algorithms, customer inventory, marketplace listings, paid scans, or authentication permissions were changed."
+  ]
+}

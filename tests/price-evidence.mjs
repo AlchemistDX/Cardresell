@@ -20,12 +20,13 @@ if(!process.env.PRICE_MATCH_ONLY){
   ['wrong condition',{condition:'lp'}],['condition-scaled estimate',{multiplier:.85}],['graded selection',{graded:true,key:'psa_10'}],
   ['mixed endpoint sources',{row:{...row,highBasis:'ebay-sold'}}],['calculated high',{row:{...row,highBasis:'derived'}}],
   ['clamped high',{row:{...row,highClamped:true}}],['reversed endpoints',{row:{...row,low:140}}],
-  ['same endpoints',{row:{...row,low:130}}],['missing endpoint',{row:{...row,low:null}}],['infinite endpoint',{row:{...row,high:Infinity}}]
+  ['same endpoints',{row:{...row,low:130}}],['indistinguishable cents',{row:{...row,low:100.001,high:100.002}}],['sub-cent low',{row:{...row,low:.001,high:.05}}],['missing endpoint',{row:{...row,low:null}}],['infinite endpoint',{row:{...row,high:Infinity}}]
  ])check(label+' cannot supply observed asking choices',E.tiers(E.assess({...input,...change}))===null);
  const average=E.assess({...input,row:{market:100,ebaySalesAverage:{value:100,days:7}}});
  check('a seven-day average is one average, never a range',average.salesAverage.days===7&&!average.range);
  check('an average for another condition is withheld',!E.assess({...input,condition:'lp',row:{ebaySalesAverage:{value:100,days:7}}}).salesAverage);
  check('a reference outside the asking range is not an invented midpoint',E.tiers(E.assess({...input,row:{...row,market:200}})).length===2);
+ check('a rounded reference cannot replace the actual listed high',JSON.stringify(E.tiers(E.assess({...input,row:{...row,market:100.119,low:100.11,high:100.12}})).map(t=>[t.id,t.amt]))==='[["ask-low",100.11],["ask-high",100.12]]');
  check('old observed endpoints retain their date and limitation',E.assess({...input,sourceUpdatedAt:'2026-10-10'}).stale&&/over 7 days/.test(E.assess({...input,sourceUpdatedAt:'2026-10-10'}).note));
 }
 const names=['_crTplAskEndpoints','_crTplSoldAverage','tplCardToNormalized','fetchTPLGradedByNameNumber'];

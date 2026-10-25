@@ -234,17 +234,15 @@ console.log('\n[Quick Pricing — honest labelling]');
         !/sell[-\s]?through|velocity|days? to (cash|sell)|typically sells/i.test(zone),
         'same rule: we do not have this data for any venue');
 
-  check('the tier labels describe the price, not a promised speed',
-        /label:'Sell Now'/.test(logic) &&
-        /label:'Market'/.test(logic) &&
-        /label:'Top of Book'/.test(logic),
-        "'Sell Faster' would promise a timeline we cannot support");
+  check('the tier labels name reported prices, never selling speed',
+        !/label:'Sell Now'|label:'Top of Book'/.test(logic)
+        && /Listed low/.test(markup) && /Listed high/.test(markup));
 
   check('no "beta" anywhere in the widget',
         !/beta/i.test(zone));
 
   check('the info panel states we do not estimate timelines',
-        /do not predict a sale price or how quickly a card will sell/i.test(markup),
+        /not completed sales or a promised sale range/i.test(markup),
         'the caveat is the thing that makes the tier names honest');
 }
 
@@ -253,28 +251,26 @@ console.log('\n[Quick Pricing — tier derivation]');
   const fStart = index.indexOf('function _qpTiers(');
   const logic  = index.slice(fStart, index.indexOf('function renderQuickPricing()'));
 
-  check('Sell Now is derived from the lowest ask, not invented',
-        /id:'now'/.test(logic) && /low - step/.test(logic),
-        'the undercut must be computed from a real listing price');
-
-  check('the undercut is visible at the precision we display',
-        /const step = low < 100 \? 0\.01 : 1;/.test(logic),
-        'a $0.01 undercut on a $2450 card rendered as "$2,450" -- same as the ' +
-        'Lowest listing row, two different numbers displayed identically');
-
-  check('Sell Now is suppressed when the low ask is not below market',
-        /low != null && market != null && low < market/.test(logic),
-        'undercutting above the last sale is not a fast sale');
-
-  check('Top of Book is suppressed unless meaningfully above market',
-        /mid > market \* 1\.02/.test(logic),
-        'a third tier within a rounding error of market is the same number twice');
-
-  const render = index.slice(index.indexOf('function renderQuickPricing()'),
-                             index.indexOf('function qpApply('));
-  check('fewer than two tiers hides the widget',
-        /tiers\.length < 2/.test(render) && /display = 'none'/.test(render),
-        'one price is not a choice between prices');
+  const refStart=index.indexOf('function _qpReferenceChoices(');
+  const refSource=index.slice(refStart,index.indexOf('// Restrict the Grading Monitor',refStart));
+  const tierSource=logic.slice(0,logic.indexOf('// ── Grade ladder'));
+  const tiersFor=new Function('window','getCondMultiplier','_crSelectedPriceEvidence',refSource+tierSource+';return _qpTiers;');
+  const fallback=tiersFor({},()=>1,()=>null);
+  check('a $100 reference never produces $85 / $115 alternatives',
+        JSON.stringify(fallback({market:100,low:85,high:115}).map(t=>t.amt))==='[100]');
+  check('generic endpoints without exact-condition evidence are not selectable',
+        fallback({market:100,low:10,high:1000}).every(t=>t.referenceOnly));
+  check('a condition estimate stays one reference, not a fabricated range',
+        JSON.stringify(tiersFor({},()=>.65,()=>null)({market:100}).map(t=>t.amt))==='[65]');
+  check('missing, nonfinite and nonpositive references create no choice',
+        [null,{}, {market:0},{market:-1},{market:Infinity},{market:NaN},{market:.001}].every(b=>fallback(b).length===0));
+  const render = index.slice(index.indexOf('function renderQuickPricing()'),index.indexOf('function qpApply('));
+  check('single references remain visible without a position bar',
+        /basis && tiers.length/.test(render) && /barWrap.style.display=askingRangeActive\?'':'none'/.test(render));
+  check('observed prices retain their cents above $100',
+        /minimumFractionDigits: 2, maximumFractionDigits: 2/.test(render));
+  check('the position bar ends at the reported high without an invented extension',
+        /hi = Math.max\(\.\.\.amts\);/.test(render) && !/Math.max\(\.\.\.amts\) \* 1.08/.test(render));
 
   check('the marker position is clamped to the bar',
         /Math\.max\(0, Math\.min\(100,/.test(render),
@@ -351,30 +347,14 @@ console.log('\n[Quick Pricing — wiring]');
   check('the graded basis is tagged so the renderer can explain itself',
         /graded:\s*true/.test(qpBasis));
 
-  // A slab has one guide value per grade (low == mid == market), so the tier
-  // builder collapses to a single tier. Rather than vanishing -- which reads
-  // as a glitch -- the panel keeps its heading and states why there is no
-  // spread to choose from. Fabricating a Sell Now / Top of Book around a
-  // single guide value would be inventing a listing book that does not exist.
-  // 2026-09-04: the gate was `basis.graded && tiers.length < 2`. Once the
-  // derived band became universal a slab HAS three tiers, so that gate stopped
-  // matching and the graded branch (which draws the grade ladder) was skipped
-  // entirely. Graded now takes the branch unconditionally.
-  check('a graded slab explains itself instead of silently vanishing',
-        /if \(basis && basis\.graded\) \{/.test(index) &&
-        /id="qpGradedNote"/.test(index));
-  check('the graded branch is not gated on the tier count',
-        !/basis\.graded && tiers\.length < 2/.test(index),
-        'a slab has three derived tiers, so a <2 gate skips the ladder');
-
-  check('the graded note hides the tiers AND the position bar',
-        /const showStrategy = \(on\) =>/.test(index) &&
-        /qpBarWrap/.test(index) &&
-        /showStrategy\(false\)/.test(index),
-        'leaving the bar visible on a slab re-creates the reported bug');
-
-  check('the strategy view is restored for non-graded prices',
-        /showStrategy\(true\)/.test(index));
+  check('a graded reference stays visible with an explicit lack of range',
+        /basis.graded && ladderHost/.test(index) && /High and low prices are unavailable/.test(index));
+  check('the grade ladder is independent of a fabricated tier count',
+        /if\(basis.graded && ladderHost\)/.test(index) && !/_qpDerivedBand/.test(index));
+  check('the position bar is shown only for supported reported endpoints',
+        /barWrap.style.display=askingRangeActive\?'':'none'/.test(index));
+  check('old tier and ladder surfaces are cleared on every render',
+        /tiersEl.innerHTML=''/.test(index) && /ladderHost.innerHTML=''/.test(index));
 
   check('the graded note never promises a timeline',
         !/\b(days?|weeks?|hours?)\b/i.test(
@@ -684,20 +664,15 @@ console.log('\n[Quick Pricing — wiring]');
         /rangeStr \+ noRangeStr/.test(core),
         'badge and range shared a line, so the range borrowed the badge');
 
-  // Sell Now / Comp / Patient survive, relabelled.
-  check('Q7: the three suggestions are still offered',
-        /label:'Lower ask −15%'/.test(core) && /label:'Comp'/.test(core) && /label:'Higher ask \+15%'/.test(core),
-        'option (iii) keeps them -- it changes what they are called');
-  check('Q7: they are labelled calculated suggestions, not estimates of a market',
-        (core.match(/calculated suggestion/g) || []).length >= 2,
-        'both outer tiers must name themselves as computed by this app');
-  check('Q7: the captions no longer call the trio a band',
-        !/Estimated band\./.test(core),
-        '"band" names a measured interval; nothing measured a width here');
-  check('Q7: the captions deny being a provider range in so many words',
-        (core.match(/not a '\s*\+\s*'provider range|not a \\?'?provider range/g) || []).length >= 1
-          || (core.match(/provider range/g) || []).length >= 2,
-        'the specific misreading to head off is "this is what the source said"');
+  check('the percentage policy is removed, not merely relabelled',
+        !/_QP_DERIVED_SPREAD|_qpDerivedBand|label:'Lower ask −15%'|label:'Higher ask \+15%'/.test(core));
+  check('an unavailable range is disclosed beside the remaining reference',
+        /High and low prices are unavailable for this selection/.test(core));
+  check('a reference-only choice is explicitly marked',
+        /referenceOnly:true/.test(core));
+  check('reported asking prices remain distinct from completed sales',
+        /Asking prices, not completed sales/.test(core));
+
 }
 
 
@@ -1142,7 +1117,7 @@ console.log('\n[Quick Pricing — wiring]');
        contract records the limitation; this asserts the RENDERER honours it. */
     {
       const ra = core.indexOf('function _crRangeHtml(');
-      const rb = core.indexOf('const _QP_DERIVED_SPREAD', ra);
+      const rb = core.indexOf('function _qpReferenceChoices(', ra);
       check('the range renderer is locatable', ra !== -1 && rb > ra);
       /* One contiguous slice from the contract through _crMeasuredRange. An
          earlier version stitched `ci..cj` (contract only) to the gate and threw
@@ -1186,13 +1161,11 @@ console.log('\n[Quick Pricing — wiring]');
           'admission is contract membership, not string plausibility');
   }
 
-  // ---- 6. the copy claim: Comp keeps its basis label ----
-  check('Comp retains a source/basis label rather than being called calculated',
-        core.includes('Comp is the displayed source value'),
-        'only Lower ask and Higher ask are calculated suggestions');
-  check('only the two outer tiers are called calculated suggestions',
-        /Lower ask and Higher ask are calculated/.test(core) &&
-        !/Comp[^.]{0,40}calculated suggestion/.test(core));
+  check('the remaining reference is not labelled as an observed range',
+        /label:basis.graded\?'Grade reference'/.test(core) && /referenceOnly:true/.test(core));
+  check('there are no calculated outer asking choices',
+        !/Lower ask and Higher ask are calculated|_QP_DERIVED_SPREAD/.test(core));
+
 }
 
 /* ── BIAS-5: the unidentified-card scope must not be shared ─────────────────
@@ -1386,8 +1359,8 @@ console.log('\n[Quick Pricing — wiring]');
         /mid:\s*r\.mid\s*\?\?\s*displayMarket/.test(tcgPrice)
         && /mid:\s*fb\.mid\s*\?\?\s*fb\.market/.test(tcgPrice),
         'this equality is what makes the Top-of-Book gate a no-op under tagging');
-  check('the Top of Book gate still tests the 2% margin BEFORE provenance',
-        /mid > market \* 1\.02 && basis\.midBasis !== 'derived'/.test(core));
+  check('a midpoint cannot create an extra suggested asking price',
+        !/label:'Top of Book'/.test(core) && /return askingTiers \|\| _qpReferenceChoices\(basis\)/.test(core));
 
   // (b) the wire. Both client copy sites must carry it beside its siblings.
   check('the client reads midBasis off the wire',

@@ -1601,41 +1601,24 @@ try {
     !/parts\.push\(`Low \$\$\{/.test(idx) && !/rp\.push\(`Low \$\$\{/.test(idx));
 }
 
-// ---- Derived strategy band for slabs + PSA 9.5 does not exist (2026-09-04) ----
+// ---- Evidence-only choices replace the percentage strategy band (2026-10-25) ----
+// Behavioural coverage lives in quick-pricing and selling-price-evidence-browser.
+// Keep the launch gate from reintroducing the retired percentage fallback.
 {
-  const band = index.slice(index.indexOf('function _qpDerivedBand'),
-                           index.indexOf('function _qpTiers'));
-  // 2026-09-04: both of these contracts were deliberately reversed. The band
-  // is now universal (raw included) and intentionally takes precedence over
-  // basis.low/mid, because those are active-listing asks across ALL
-  // conditions -- the cheapest one is frequently a heavily-played copy.
-  check('band: accepts a non-graded basis', /if \(!basis\) return null;/.test(band));
-  check('band: no longer defers to the active-listing spread',
-        !/haveReal/.test(band));
-  check('band: refuses without a comp', /if\s*\(comp == null\)\s*return null/.test(band));
-  check('band: spread is the single named constant',
-        /const _QP_DERIVED_SPREAD = 0\.15;/.test(index) &&
-        /comp \* \(1 - s\)/.test(band) && /comp \* \(1 \+ s\)/.test(band));
-  check('band: tiers are flagged derived', (band.match(/derived:true/g) || []).length === 3);
-  check('band: no hardcoded 0.85/1.15 literals',
-        !/\*\s*0\.85|\*\s*1\.15/.test(band));
-}
-{
-  // Bound to the real end of the function. A fixed 6000-char window silently
-  // stopped covering the assertions below as soon as comments were added
-  // above them, so three checks failed on the slice rather than on the code.
-  const _rs = index.indexOf('function renderQuickPricing');
-  const rqp = index.slice(_rs, index.indexOf('\nfunction ', _rs + 10));
-  check('band: disclosure says not observed sales', /not observed sales/.test(rqp));
-  check('band: disclosure survives showStrategy(true)',
-        /\(_bandActive \|\| askingRangeActive\) && note\) note\.style\.display = ''/.test(rqp));
-  check('band: payout rows stay hidden under a derived band',
-        /\(_bandActive \|\| askingRangeActive\) && rowsEl\) rowsEl\.style\.display = 'none'/.test(rqp));
-  // Tightened 2026-09-04: a derived band alone no longer keeps the ladder,
-  // since raw cards get a band too and a grade axis over a raw selection
-  // describes something different from the strategy bar above it.
-  check('band: ladder survives only on a slab',
-        /if \(!\(_bandActive && basis && basis\.graded\)\) \{[\s\S]{0,200}qpLadder/.test(rqp));
+  check('price choices contain no percentage-band generator',
+        !index.includes('function _qpDerivedBand') && !index.includes('_QP_DERIVED_SPREAD'));
+  const start=index.indexOf('function renderQuickPricing');
+  const render=index.slice(start,index.indexOf('\nfunction ',start+10));
+  check('reported prices are disclosed as asking prices, not completed sales',
+        render.includes('Asking prices, not completed sales'));
+  check('missing high and low prices are disclosed',
+        render.includes('High and low prices are unavailable'));
+  check('source disclosure is visible for both evidence states',
+        /if\(note\)\{\s*note\.style\.display=''/.test(render));
+  check('position bar requires reported endpoints',
+        /barWrap\.style\.display=askingRangeActive\?'':'none'/.test(render));
+  check('grade ladder stays separate and requires a graded selection',
+        /if\(basis\.graded && ladderHost\)/.test(render));
 }
 // PSA issues half grades 1.5-8.5 and NO 9.5. Labelling PriceCharting's generic
 // "Grade 9.5" column as "PSA 9.5" invents a grade that cannot exist on a slab.
@@ -1690,25 +1673,14 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
     check(`SGC scale has half grade ${g}`, sgc.includes(`v: '${g}'`)));
 }
 
-// ---- Derived band is universal; disagreement render withdrawn (2026-09-04) ----
+// ---- Price choices prefer observed evidence; withdrawn disagreement render stays withdrawn ----
 {
   const t = index.slice(index.indexOf('function _qpTiers'),
-                        index.indexOf('// \u2500\u2500 Grade ladder'));
-  check('band: _qpTiers delegates to the derived band first',
-        /const _band = _qpDerivedBand\(basis\);\n  if \(_band\) return _band;/.test(t));
-  const d = index.slice(index.indexOf('function _qpDerivedBand'),
-                        index.indexOf('function _gmSyncGrades'));
-  check('band: no longer restricted to graded', /if \(!basis\) return null;/.test(d));
-  check('band: no longer defers to active-listing low/mid',
-        !/const haveReal/.test(d) && !/if \(haveReal\) return null/.test(d));
-  check('band: spread stays in one named constant',
-        /_QP_DERIVED_SPREAD/.test(d) && !/0\.15/.test(d));
-  check('band: comp tick matches the derived id too',
-        /t\.id === 'market' \|\| t\.id === 'dmarket'/.test(index));
-  check('band: raw cards disclose the band and keep payout rows down',
-        /!basis\.graded && tiers\.some\(t => t && t\.derived\)/.test(index));
-  check('band: ladder only survives on a slab',
-        /if \(!\(_bandActive && basis && basis\.graded\)\) \{/.test(index));
+                        index.indexOf('// ── Grade ladder'));
+  check('asking choices prefer supported endpoints before a single reference',
+        /return askingTiers \|\| _qpReferenceChoices\(basis\)/.test(t));
+  check('reference tick uses the real evidence choice',
+        /t\.id === 'reference' \|\| t\.id === 'ask-reference'/.test(index));
   // Withdrawn render, detection deliberately retained.
   check('disagreement render is not called', !/parts\.push\(_renderSourceDisagreement/.test(index));
   // Text-presence only. This asserts the definition still exists in the bundle;
@@ -1791,55 +1763,23 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
         (index.match(/const targetKey2? = `\$\{grader\}_\$\{grade\}`/g) || []).length === 0);
 }
 
-// ---- Info panel reflects the derived-band model (2026-09-04 Sol audit) ----
-// The visible qpInfo dialog is what tells sellers what each tile MEANS.
-// Post-universal-band it must describe Sell Now / Comp / Patient, not the
-// retired Sell Now / Market / Top of Book model.
+// ---- Help and captions explain what the evidence can establish ----
 {
   const info = index.slice(index.indexOf('<div id="qpInfo"'),
                            index.indexOf('</div>', index.indexOf('<div id="qpInfo"')));
-  check('qpInfo separates observed asking endpoints from completed sales',
-        /Lower ask \/ Upper ask/.test(info) && /asking prices, not completed sales/.test(info));
+  check('qpInfo separates reported asking endpoints from completed sales',
+        /Listed low \/ Listed high/.test(info) && /active listings, not completed sales/.test(info));
+  check('qpInfo requires selected-condition and recent endpoint evidence',
+        /selected condition/.test(info) && /within 7 days/.test(info));
   check('qpInfo defines reference without inventing a midpoint',
-        /Reference \/ Comp/.test(info) && /not necessarily the midpoint/.test(info));
-  check('qpInfo defines percentage choices as calculated suggestions',
-        /Lower ask −15% \/ Higher ask \+15%/.test(info) && /calculated suggestions/.test(info));
-  check('qpInfo no longer says Sell Now undercuts the cheapest listing',
-        !/undercuts the cheapest/.test(info));
-  check('qpInfo no longer names Top of Book', !/Top of Book/.test(info));
-  check('qpInfo no longer defines Market as a tier', !/<strong>Market<\/strong>/.test(info));
-}
-
-// ---- The band caption stops claiming completed-sales as universal (Sol) ----
-{
-  /* CHANGED 2026-09-07 by Q7 option (iii).
-     This used to assert the literal opening string
-       'Estimated band. Comp is the displayed source value; Sell Now and '
-     which was the Sol fix for a caption that had claimed the comp was
-     "recent completed sales" universally. That fix was right and is kept --
-     the caption still says the comp is the displayed source value.
-
-     What Q7 removed is the phrase "Estimated band". A band is a measured
-     interval, so naming the trio one told the reader the market is this wide
-     when nothing measured a width; the two outer figures are suggestions this
-     app calculates around the comp. Asserting the exact old literal would now
-     fail for the right reason, and re-pinning the exact NEW literal would just
-     reschedule this argument for the next copy change. So the checks below name
-     the three claims the caption has to make and the one it must not, and stop
-     caring how they are punctuated. The completed-sales check is preserved
-     verbatim in intent because it is the original regression. */
-  check('band caption still says Comp is the displayed source value',
-        index.includes('Comp is the displayed source value'));
-  check('band caption does not say completed sales anymore',
-        !index.includes("'Estimated band. Comp is recent completed sales; Sell Now and '")
-        && !/Comp is recent completed sales/.test(index));
-  check('caption no longer calls the trio a band (Q7)',
-        !index.includes('Estimated band.'));
-  check('caption names the outer tiers as calculated suggestions (Q7)',
-        index.includes('calculated ') && index.includes('suggestions at '));
-  check('caption denies being a provider range (Q7)',
-        (index.match(/provider range/g) || []).length >= 2);
-  check('caption carries the single-reference disclosure (Q7)',
+        /<strong>Reference<\/strong>/.test(info) && /not necessarily the midpoint/.test(info));
+  check('qpInfo refuses percentage alternatives and explains missing endpoints',
+        /Missing endpoints stay unavailable/.test(info) && /No percentage range is calculated/.test(info));
+  check('qpInfo does not promise a fast sale or describe a synthetic tier',
+        !/undercuts the cheapest|Top of Book|15%|calculated suggestions/.test(info));
+  check('caption never calls one reference recent completed sales',
+        !/Comp is recent completed sales/.test(index));
+  check('caption carries the single-reference disclosure',
         index.includes('Single reference price. No observed market range is available.'));
 }
 
@@ -2026,8 +1966,12 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
 {
   check('no condMult site still gates on _ovAutoFilled',
         (index.match(/window\._ovAutoFilled !== false && typeof getCondMultiplier/g) || []).length === 0);
-  check('all three condMult sites read the multiplier directly',
-        (index.match(/const condMult = \(typeof getCondMultiplier === 'function'\) \? getCondMultiplier\(\) : 1;/g) || []).length === 3);
+  // Removing the synthetic tier path retired two of the old three sites.
+  // The one-reference fallback still follows the selected condition.
+  const reference=index.slice(index.indexOf('function _qpReferenceChoices'),index.indexOf('function _gmSyncGrades'));
+  check('single reference reads the condition multiplier directly',
+        /typeof getCondMultiplier === 'function' \? getCondMultiplier\(\) : 1/.test(reference)
+        && /Number\(basis.market\) \* multiplier/.test(reference));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
