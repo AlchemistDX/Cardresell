@@ -1,149 +1,91 @@
-// tools/fastpath_calibration.mjs
-//
-// EMPIRICAL calibration harness for the offline pHash fastpath. tests/
-// scanner-fastpath.mjs pins the code's SHAPE; this measures whether it
-// actually works. Re-run it by hand whenever you touch hashing, cropping,
-// CONFIDENCE_MAX, GAP_MIN, or the seeder's preprocessing.
-//
-// Method: download reference images straight from the index and feed them
-// BACK through scanFile(). A card's own catalog image is the easiest possible
-// input, so the accept rate here is an UPPER BOUND on real-world recall. If
-// this number is low, the matcher is broken — that is how the 0%-hit-rate
-// crop/index mismatch was found on 2026-09-03.
-//
-// Prereqs:
-//   1. python3 -m http.server 8099   (from the repo root)
-//   2. reference images + meta.json  (see PREP below)
-//   3. Playwright available to node
-//
-// PREP — build the sample set:
-//   python3 - <<'EOF'
-//   import json,random,urllib.request,os
-//   idx=json.load(open('card-index.json'))
-//   sc=[c for c in idx if 'scrydex.com' in (c.get('i') or '')]
-//   random.seed(7); samp=random.sample(sc,30)
-//   os.makedirs('/tmp/selftest',exist_ok=True); meta=[]
-//   for c in samp:
-//       p=f"/tmp/selftest/{c['id']}.png"
-//       req=urllib.request.Request(c['i'],headers={'User-Agent':'Mozilla/5.0'})
-//       open(p,'wb').write(urllib.request.urlopen(req,timeout=20).read())
-//       meta.append({'id':c['id'],'n':c['n'],'path':p})
-//   json.dump(meta,open('/tmp/selftest/meta.json','w'))
-//   EOF
-//
-// BASELINE (2026-09-03, n=30, after the dual-hash fix):
-//   A. accepted 26/30, WRONG-ACCEPTED 0
-//      4 honest fall-throughs, all gap-rule (gap 0-1) on near-duplicate arts
-//   B. matchedOn: uncropped for all tight scans (expected — index is uncropped)
-//   C. phone photos of full-art holos still miss, and do NOT guess wrong
-//   D. negative control (icon-512.png) does not match
-//
-// BEFORE the fix the same harness reported 0/30 accepted.
-//
-// A drop in A, or ANY non-zero WRONG-ACCEPTED, is a release blocker: a false
-// accept shows the user a confidently wrong card, which is worse than an
-// honest "not recognized".
-import { chromium } from '/home/user/node_modules/playwright/index.mjs';
-import { readFileSync } from 'node:fs';
-
-const meta = JSON.parse(readFileSync('/tmp/selftest/meta.json','utf8'));
-const b = await chromium.launch();
-const pg = await b.newPage({ viewport:{width:430,height:900} });
-await pg.addInitScript(()=>{ Object.defineProperty(window,'autoRunExampleCard',
-  { value: async()=>false, writable:true, configurable:true }); });
-await pg.goto('http://localhost:8099/index.html',{waitUntil:'domcontentloaded'});
-await pg.waitForTimeout(2500);
-
-const run = async (path,type='image/png') => {
-  const b64 = readFileSync(path).toString('base64');
-  return pg.evaluate(async ({b64,type}) => {
-    const bin=atob(b64); const arr=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-    const r=await window.CardResellFastPath.scanFile(new File([arr],'c',{type}));
-    return { hit:!!r.hit, id:r.hit?r.card.id:null,
-             name:r.hit?(r.card.card_name+' #'+r.card.card_number):null,
-             matchedOn:r.matchedOn||null, dist:r.hit?r.distance:r.bestDist,
-             reason:r.reason||null,
-             guess:r.bestGuess?(r.bestGuess.card_name+' #'+r.bestGuess.card_number):null };
-  }, {b64,type});
-};
-
-console.log('=== A. FALSE-ACCEPT CHECK (n=30 reference images) ===');
-let hit=0, wrong=0; const misses=[];
-for (const m of meta) {
-  const r = await run(m.path);
-  if (r.hit) { hit++; if (r.id!==m.id) { wrong++; console.log(`  WRONG: ${m.id} -> ${r.id}`); } }
-  else misses.push(`${m.id} (${r.reason})`);
+// Repeatable evaluation of the SHIPPED local matcher. No paid recognition.
+// Usage: node tools/fastpath_calibration.mjs [manifest.json] [report.json]
+// A local artwork candidate is not a confirmed card/printing. This measures
+// candidate recall and unsafe promotion, never Ximilar or real-world accuracy.
+import { chromium } from 'playwright';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname, extname } from 'node:path';
+const root=resolve(new URL('..',import.meta.url).pathname);
+const manifestPath=resolve(process.argv[2] || root+'/tests/fixtures/scanner-accuracy.json');
+const output=process.argv[3] && resolve(process.argv[3]);
+const manifest=JSON.parse(readFileSync(manifestPath,'utf8'));
+if (!Array.isArray(manifest.inputs) || !manifest.inputs.length) throw Error('A nonempty, labeled manifest is required');
+const origin='https://scanner-calibration.test';
+const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:390,height:844}});
+const rows=[],errors=[],requests=[];
+await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
+await page.route('**/*',route=>{
+  const u=new URL(route.request().url());
+  if(u.origin!==origin || u.pathname.startsWith('/api/')) {
+    requests.push(u.href);return route.fulfill({status:503,body:'offline'});
+  }
+  try {
+    const path=resolve(root,'.'+(u.pathname==='/'?'/index.html':u.pathname));
+    if(!path.startsWith(root+'/'))throw Error('path');
+    const type={'.js':'application/javascript','.css':'text/css','.json':'application/json','.jpg':'image/jpeg','.png':'image/png'}[extname(path)]||'text/html';
+    return route.fulfill({body:readFileSync(path),contentType:type});
+  }catch{return route.fulfill({status:404,body:''})}
+});
+page.on('pageerror',e=>errors.push(e.message));
+async function evaluate(files,expected,label) {
+  const data=await page.evaluate(async files=>{
+    const out=[];
+    for(const input of files) {
+      const file=typeof input==='number'?window._bulkQueue[input].file:
+        new File([Uint8Array.from(atob(input.base64),c=>c.charCodeAt(0))],input.name,{type:input.type});
+      const qc=await CardResellPhotoQC.check(file,{skipDupe:true});
+      const fp=await CardResellFastPath.scanFile(file);
+      out.push({width:qc.details.width,height:qc.details.height,photoCheck:qc.ok,
+        photoReasons:qc.reasons,artworkCandidate:fp.artworkCandidate===true,acceptedIdentity:fp.hit===true,
+        candidate:fp.bestGuess?{id:fp.bestGuess.id,name:fp.bestGuess.card_name,number:fp.bestGuess.card_number,set:fp.bestGuess.set_name}:null,
+        distance:fp.bestDist,gap:Number.isFinite(fp.secondDist)?fp.secondDist-fp.bestDist:null,reason:fp.reason});
+    }
+    return out;
+  },files);
+  data.forEach((r,i)=>{
+    const truth=expected[i];
+    if(!truth || (!truth.name && truth.negative!==true))throw Error('Missing independent label');
+    const nameCorrect=truth.negative?null:r.candidate?.name.toLowerCase()===truth.name.toLowerCase();
+    rows.push({label:label+(files.length>1?`/pocket-${i+1}`:''),expected:truth,...r,nameCorrect,
+      unsafePromotion:r.acceptedIdentity || (truth.negative && r.artworkCandidate)});
+  });
 }
-console.log(`  accepted ${hit}/30, WRONG-ACCEPTED ${wrong}`);
-console.log(`  honest fall-through (${misses.length}):`);
-misses.forEach(x=>console.log('    '+x));
-
-console.log('\n=== B. matchedOn distribution (should be "uncropped" for tight scans) ===');
-const d={};
-for (const m of meta.slice(0,10)) { const r=await run(m.path); d[r.matchedOn||'miss']=(d[r.matchedOn||'miss']||0)+1; }
-console.log('  '+JSON.stringify(d));
-
-console.log('\n=== C. GRENINJA PHOTOS \u2014 must still honestly miss, NOT guess wrong ===');
-for (const [lab,p] of [['wood','/home/user/gren_wood_preview.png'],
-                       ['hand','/home/user/gren_hand_preview.png']]) {
-  const r = await run(p);
-  console.log(`  ${lab}: hit=${r.hit}  ${r.hit?('ACCEPTED '+r.name+' <-- FALSE POSITIVE!'):('miss, '+r.reason+', best guess would have been '+r.guess)}`);
-}
-
-console.log('\n=== D. NEGATIVE CONTROL \u2014 a non-card image must not match ===');
-const r = await run('/home/user/workspace/cardresell/public/icon-512.png');
-console.log(`  icon-512.png: hit=${r.hit} ${r.hit?('ACCEPTED '+r.name+' <-- FALSE POSITIVE!'):('miss ('+r.reason+')')}`);
-await b.close();
-import { chromium } from '/home/user/node_modules/playwright/index.mjs';
-import { readFileSync } from 'node:fs';
-
-const meta = JSON.parse(readFileSync('/tmp/selftest/meta.json','utf8'));
-const b = await chromium.launch();
-const pg = await b.newPage({ viewport:{width:430,height:900} });
-await pg.addInitScript(()=>{ Object.defineProperty(window,'autoRunExampleCard',
-  { value: async()=>false, writable:true, configurable:true }); });
-await pg.goto('http://localhost:8099/index.html',{waitUntil:'domcontentloaded'});
-await pg.waitForTimeout(2500);
-
-const run = async (path,type='image/png') => {
-  const b64 = readFileSync(path).toString('base64');
-  return pg.evaluate(async ({b64,type}) => {
-    const bin=atob(b64); const arr=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-    const r=await window.CardResellFastPath.scanFile(new File([arr],'c',{type}));
-    return { hit:!!r.hit, id:r.hit?r.card.id:null,
-             name:r.hit?(r.card.card_name+' #'+r.card.card_number):null,
-             matchedOn:r.matchedOn||null, dist:r.hit?r.distance:r.bestDist,
-             reason:r.reason||null,
-             guess:r.bestGuess?(r.bestGuess.card_name+' #'+r.bestGuess.card_number):null };
-  }, {b64,type});
-};
-
-console.log('=== A. FALSE-ACCEPT CHECK (n=30 reference images) ===');
-let hit=0, wrong=0; const misses=[];
-for (const m of meta) {
-  const r = await run(m.path);
-  if (r.hit) { hit++; if (r.id!==m.id) { wrong++; console.log(`  WRONG: ${m.id} -> ${r.id}`); } }
-  else misses.push(`${m.id} (${r.reason})`);
-}
-console.log(`  accepted ${hit}/30, WRONG-ACCEPTED ${wrong}`);
-console.log(`  honest fall-through (${misses.length}):`);
-misses.forEach(x=>console.log('    '+x));
-
-console.log('\n=== B. matchedOn distribution (should be "uncropped" for tight scans) ===');
-const d={};
-for (const m of meta.slice(0,10)) { const r=await run(m.path); d[r.matchedOn||'miss']=(d[r.matchedOn||'miss']||0)+1; }
-console.log('  '+JSON.stringify(d));
-
-console.log('\n=== C. GRENINJA PHOTOS \u2014 must still honestly miss, NOT guess wrong ===');
-for (const [lab,p] of [['wood','/home/user/gren_wood_preview.png'],
-                       ['hand','/home/user/gren_hand_preview.png']]) {
-  const r = await run(p);
-  console.log(`  ${lab}: hit=${r.hit}  ${r.hit?('ACCEPTED '+r.name+' <-- FALSE POSITIVE!'):('miss, '+r.reason+', best guess would have been '+r.guess)}`);
-}
-
-console.log('\n=== D. NEGATIVE CONTROL \u2014 a non-card image must not match ===');
-const r = await run('/home/user/workspace/cardresell/public/icon-512.png');
-console.log(`  icon-512.png: hit=${r.hit} ${r.hit?('ACCEPTED '+r.name+' <-- FALSE POSITIVE!'):('miss ('+r.reason+')')}`);
-await b.close();
+try {
+  await page.goto(origin,{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.CardResellBinder && window.CardResellFastPath && window.CardResellPhotoQC);
+  for(const input of manifest.inputs) {
+    const path=resolve(dirname(manifestPath),input.path);
+    if(input.layout) {
+      await page.evaluate(()=>{window._bulkQueue=[];document.getElementById('bulkScanOverlay').style.display='flex';startBinderScan()});
+      await page.selectOption('#binderLayout',input.layout);
+      await page.setInputFiles('#binderInput',path);
+      await page.waitForFunction(()=>!document.getElementById('binderControls').disabled && document.querySelectorAll('.binder-pocket').length>0,null,{timeout:30000});
+      const count=await page.locator('.binder-pocket').count();
+      if(count!==input.expected.length)throw Error('Pocket count differs from truth labels');
+      await page.click('#binderSelectAll');await page.click('#binderContinue');
+      await evaluate(Array.from({length:count},(_,i)=>i),input.expected,input.label);
+    } else {
+      const type=input.type || ({'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}[extname(path)]);
+      if(!type)throw Error('Unsupported fixture format');
+      await evaluate([{name:input.path,type,base64:readFileSync(path).toString('base64')}],[input.expected],input.label);
+    }
+  }
+  const positives=rows.filter(r=>!r.expected.negative),negatives=rows.filter(r=>r.expected.negative);
+  const report={version:1,manifestSha256:createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+    assets:[...readFileSync(root+'/index.html','utf8').matchAll(/src="(\/js\/(?:core|binder|photo-qc)\.[a-f0-9]+\.js)"/g)].map(m=>m[1]),
+    inputs:manifest.inputs.map(i=>({path:i.path,sha256:createHash('sha256').update(readFileSync(resolve(dirname(manifestPath),i.path))).digest('hex')})),
+    scope:'Offline local artwork candidates and photo preparation only; no Ximilar recognition or printing accuracy measurement',
+    description:manifest.description,
+    summary:{positivePhotos:positives.length,negativeControls:negatives.length,photoChecksPassed:positives.filter(r=>r.photoCheck).length,
+      qualifiedArtworkCandidates:positives.filter(r=>r.artworkCandidate).length,
+      qualifiedCorrectNames:positives.filter(r=>r.artworkCandidate&&r.nameCorrect).length,
+      nearestNamesCorrect:positives.filter(r=>r.nameCorrect).length,
+      acceptedIdentities:rows.filter(r=>r.acceptedIdentity).length,
+      unsafePromotions:rows.filter(r=>r.unsafePromotion).length,
+      scanRequests:requests.filter(u=>/\/api\/scan(?:[?/-]|$)/.test(u)).length,browserErrors:errors.length},rows,errors};
+  if(output){mkdirSync(dirname(output),{recursive:true});writeFileSync(output,JSON.stringify(report,null,2)+'\n')}
+  console.log(JSON.stringify(report.summary));
+  if(report.summary.unsafePromotions || report.summary.scanRequests || errors.length)process.exitCode=1;
+} finally {await browser.close()}

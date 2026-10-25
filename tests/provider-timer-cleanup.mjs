@@ -36,7 +36,7 @@ try {
   }
 
   globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ records: [{
-    _objects: [{ _identification: { best_match: { name: 'Minun' }, distances: [0.1, 0.8] } }],
+    _objects: [{ _identification: { best_match: { name: 'Minun', subcategory: 'Pokemon' }, distances: [0.1, 0.8] } }],
     grades: { final: 9, corners: 9 },
   }] }) });
   assert.equal((await identifyWithXimilar('fixture', 'image/jpeg', 'fixture', 'sport', 'grade')).cardInfo.card_name, 'Minun');
@@ -64,7 +64,7 @@ try {
     { label: 'TCG close alternatives', kind: 'tcg', mode: 'identify', distances: [0.2, 0.21], expected: 'picker' },
     { label: 'TCG reject boundary', kind: 'tcg', mode: 'identify', distances: [0.55, 0.9], expected: 'miss' },
     { label: 'TCG weak match', kind: 'tcg', mode: 'identify', distances: [0.8, 0.9], expected: 'miss' },
-    { label: 'TCG absent distance', kind: 'tcg', mode: 'identify', distances: [], expected: 'miss' },
+    { label: 'TCG absent distance', kind: 'tcg', mode: 'identify', distances: [], expected: 'invalid' },
     { label: 'TCG during Quick Grade', kind: 'tcg', mode: 'grade', distances: [0.2, 0.8], expected: 'high' },
     { label: 'TCG during Deep Grade', kind: 'tcg', mode: 'deep_grade', distances: [0.2, 0.8], expected: 'high' },
     { label: 'sports identification', kind: 'sport', mode: 'identify', distances: [0.2, 0.8], expected: 'high' },
@@ -77,7 +77,7 @@ try {
       requests.push({ url, options });
       return { ok: true, status: 200, json: async () => ({ records: [{ _objects: [{
         _identification: {
-          best_match: { name: 'Minun' }, alternatives: [{ name: 'Plusle' }], distances: fixture.distances,
+          best_match: { name: 'Minun', subcategory: 'Pokemon' }, alternatives: [{ name: 'Plusle', subcategory: 'Pokemon' }], distances: fixture.distances,
         },
       }] }] }) };
     };
@@ -91,10 +91,10 @@ try {
     assert.equal(observations.length, before + 1);
     assert.equal(observations.at(-1).operation, `${fixture.kind}_id`);
     assert.equal(observations.at(-1).mode, fixture.mode);
-    assert.equal(observations.at(-1).outcome, fixture.expected === 'miss' ? 'failure' : 'success');
-    if (fixture.expected === 'miss') {
+    assert.equal(observations.at(-1).outcome, ['miss', 'invalid'].includes(fixture.expected) ? 'failure' : 'success');
+    if (['miss', 'invalid'].includes(fixture.expected)) {
       assert.equal(result.ok, false, fixture.label);
-      assert.equal(result.reason, 'low_confidence', fixture.label);
+      assert.equal(result.reason, fixture.expected === 'invalid' ? 'invalid_response' : 'low_confidence', fixture.label);
       assert.equal(result.cardInfo, undefined, fixture.label);
     } else if (fixture.expected === 'picker') {
       assert.equal(result.ok, true);
