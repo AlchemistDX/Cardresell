@@ -134,9 +134,43 @@ for (const pc of [null, { source: 'pricecharting', median: 42 }]) {
   }
 }
 const sparse = ctx.renderPriceStatus({ ebay: { count: 0, median: null }, fallbackEbayUrl: 'https://www.ebay.com/' });
-assert.match(sparse, /Not enough matched eBay sales/); cases++;
+assert.match(sparse, /Not enough verified eBay sales/); cases++;
 const available = ctx.renderPriceStatus({ ebay: { count: 3, median: 10 }, fallbackEbayUrl: 'https://www.ebay.com/' });
 assert.match(available, /3 sold/); assert.doesNotMatch(available, /prices unavailable/); cases++;
 const reviewed = ctx.renderPriceStatus({ebay:{count:3,median:10,windowDays:30,matchReviewRequired:true,shippingIncluded:false,items:[{title:'<img src=x> Mew',price:10,soldDate:'2026-10-23',url:'https://www.ebay.com/itm/123'}]},fallbackEbayUrl:'https://www.ebay.com/'});
-assert.match(reviewed,/last 30 days/);assert.match(reviewed,/Sold 2026-10-23/);assert.match(reviewed,/shipping extra/);assert.doesNotMatch(reviewed,/<img/);cases++;
+assert.match(reviewed,/last 30 days/);assert.match(reviewed,/Sold 2026-10-23/);assert.match(reviewed,/excluding shipping/);assert.doesNotMatch(reviewed,/<img/);cases++;
+const broad={market:100,low:90,high:999,url:'https://www.tcgplayer.com/product/123'};
+const broadResult=ctx.renderPriceStatus({tcg:broad,selection:{graded:false,finish:'',condition:'lp'},fallbackEbayUrl:'https://www.ebay.com/'});
+assert.match(broadResult,/Base-printing reference/);assert.match(broadResult,/Condition and finish are not verified/);assert.doesNotMatch(broadResult,/>Market price</);cases++;
+for(const selection of [{graded:true,finish:''},{graded:false,finish:'Reverse Holofoil'}]){
+ const rendered=ctx.renderPriceStatus({tcg:broad,selection,fallbackEbayUrl:'https://www.ebay.com/'});
+ assert.doesNotMatch(rendered,/\$100\.00/);cases++;
+}
+const one=ctx.renderPriceStatus({ebay:{available:true,count:1,median:10,low:10,high:10,windowDays:30,matchReviewRequired:true,items:[{title:'Mew',price:10,soldDate:'2026-10-23',url:'https://www.ebay.com/itm/123'}]},fallbackEbayUrl:'https://www.ebay.com/'});
+assert.match(one,/Review 1 recent sold listing/);assert.match(one,/one listing does not establish a price range/i);assert.doesNotMatch(one,/· median/);cases++;
+const unavailableWithOldNumbers=ctx.renderPriceStatus({ebay:{available:false,count:3,median:99,low:90,high:100},fallbackEbayUrl:'https://www.ebay.com/'});
+assert.match(unavailableWithOldNumbers,/eBay sold prices unavailable/);assert.doesNotMatch(unavailableWithOldNumbers,/\$99\.00/);cases++;
+const hostile=ctx.renderPriceStatus({pc:{source:'pricecharting',median:42,url:'javascript:alert(1)',productName:'<img src=x onerror=alert(1)>'},ebay:{count:3,median:10,confidence:'high',confidenceReasons:['<svg onload=alert(1)>'],searchUrl:'https://www.ebay.com.evil.test/'},fallbackEbayUrl:'https://www.ebay.com/'});
+assert.doesNotMatch(hostile,/<img|<svg|javascript:|ebay\.com\.evil/);assert.match(hostile,/Needs review/);cases++;
+for(const median of [0,-1,Infinity,NaN]){
+ const rendered=ctx.renderPriceStatus({pc:{source:'pricecharting',median},ebay:{count:3,median},fallbackEbayUrl:'https://www.ebay.com/'});
+ assert.doesNotMatch(rendered,/Guide value|· median/);cases++;
+}
+const entryStart=source.indexOf('async function _fetchEbayPriceForEntry(');
+const entryEnd=source.indexOf('function _pcKeyForGrade',entryStart);
+let savedEntryResponse;
+const entryContext=vm.createContext({fetch:async()=>({ok:true,json:async()=>savedEntryResponse})});
+vm.runInContext(source.slice(entryStart,entryEnd),entryContext);
+const savedEntry={card:'Mew',number:'76/214',set:'Unbroken Bonds',value:80};
+for(const change of [
+ {matchReviewRequired:true},{matchReviewRequired:undefined},{available:false},
+ {count:1},{count:'3'},{confidence:'insufficient'},
+ {median:0},{median:-10},{median:Infinity},{median:'10'}
+]){
+ savedEntryResponse={available:true,count:3,median:10,confidence:'medium',matchReviewRequired:false,...change};
+ assert.equal(await entryContext._fetchEbayPriceForEntry(savedEntry),null,'unusable or unreviewed samples cannot revalue inventory');
+ assert.equal(savedEntry.value,80);cases++;
+}
+savedEntryResponse={available:true,count:3,median:10,confidence:'medium',matchReviewRequired:false};
+assert.equal(await entryContext._fetchEbayPriceForEntry(savedEntry),10);cases++;
 console.log(`ebay-sold-resilience: ${cases} passed, 0 failed -- SUITE COMPLETE, exit=0`);

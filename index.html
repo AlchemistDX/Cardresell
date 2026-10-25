@@ -2539,9 +2539,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:.4rem;padding-left:.5rem">Set price via Override field below after checking comps</div>
         </div>
         <!-- eBay sold comps auto-status -->
-        <div id="ebayCompsStatus" style="display:none;margin-bottom:.35rem;padding:.38rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.68rem;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between;gap:.5rem">
-          <span id="ebayCompsStatusText"></span>
-          <button id="ebayCompsRefreshBtn" onclick="fetchAndApplySoldComps(true)" style="background:none;border:none;color:var(--gold-text);font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;padding:0">Refresh</button>
+        <div id="ebayCompsStatus" aria-busy="false" style="display:none;flex-direction:column;align-items:stretch;margin-bottom:.35rem;padding:.5rem .65rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);font-size:.78rem;color:var(--text-muted);gap:.3rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+            <strong style="color:var(--text)">Price research</strong>
+            <button type="button" id="ebayCompsRefreshBtn" onclick="fetchAndApplySoldComps(true)" style="min-height:44px;padding:.4rem .5rem;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--gold-text);font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap">Refresh</button>
+          </div>
+          <div id="ebayCompsStatusText" aria-live="polite" style="min-width:0;overflow-wrap:anywhere"></div>
         </div>
 
         <div class="price-override">
@@ -3951,7 +3954,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/sale-corrections.ba658815.js"></script>
 <script defer src="/js/inventory-edits.827690a8.js"></script>
 <script defer src="/js/price-evidence.02c7df5f.js"></script>
-<script defer src="/js/core.b49297a3.js"></script>
+<script defer src="/js/core.c0d8d3c4.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
