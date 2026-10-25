@@ -1,0 +1,122 @@
+{
+  "date": "2026-10-25",
+  "baseCommit": "3595c19f45213fe90e05ce4b67fea5cf4268823b",
+  "assets": [
+    {
+      "path": "js/core.288cc2b5.js",
+      "sha256": "288cc2b56d174b1ef1156eb3998245b74cf06e114efa9588ee16fcad3ae31125",
+      "bytes": 1538308
+    },
+    {
+      "path": "js/auth.e6999513.js",
+      "sha256": "e6999513a26e574dd0fe36f7be0b54abb0a38a99a68cb46da473f06275bdcc97",
+      "bytes": 26088
+    }
+  ],
+  "releaseGate": {
+    "slots": 166,
+    "executedSuitesPassed": 163,
+    "intentionalSkips": [
+      "live managed Redis opt-in",
+      "production mutation smoke"
+    ],
+    "conditionalGateVerifiedSeparately": "condition-applicability",
+    "skipEvidence": [
+      "\u25b6 [27/166] C1 real-store pass \u2014 SKIPPED (set DRAFT_KV_LIVE=1 + KV_REST_API_* to run)",
+      "\u25b6 [28/166] Prod endpoint smoke \u2014 SKIPPED (--local)",
+      "\u25b6 [29/166] Condition-applicability interaction \u2014 SKIPPED (set COND_PILLS_BROWSER=1 + serve the site at SITE_BASE to run)"
+    ],
+    "logSha256": "c7031694387c50cba2b78504d939ef3006fe67091708f9785d6f8d903484bee5",
+    "result": "ALL CHECKS PASSED"
+  },
+  "regressions": {
+    "originalBaseline": {
+      "passed": 4,
+      "failed": 25,
+      "checks": 29
+    },
+    "draft-read-recovery": {
+      "passed": 39,
+      "failed": 0
+    },
+    "draft-read-workflow-browser": {
+      "passed": 46,
+      "failed": 0,
+      "widths": [
+        390,
+        1280
+      ]
+    }
+  },
+  "conditionGate": {
+    "passed": 17,
+    "failed": 0,
+    "logSha256": "ac0c34ab753898f8e51cc8b52b31de571413d70c3e1534a08353003a9f3b699c"
+  },
+  "additionalGates": [
+    {
+      "suite": "membership-account-routes.mjs",
+      "completion": [
+        "membership-account-routes: 30 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "logSha256": "f01ef62d560d0c5702cd8d3ecd7584624a7faed90444b4f96fed95e27eeae80a"
+    },
+    {
+      "suite": "billing-release-browser.mjs",
+      "completion": [
+        "billing-release-browser: 34 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "logSha256": "51a854660d190102895ace2193512beb26095b25260e03cb1584fc00f1fa3114"
+    },
+    {
+      "suite": "customer-journey-browser.mjs",
+      "completion": [
+        "\u2713 390 failed cloud sync offers recovery",
+        "\u2713 390 failed cloud sync does not claim account save",
+        "\u2713 1280 failed cloud sync offers recovery",
+        "\u2713 1280 failed cloud sync does not claim account save",
+        "SUITE COMPLETE: customer-journey-browser: 170 passed, 0 failed"
+      ],
+      "logSha256": "05f8557b22c3ee051b2ff17dc4b0f6c6f586ec2ac2608184c66d13f9558cb481"
+    },
+    {
+      "suite": "verification-email-send.cjs",
+      "completion": [
+        "PASS: verification send acceptance, rejection, bounded fallback, and both resend callers"
+      ],
+      "logSha256": "48e124a8fad92bb276ac846d50245fc80f056d318e19e55719106d7c602cc65b"
+    },
+    {
+      "suite": "google-signin-recovery.cjs",
+      "completion": [
+        "google-signin-recovery: 38 passed, 0 failed"
+      ],
+      "logSha256": "708e8b924c4d45d1ff32fc8bd86d1938035b36462aa35ebf8435b002b18dcae6"
+    }
+  ],
+  "finalBrowserRerun": {
+    "passed": 46,
+    "failed": 0,
+    "logSha256": "c007bc4bef7cb07967e743582c28b4cc20b1ea3f10b58f255771974a5939b053"
+  },
+  "environment": {
+    "browser": "local Chromium",
+    "redis": "isolated local Redis over authenticated loopback TCP",
+    "externalTraffic": "blocked; SDK, provider and API edges controlled"
+  },
+  "scope": [
+    "draft list/read deadlines and validation",
+    "request and auth-session isolation",
+    "edit/delete/refresh/photo continuation guards",
+    "auth transition UI clearing",
+    "light-theme readiness contrast"
+  ],
+  "limits": [
+    "No live customer account, email, inventory, paid recognition or marketplace writes",
+    "No new deadline for draft PATCH/DELETE mutations or all local photo operations",
+    "No claim of durable unsaved edits across tab closure or account changes",
+    "No live scanner exact-printing benchmark or new eBay sold-data entitlement",
+    "Existing runtime deprecation warning remains"
+  ],
+  "testEnvironmentNote": "The initial release run was interrupted after local Unix sockets were denied. The final complete run uses the existing CARDRESELL_TEST_REDIS_TCP=1 harness mode; no production store is used."
+}
