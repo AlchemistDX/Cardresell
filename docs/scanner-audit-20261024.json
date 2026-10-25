@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "manifestSha256": "69ccff299c78f6c14373c7f5160bee2acacf610d845132d30bcae63c7ba6e2c4",
+  "assets": [
+    "/js/core.f30fb35b.js",
+    "/js/binder.b6547bf7.js"
+  ],
+  "inputs": [
+    {
+      "path": "binder/real_IMG_4652_page.jpg",
+      "sha256": "f6a995fb07479432d86d79997b91d2bf74eec5e730761dea9d90d60565c89952"
+    },
+    {
+      "path": "../../public/icon-512.png",
+      "sha256": "441136ce59cea446feaf2228f2b49b13aaf92be27c13b1708b3a7a39c4415048"
+    }
+  ],
+  "scope": "Offline local artwork candidates and photo preparation only; no Ximilar recognition or printing accuracy measurement",
+  "description": "One real 3x3 Pokemon binder page (owner IMG_4652) and a non-card icon. Names labeled visually, independently of the matcher. Small convenience sample; no Magic source photos or provider responses.",
+  "summary": {
+    "positivePhotos": 9,
+    "negativeControls": 1,
+    "photoChecksPassed": 9,
+    "qualifiedArtworkCandidates": 0,
+    "qualifiedCorrectNames": 0,
+    "nearestNamesCorrect": 4,
+    "acceptedIdentities": 0,
+    "unsafePromotions": 0,
+    "scanRequests": 0,
+    "browserErrors": 0
+  },
+  "rows": [
+    {
+      "label": "real-binder-page/pocket-1",
+      "expected": {
+        "name": "Scovillain"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "sm11-60",
+        "name": "Magnezone",
+        "number": "60",
+        "set": "Unified Minds"
+      },
+      "distance": 51,
+      "gap": 5,
+      "reason": "best=51 gap=5",
+      "nameCorrect": false
+    },
+    {
+      "label": "real-binder-page/pocket-2",
+      "expected": {
+        "name": "Relicanth"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "ffe7071e-a214-44e8-a571-129f0db44f76",
+        "name": "Perennation",
+        "number": "212",
+        "set": "Tarkir: Dragonstorm"
+      },
+      "distance": 48,
+      "gap": 1,
+      "reason": "best=48 gap=1",
+      "nameCorrect": false
+    },
+    {
+      "label": "real-binder-page/pocket-3",
+      "expected": {
+        "name": "Carracosta"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "sv7-38",
+        "name": "Carracosta",
+        "number": "38",
+        "set": "Stellar Crown"
+      },
+      "distance": 47,
+      "gap": 1,
+      "reason": "best=47 gap=1",
+      "nameCorrect": true
+    },
+    {
+      "label": "real-binder-page/pocket-4",
+      "expected": {
+        "name": "Heliolisk"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "sv3pt5-74",
+        "name": "Geodude",
+        "number": "74",
+        "set": "151"
+      },
+      "distance": 45,
+      "gap": 4,
+      "reason": "best=45 gap=4",
+      "nameCorrect": false
+    },
+    {
+      "label": "real-binder-page/pocket-5",
+      "expected": {
+        "name": "Plusle"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "sv7-65",
+        "name": "Alcremie",
+        "number": "65",
+        "set": "Stellar Crown"
+      },
+      "distance": 47,
+      "gap": 3,
+      "reason": "best=47 gap=3",
+      "nameCorrect": false
+    },
+    {
+      "label": "real-binder-page/pocket-6",
+      "expected": {
+        "name": "Dubwool"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "swsh12pt5-122",
+        "name": "Dubwool",
+        "number": "122",
+        "set": "Crown Zenith"
+      },
+      "distance": 25,
+      "gap": 16,
+      "reason": "best=25 gap=16",
+      "nameCorrect": true
+    },
+    {
+      "label": "real-binder-page/pocket-7",
+      "expected": {
+        "name": "Dwebble"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "sv4-6",
+        "name": "Dwebble",
+        "number": "6",
+        "set": "Paradox Rift"
+      },
+      "distance": 49,
+      "gap": 1,
+      "reason": "best=49 gap=1",
+      "nameCorrect": true
+    },
+    {
+      "label": "real-binder-page/pocket-8",
+      "expected": {
+        "name": "Venipede"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "sv6-115",
+        "name": "Venipede",
+        "number": "115",
+        "set": "Twilight Masquerade"
+      },
+      "distance": 30,
+      "gap": 15,
+      "reason": "best=30 gap=15",
+      "nameCorrect": true
+    },
+    {
+      "label": "real-binder-page/pocket-9",
+      "expected": {
+        "name": "Froslass"
+      },
+      "width": 443,
+      "height": 605,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "7bf81a8b-52ad-49f5-a3d4-22613cad3a3d",
+        "name": "Ragged Short Spear",
+        "number": "108",
+        "set": "The Hobbit"
+      },
+      "distance": 43,
+      "gap": 1,
+      "reason": "best=43 gap=1",
+      "nameCorrect": false
+    },
+    {
+      "label": "non-card-icon",
+      "expected": {
+        "negative": true
+      },
+      "width": 512,
+      "height": 512,
+      "photoCheck": true,
+      "photoReasons": [],
+      "artworkCandidate": false,
+      "acceptedIdentity": false,
+      "candidate": {
+        "id": "6c6aca69-1624-420f-b83e-290a2c38291e",
+        "name": "Plague of Vermin",
+        "number": "7",
+        "set": "Teenage Mutant Ninja Turtles Source Material"
+      },
+      "distance": 56,
+      "gap": 0,
+      "reason": "best=56 gap=0",
+      "nameCorrect": null,
+      "unsafePromotion": false
+    }
+  ],
+  "errors": [],
+  "regression": {
+    "suites": 34,
+    "checks": 2865,
+    "failures": 0,
+    "counts": {
+      "asset-fingerprints": 260,
+      "test-registry": 12,
+      "scanner-catalog-deadlines": 16,
+      "binder-scan-browser": 184,
+      "binder-interaction-browser": 131,
+      "binder-autoselect-browser": 53,
+      "binder-multipage-browser": 57,
+      "bulk-photo-preflight": 26,
+      "bulk-text-rescue": 104,
+      "bulk-text-rescue-browser": 43,
+      "bulk-match-review-browser": 398,
+      "bulk-recovery-browser": 135,
+      "bulk-workflow-browser": 188,
+      "bulk-variant-choice": 73,
+      "rapid-scan-browser": 88,
+      "scan-finish-browser": 223,
+      "scan-input-reset": 1,
+      "scan-request-recovery": 1,
+      "scanner-fastpath": 16,
+      "scan-hash-distance": 9,
+      "scan-rarity-grounding": 19,
+      "bulk-scan-misfire": 21,
+      "id-confirmation-atomic": 366,
+      "membership-scan-intent": 70,
+      "id-credit-toast": 6,
+      "photo-decoder-fallback": 18,
+      "photo-capture-lifecycle": 37,
+      "ximilar-contract": 31,
+      "provider-timer-cleanup": 38,
+      "scanner-audit-browser": 38,
+      "test-scan": 40,
+      "ximilar-sport-retry": 54,
+      "provider-deadlines": 9,
+      "bulk-lookup-browser": 100
+    }
+  }
+}

@@ -82,19 +82,37 @@ async function identify(imageBase64, apiToken, kind, observe) {
 
   const rec = json?.records?.[0];
   if (!rec) return { ok: false, reason: 'no_records' };
+  // HTTP 200 does not guarantee that this individual image was processed.
+  if (rec._status && (!Number.isInteger(rec._status.code) || rec._status.code < 200 || rec._status.code >= 300)) {
+    return { ok: false, reason: 'record_error' };
+  }
 
-  // If Ximilar didn't detect any card object at all, fall through
-  const obj = rec._objects?.[0];
+  if (!Array.isArray(rec._objects)) return { ok: false, reason: 'invalid_response' };
+  // Detection can include a Slab Label before the Card. Never identify the
+  // label as the card. Older responses omitted the name on a sole object.
+  const cards = rec._objects.filter(o => o?.name === 'Card' ||
+    (rec._objects.length === 1 && o && !o.name && o._identification));
+  const identifiedCards = cards.filter(o => o._identification?.best_match?.name);
+  if (identifiedCards.length > 1) return { ok: false, reason: 'multiple_cards' };
+  const obj = identifiedCards[0] || cards[0];
   if (!obj) return { ok: false, reason: 'no_card_detected' };
 
   const ident = obj._identification || {};
   const best  = ident.best_match;
   if (!best?.name) return { ok: false, reason: 'no_match' };
+  if (typeof best.name !== 'string' || !best.name.trim()) return { ok: false, reason: 'invalid_response' };
 
   const alternatives = Array.isArray(ident.alternatives) ? ident.alternatives : [];
   const distances    = Array.isArray(ident.distances)    ? ident.distances    : [];
-  const dBest   = distances[0] ?? 1.0;
-  const dSecond = distances[1] ?? 1.0;
+  // Scores are ordered numeric distances, not probabilities. A corrupt or
+  // incomplete score must never become a confident match through JS coercion.
+  if (distances.length < alternatives.length + 1 ||
+      distances.some((d, i) => typeof d !== 'number' || !Number.isFinite(d) || d < 0 || (i && d < distances[i - 1])) ||
+      alternatives.some(a => !a || typeof a.name !== 'string' || !a.name.trim())) {
+    return { ok: false, reason: 'invalid_response' };
+  }
+  const dBest   = distances[0];
+  const dSecond = distances[1] ?? Infinity;
   observe?.({ matchDistance: distances[0], ...(distances.length > 1 ? { matchGap: distances[1] - distances[0] } : {}) });
 
   // Extract card-tag signals for cardInfo enrichment
@@ -105,26 +123,30 @@ async function identify(imageBase64, apiToken, kind, observe) {
   const alphabet = tags['Alphabet']?.[0]?.name || 'latin'; // latin | japanese | korean | ...
   const gradedTag = tags['Graded']?.[0]?.name === 'yes';
 
-  const cardType = mapSubcategoryToCardType(subCat, kind);
-  const isJapanese = alphabet === 'japanese' || subCat === 'Pokemon Japanese';
+  // Prefer the matched catalog entry's game to a visual object tag. Missing
+  // or unsupported games must not inherit Pokemon pricing and catalog IDs.
+  const typeFor = m => mapSubcategoryToCardType(m.subcategory || best.subcategory || subCat, kind);
+  if (!typeFor(best)) return { ok: false, reason: 'unsupported_card_type' };
+  const isJapanese = alphabet === 'japanese' || /japanese/i.test(best.subcategory || subCat);
 
   // Build cardInfo for the confident-single case
-  const buildCardInfo = (m) => ({
+  const buildCardInfo = (m, distance) => ({
     card_name:   m.name || '',
     card_number: m.card_number || '',
-    set_name:    m.set || '',
+    set_name:    m.set || m.set_name || '',
     set_code:    m.set_code || '',
     hp:          '', // Ximilar doesn't return HP directly
-    card_type:   cardType,
+    card_type:   typeFor(m),
     is_japanese: isJapanese,
     jp_name:     isJapanese && m.japanese_name ? m.japanese_name : '',
     rarity:      m.rarity || '',
-    sport:       kind === 'sport' ? (m.sport || '') : '',
+    sport:       kind === 'sport' ? (m.sport || m.subcategory || '') : '',
+    brand:       kind === 'sport' ? (m.company || '') : '',
     year:        m.year ? String(m.year) : '',
     _grounded:      true,
     _grounded_id:   deriveGroundedId(m),
     _ximilar:       true,
-    _ximilar_dist:  dBest,
+    _ximilar_dist:  distance,
     _ximilar_links: m.links || {},
     _ximilar_side:  sideTag,
     _ximilar_foil:  foilTag,
@@ -132,15 +154,15 @@ async function identify(imageBase64, apiToken, kind, observe) {
     // For downstream image loading — we have TCGPlayer / cardmarket links.
     // Keep the raw best_match around for the client if it wants them.
     _ximilar_full_name: m.full_name || '',
-    image_quality: 'ok',
-    confidence:    dBest < DIST_HIGH_CONF ? 'high' : 'medium',
+    image_quality: 'unknown',
+    confidence:    distance < DIST_HIGH_CONF ? 'high' : 'medium',
   });
 
   // HIGH CONFIDENCE: top match well below threshold AND second match is meaningfully worse
   if (dBest < DIST_HIGH_CONF && (dSecond - dBest) >= DIST_GAP_FOR_SINGLE) {
     return {
       ok: true,
-      cardInfo: buildCardInfo(best),
+      cardInfo: buildCardInfo(best, dBest),
     };
   }
 
@@ -148,25 +170,29 @@ async function identify(imageBase64, apiToken, kind, observe) {
   if (dBest < DIST_MEDIUM_CONF) {
     // Build 2-3 candidates: top + close alternatives (within 0.2 of top)
     const closeAlts = alternatives
-      .map((a, i) => ({ ...a, dist: distances[i + 1] ?? 1.0 }))
+      .map((a, i) => ({ ...a, dist: distances[i + 1] }))
       .filter(a => a.dist < Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25))
       .slice(0, 2);
 
     if (closeAlts.length === 0) {
       // Only one plausible answer — return it as single (medium confidence)
-      return { ok: true, cardInfo: buildCardInfo(best) };
+      // A close second distance without its candidate cannot establish a
+      // unique identity. Ask for a retry instead of hiding the ambiguity.
+      if (dSecond < Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25)) return { ok: false, reason: 'invalid_response' };
+      return { ok: true, cardInfo: buildCardInfo(best, dBest) };
     }
 
+    if (closeAlts.some(a => !typeFor(a))) return { ok: false, reason: 'unsupported_card_type' };
     const candidates = [
-      { ...buildCardInfo(best),        confidence_pct: Math.round((1 - dBest)   * 100) },
-      ...closeAlts.map(a => ({ ...buildCardInfo(a), confidence_pct: Math.round((1 - a.dist) * 100) })),
+      buildCardInfo(best, dBest),
+      ...closeAlts.map(a => buildCardInfo(a, a.dist)),
     ];
 
     return {
       ok: true,
       needsPicker: true,
       candidates,
-      cardInfo: buildCardInfo(best), // top guess for UI convenience
+      cardInfo: buildCardInfo(best, dBest), // top guess for UI convenience
     };
   }
 
@@ -177,13 +203,13 @@ async function identify(imageBase64, apiToken, kind, observe) {
 
 function mapSubcategoryToCardType(subCat, kind) {
   if (kind === 'sport') return 'sports';
-  const s = (subCat || '').toLowerCase();
+  const s = String(subCat || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (s.includes('pokemon'))     return 'pokemon';
-  if (s.includes('magic'))       return 'mtg';
+  if (s.includes('magic') || s === 'mtg') return 'mtg';
   if (s.includes('yu-gi'))       return 'yugioh';
   if (s.includes('lorcana'))     return 'lorcana';
   if (s.includes('one piece'))   return 'onepiece';
-  return 'pokemon'; // TCG default — client uses this to pick pricing source
+  return null;
 }
 
 /**

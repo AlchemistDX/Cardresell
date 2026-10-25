@@ -1,0 +1,11 @@
+{
+  "description": "One real 3x3 Pokemon binder page (owner IMG_4652) and a non-card icon. Names labeled visually, independently of the matcher. Small convenience sample; no Magic source photos or provider responses.",
+  "inputs": [
+    {"label":"real-binder-page","path":"binder/real_IMG_4652_page.jpg","layout":"3,3","expected":[
+      {"name":"Scovillain"},{"name":"Relicanth"},{"name":"Carracosta"},
+      {"name":"Heliolisk"},{"name":"Plusle"},{"name":"Dubwool"},
+      {"name":"Dwebble"},{"name":"Venipede"},{"name":"Froslass"}
+    ]},
+    {"label":"non-card-icon","path":"../../public/icon-512.png","expected":{"negative":true}}
+  ]
+}

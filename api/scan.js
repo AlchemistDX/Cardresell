@@ -57,9 +57,9 @@ export async function groundYugiohCardInfo(cardInfo) {
         `https://db.ygoprodeck.com/api/v7/cardinfo.php?id=${encodeURIComponent(rawNum)}`,
         { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }
       ).catch(() => null);
+      const j = (r && r.ok) ? await r.json().catch(() => null) : null;
       clearTimeout(tt);
-      if (r && r.ok) {
-        const j = await r.json().catch(() => null);
+      if (j) {
         const card = j?.data?.[0];
         if (card && card.name && String(card.id) === String(Number(rawNum))) {
           const printing = ygoPrinting(cardInfo, card.card_sets) || {};
@@ -90,9 +90,9 @@ export async function groundYugiohCardInfo(cardInfo) {
         `https://db.ygoprodeck.com/api/v7/cardsetsinfo.php?setcode=${encodeURIComponent(cardInfo.set_code)}`,
         { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }
       ).catch(() => null);
+      const j = (r && r.ok) ? await r.json().catch(() => null) : null;
       clearTimeout(tt);
-      if (r && r.ok) {
-        const j = await r.json().catch(() => null);
+      if (j) {
         if (j && j.name && j.set_name && String(j.set_code || '').toUpperCase() === String(cardInfo.set_code).toUpperCase() && (!cardInfo.card_name || catalogText(j.name) === catalogText(cardInfo.card_name))) {
           ygoHit = {
             source: 'set_code',
@@ -196,14 +196,14 @@ export async function groundMagicCardInfo(cardInfo) {
   const collNum   = rawNum; // Preserve suffixes, stars and separators; never manufacture a number.
 
   const fetchScry = async (url) => {
+    const ac = new AbortController();
+    const tt = setTimeout(() => ac.abort(), 4000);
     try {
-      const ac = new AbortController();
-      const tt = setTimeout(() => ac.abort(), 4000);
-      const r  = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
-      clearTimeout(tt);
-      if (!r || !r.ok) return null;
-      return await r.json().catch(() => null);
+      const r = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } });
+      if (!r.ok) return null;
+      return await r.json();
     } catch (_) { return null; }
+    finally { clearTimeout(tt); } // The deadline covers the response body too.
   };
 
   let hit = null;
@@ -286,14 +286,14 @@ export async function groundLorcanaCardInfo(cardInfo) {
   const rawSet = String(cardInfo.set_code || cardInfo.set_name || '').trim();
 
   const fetchLor = async (url) => {
+    const ac = new AbortController();
+    const tt = setTimeout(() => ac.abort(), 4000);
     try {
-      const ac = new AbortController();
-      const tt = setTimeout(() => ac.abort(), 4000);
-      const r  = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } }).catch(() => null);
-      clearTimeout(tt);
-      if (!r || !r.ok) return null;
-      return await r.json().catch(() => null);
+      const r = await fetch(url, { signal: ac.signal, headers: { 'user-agent': 'CardResell/1.0' } });
+      if (!r.ok) return null;
+      return await r.json();
     } catch (_) { return null; }
+    finally { clearTimeout(tt); } // The deadline covers the response body too.
   };
 
   let hits = null;
@@ -1212,7 +1212,7 @@ export default async function handler(req, res) {
   //
   // Grade mode is unchanged — Deep Grade still uses Ximilar CV grader,
   // Quick Grade still uses GPT for centering/edges/surface.
-  const XIMILAR_MISS_REASONS = new Set(['no_match', 'no_card_detected', 'low_confidence', 'no_records']);
+  const XIMILAR_MISS_REASONS = new Set(['no_match', 'no_card_detected', 'low_confidence', 'no_records', 'unsupported_card_type', 'multiple_cards']);
   if (isIdentifyMode && imageBase64) {
     // Detect "maybe sports" heuristically: user hasn't told us, and Ximilar's
     // TCG endpoint would return no_match for real sports cards. Try TCG first;
@@ -1255,7 +1255,11 @@ export default async function handler(req, res) {
         confidence: 'low',
         image_quality: 'unknown',
         glare_regions: [],
-        retake_hint: 'We couldn\u2019t identify this card. It may be a custom/proxy card, out-of-focus, or a very new release. Try a sharper photo with the full card visible.',
+        retake_hint: xim.reason === 'multiple_cards'
+          ? 'More than one card was found. Adjust the crop so it contains one complete card.'
+          : xim.reason === 'unsupported_card_type'
+            ? 'We couldn\u2019t confirm a supported card game. Search by name to review the card manually.'
+            : 'We couldn\u2019t identify this card. Try a sharper photo with the full card visible, or search by name to review it manually.',
         card_name: '',
         card_number: '',
         set_name: '',
@@ -1292,6 +1296,7 @@ export default async function handler(req, res) {
       // *into* those from the number alone — but we CAN detect that a card_number
       // matching YGO/OP format means the Subcategory tag is wrong.
       const reconcileTypeFromNumber = (info) => {
+        if (info.card_type === 'sports') return info.card_type;
         const num = String(info.card_number || '').trim().toUpperCase();
         if (!num) return info.card_type;
         // Strong YGO signal: <SET>-<REGION><###> where region is a real 2-letter locale
@@ -1392,9 +1397,8 @@ export default async function handler(req, res) {
           card_name: c.card_name, card_number: c.card_number, set_name: c.set_name,
           set_code: c.set_code || '', hp: c.hp || '', card_type: c.card_type || 'pokemon',
           is_japanese: c.is_japanese === true, rarity: c.rarity || '',
-          sport: c.sport || '', year: c.year || '',
-          confidence_pct: c.confidence_pct || 50,
-          grounded_id: c._grounded_id || null,
+          sport: c.sport || '', year: c.year || '', brand: c.brand || '',
+          grounded_id: c.grounded_id || c._grounded_id || null,
         }));
         const confirmation = await offerIdConfirmation({ ...idContext, cardType: cardInfo.card_type }, cleanCandidates, freeRetry);
         return res.status(200).json({
@@ -1407,7 +1411,7 @@ export default async function handler(req, res) {
           grounded: true, grounded_id: cardInfo.grounded_id || cardInfo._grounded_id,
           hp: cardInfo.hp, card_type: cardInfo.card_type,
           is_japanese: cardInfo.is_japanese, jp_name: cardInfo.jp_name,
-          rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year,
+          rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year, brand: cardInfo.brand || '',
           image_url: cardInfo.image_url || null,
           image_small: cardInfo.image_small || null,
           source: 'ximilar',
@@ -1443,7 +1447,7 @@ export default async function handler(req, res) {
         grounded: true, grounded_id: cardInfo.grounded_id || cardInfo._grounded_id,
         hp: cardInfo.hp, card_type: cardInfo.card_type,
         is_japanese: cardInfo.is_japanese, jp_name: cardInfo.jp_name,
-        rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year,
+        rarity: cardInfo.rarity, sport: cardInfo.sport, year: cardInfo.year, brand: cardInfo.brand || '',
         image_url: cardInfo.image_url || null,
         image_small: cardInfo.image_small || null,
         source: 'ximilar',
