@@ -1,5 +1,12 @@
 // Only fixed messages and numeric provider codes may leave this boundary.
 // Provider descriptions can contain account data or request parameters.
+export function usableInventoryLocation(location) {
+  const address=location?.location?.address;
+  const present=v=>typeof v==='string'&&v.trim().length>0;
+  return location?.merchantLocationStatus==='ENABLED'&&present(location.merchantLocationKey)&&present(address?.country)&&
+    (present(address.postalCode)||(present(address.city)&&present(address.stateOrProvince)));
+}
+
 export function sellerSetupIssue(check,error={}) {
   const labels={registration:'seller registration',fulfillment:'shipping policies',payment:'payment policies',return:'return policies',location:'inventory locations'};
   if(!Object.hasOwn(labels,check))throw Error('Unknown seller setup check');

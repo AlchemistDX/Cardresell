@@ -3,6 +3,7 @@
 import {hash} from './_ebaySeller.js';
 import {validateDraftForSlot} from './_draftStore.js';
 import {canonicalGrade,canonicalGrader} from './_cardIdentity.js';
+import {usableInventoryLocation} from './_ebaySetup.js';
 
 export const REVIEW_TTL = 30 * 86400;
 export const REVIEW_FRESH_MS = 10 * 60 * 1000;
@@ -109,13 +110,12 @@ export function buildSubmissionReview({read,owner,environment='production',conne
       }
     }
     for(const type of ['fulfillment','payment','return']) {
-      const field=type+'PolicyId',list=reference[type+'Policies']||[],matches=list.filter(x=>String(x[field])===chosen[field]&&x.marketplaceId==='EBAY_US');
+      const field=type+'PolicyId',list=reference[type+'Policies']||[],matches=list.filter(x=>typeof x?.[field]==='string'&&x[field]===chosen[field]&&x.marketplaceId==='EBAY_US');
       if(!chosen[field]||matches.length!==1)add('POLICY_'+type.toUpperCase(),'Choose a current US '+type+' policy from your eBay account.');
       else if(type==='fulfillment'&&matches[0].shippingOptions?.some(x=>x.costType==='CALCULATED'))add('PACKAGE_REQUIRED','Calculated shipping needs package weight and dimensions, which this preparation flow does not support yet.');
     }
-    const location=(reference.locations||[]).filter(x=>x.merchantLocationKey===chosen.merchantLocationKey&&x.merchantLocationStatus==='ENABLED');
-    const address=location[0]?.location?.address;
-    if(!chosen.merchantLocationKey||location.length!==1||!address?.country||!(address.postalCode||(address.city&&address.stateOrProvince)))add('LOCATION','Choose an enabled inventory location with a complete address.');
+    const location=(reference.locations||[]).filter(x=>x.merchantLocationKey===chosen.merchantLocationKey&&usableInventoryLocation(x));
+    if(!chosen.merchantLocationKey||location.length!==1)add('LOCATION','Choose an enabled inventory location with a complete address.');
   }
   const payloadReady=!issues.some(i=>i.severity==='error'),sku=copySku(environment,owner,d.instanceId);
   // eBay interprets descriptions as HTML. Card names and other saved strings

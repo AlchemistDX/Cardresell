@@ -31,7 +31,7 @@
 `;document.head.append(s);
     }
     const dialog=el('dialog');dialog.id='ebayConnectDialog';dialog.className='ebay-connect';dialog.setAttribute('aria-labelledby','ebayConnectTitle');
-    const state={dialog,owner:owner(),closed:false};active=state;
+    const state={dialog,owner:owner(),closed:false,busy:false,returnFocus:document.activeElement};active=state;
     const header=el('header'),title=el('h2','eBay seller connection');title.id='ebayConnectTitle';header.append(title,button('Close',()=>dialog.close()));dialog.append(header);
     dialog.append(el('p','Check your eBay seller registration, policies, and inventory locations. This connection is read-only. Listing publication and automatic inventory sync are not enabled.'));
     const status=el('p','Checking connection…');status.setAttribute('role','status');dialog.append(status);
@@ -44,7 +44,7 @@
     const actions=el('div');actions.className='ebay-connect-actions';dialog.append(actions);
     const current=()=>active===state&&!state.closed&&owner()===state.owner;
     const closeOnChange=setInterval(()=>{if(!current()){dialog.close();mount(true);}},300);
-    dialog.addEventListener('close',()=>{state.closed=true;clearInterval(closeOnChange);if(active===state)active=null;dialog.remove();document.getElementById('ebayConnectionBtn')?.focus();},{once:true});
+    dialog.addEventListener('close',()=>{state.closed=true;clearInterval(closeOnChange);if(active===state)active=null;dialog.remove();(state.returnFocus?.isConnected?state.returnFocus:document.getElementById('ebayConnectionBtn'))?.focus();},{once:true});
     document.body.append(dialog);dialog.showModal();
     const notes={denied:'You declined eBay authorization. Your existing connection was not changed.',expired:'That authorization expired. Start again from this dialog.',error:'eBay authorization could not be completed. Try connecting again.',unavailable:'Direct eBay connection is not available yet.'};
     const issues={state:'CardResell could not check this connection attempt. Please try again.',token:'eBay returned to CardResell, but we could not finish its approval. Start a fresh connection from this dialog.',application:'eBay could not verify CardResell’s application settings. Please share the connection reference with CardResell support.',identity:'eBay returned to CardResell, but we could not verify your seller account. Please share the connection reference with CardResell support.',storage:'CardResell could not save this eBay connection. Please try again in a moment.'};
@@ -52,9 +52,9 @@
     if(outcome==='error'&&/^[a-f\d]{12}$/.test(diagnostic.reference||''))reference.textContent='Connection reference: '+diagnostic.reference;
     const clearOutcome=()=>{outcomeNote.textContent='';reference.textContent='';};
     async function run(work) {
-      if(!current())return;actions.querySelectorAll('button').forEach(b=>b.disabled=true);error.textContent='';
+      if(!current()||state.busy)return;state.busy=true;actions.querySelectorAll('button').forEach(b=>b.disabled=true);error.textContent='';
       try{await work();}catch(e){if(current()){error.textContent=e.message||'Could not complete this action. Try again.';if(!actions.children.length)actions.append(button('Retry',()=>run(refresh)));}}
-      finally{if(current())actions.querySelectorAll('button').forEach(b=>b.disabled=false);}
+      finally{state.busy=false;if(current())actions.querySelectorAll('button').forEach(b=>b.disabled=false);}
     }
     async function refresh() {
       if(!current())return;
@@ -77,14 +77,24 @@
           if(!['https://auth.ebay.com','https://auth.sandbox.ebay.com'].includes(url.origin)||url.pathname!=='/oauth2/authorize')throw Error('The eBay authorization link could not be confirmed.');
           clearOutcome();
           window.location.assign(url.href);
-        }));connect.dataset.primary='';actions.append(connect);
+        }));if(!data.connected||data.reconnectRequired)connect.dataset.primary='';actions.append(connect);
       }
       if(data.connected)actions.append(button('Check seller setup',()=>run(async()=>{
-        status.textContent='Checking seller setup for eBay US…';const report=await request('readiness','POST',state.owner);if(!current())return;
+        details.replaceChildren();status.textContent='Checking seller setup for eBay US…';let report;
+        try{report=await request('readiness','POST',state.owner);}catch(e){if(current())status.textContent='Seller setup could not be refreshed. Check again to see current settings.';throw e;}if(!current())return;
         details.replaceChildren();const list=el('dl');
-        const rows=[['Seller registration',report.sellerRegistered===true?'Complete':report.sellerRegistered===false?'Incomplete':'Could not check'],['Shipping policies',report.fulfillmentPolicies],['Payment policies',report.paymentPolicies],['Return policies',report.returnPolicies],['Enabled inventory locations',report.inventoryLocations]];
+        const locationCount=Object.hasOwn(report,'usableInventoryLocations')?report.usableInventoryLocations:report.inventoryLocations;
+        const rows=[['Seller registration',report.sellerRegistered===true?'Complete':report.sellerRegistered===false?'Incomplete':'Could not check'],['Shipping policies',report.fulfillmentPolicies],['Payment policies',report.paymentPolicies],['Return policies',report.returnPolicies],[Object.hasOwn(report,'usableInventoryLocations')?'Enabled locations with an address':'Enabled inventory locations',locationCount]];
         rows.forEach(([label,value])=>list.append(el('dt',label),el('dd',value===null?'Could not check':String(value))));details.append(list);
         status.textContent=report.reconnectRequired?'eBay authorization expired or was revoked. Use Reconnect eBay to authorize again.':report.partial?'Your eBay account is connected. Some seller settings could not be checked; see the details below.':'Seller setup checked for eBay US.';
+        const next=el('ol');next.dataset.sellerNextSteps='';
+        if(report.sellerRegistered!==true)next.append(el('li',report.sellerRegistered===false?'Complete seller registration in eBay, then check again.':'Seller registration could not be verified. Retry this check.'));
+        const missing=['fulfillment','payment','return'].filter(type=>report[type+'Policies']===0).map(type=>type==='fulfillment'?'shipping':type);
+        if(missing.length)next.append(el('li','Create US '+missing.join(', ')+' policies in eBay Business Policies, then return and check again.'));
+        if(locationCount===0)next.append(el('li','An enabled inventory location needs a dispatch address: country and postal code, or country, city and state. CardResell’s current read-only connection cannot create or change this location.'));
+        if(report.partial)next.append(el('li','Resolve the unavailable checks below, then check seller setup again. Unavailable settings have not been confirmed.'));
+        if(!next.children.length)next.append(el('li','Basic account settings are present. Open an eBay draft to check category requirements, choose supported policies, and review its photos and price.'));
+        details.append(el('h3','Next steps'),next);
         for(const issue of report.issues||[]) {
           const codes=[Number.isInteger(issue.providerStatus)?'HTTP '+issue.providerStatus:'',Number.isInteger(issue.providerErrorId)?'eBay code '+issue.providerErrorId:''].filter(Boolean);
           details.append(el('p',issue.message+(codes.length?' ('+codes.join(' · ')+')':'')));
@@ -92,9 +102,11 @@
         if(['fulfillmentPolicies','paymentPolicies','returnPolicies'].some(key=>report[key]===null||report[key]===0)) {
           const help=el('p','Review your shipping, payment and return policies in eBay. Business Policies enrollment may be required. '),link=el('a','Open eBay Business Policies');link.href='https://www.ebay.com/help/selling/business-policies/business-policies?id=4212';link.target='_blank';link.rel='noopener noreferrer';help.append(link);details.append(help);
         }
-        if(report.inventoryLocations===0)details.append(el('p','No enabled inventory location was found. Direct listing preparation needs an eBay inventory location with a complete dispatch address.'));
+        if(locationCount===0){const help=el('p'),link=el('a','Inventory location setup guidance');link.href='https://developer.ebay.com/api-docs/sell/static/inventory/managing-inventory-locations.html';link.target='_blank';link.rel='noopener noreferrer';help.append(link);details.append(help);}
         details.append(el('p','These checks describe account setup only. Each draft still needs reviewed card details, photos, price, and selling terms before it can be listed.'));
       })),button('Disconnect eBay',disconnect));
+      if(data.connected&&!data.reconnectRequired&&!data.pending){const check=Array.from(actions.querySelectorAll('button')).find(b=>b.textContent==='Check seller setup');if(check){check.dataset.primary='';actions.prepend(check);}}
+      if(data.connected&&typeof window.switchView==='function'&&!state.returnFocus?.closest?.('#ebayListingReview'))actions.append(button('Open listing drafts',()=>{if(current()&&!state.busy){dialog.close();window.switchView('drafts');}}));
     }
     function disconnect() {
       details.replaceChildren(el('p','Remove your saved eBay connection? This removes authorization tokens from CardResell. Existing eBay listings stay on eBay.'));
@@ -103,7 +115,10 @@
     if(!state.owner) {
       status.textContent='Sign in to the CardResell account that started this connection.';
       actions.append(button('Sign in',()=>{dialog.close();window.triggerGoogleSignIn?.('collection');}));
-    } else await run(refresh);
+    } else {
+      await run(refresh);
+      if(diagnostic.checkSetup&&current())Array.from(actions.querySelectorAll('button')).find(b=>b.textContent==='Check seller setup')?.click();
+    }
   }
   window.CardResellEbayConnect={mount,open};
   mount();
