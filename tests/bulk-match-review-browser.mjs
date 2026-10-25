@@ -17,7 +17,7 @@ const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args
 async function until(fn) { for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error('request did not reach test boundary') }
 try {
  for(const billing of ['legacy','membership']) {
-  for(const mode of ['cancel','retake','success','lost-after-commit','expired','no-credits','account','batch','scan-account','token-account','token-timeout','invalid-offer','malformed','wrong-price','late-price','magic']) {
+  for(const mode of ['cancel','retake','success','lost-after-commit','lost-auth','expired','no-credits','account','batch','scan-account','token-account','token-timeout','invalid-offer','malformed','wrong-price','late-price','magic']) {
    const prefix=billing+'/'+mode;
    const h=billingHarness({bucket:'free',balance:4});
    if(billing==='membership') {
@@ -36,7 +36,7 @@ try {
    }
    const offered=(await h.scan(stub)).payload, initial=await balance();
    const ctx=await browser.newContext({viewport:mode==='magic'?{width:844,height:390}:{width:390,height:844},serviceWorkers:'block'});
-   let calls=[],writes=[],hold,priceHold,scanHold,drop=mode==='lost-after-commit',malformed=mode==='malformed',priceRequests=0,scanCalls=0;
+   let calls=[],writes=[],hold,priceHold,scanHold,drop=mode.startsWith('lost-'),malformed=mode==='malformed',priceRequests=0,scanCalls=0;
    await ctx.route('**/*',async route=>{
     const req=route.request(),u=new URL(req.url());
     const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
@@ -51,6 +51,7 @@ try {
     if(u.pathname==='/api/scan-debit-id') {
      calls.push({body:req.postDataJSON(),raw:req.postData()});
      await new Promise(r=>{hold=r});
+     if(mode==='lost-auth'&&calls.length===2)return json({ok:false,error:'Invalid session.'},401);
      const r=await h.pick(req.postDataJSON());
      if(drop){drop=false;return route.abort('failed')}
      if(malformed){malformed=false;return json({...r.payload,pickedCard:{...r.payload.pickedCard,set_name:'wrong'}})}
@@ -180,7 +181,7 @@ try {
      if(mode==='account')t.check(prefix+': another account can start its own clean batch',await page.evaluate(()=>{openBulkScan();return _bulkResults.length===0}));
      continue;
     }
-    if(['lost-after-commit','malformed'].includes(mode)) {
+    if(['lost-after-commit','lost-auth','malformed'].includes(mode)) {
      await page.getByRole('button',{name:'Retry same confirmation',exact:true}).waitFor();
      t.check(prefix+': committed response failure retains unaccepted UI',await balance()===initial-1&&await page.evaluate(()=>!reviewRow.success));
      t.check(prefix+': uncertain outcome cannot select a different candidate',await page.getByRole('button',{name:'Back to matches',exact:true}).count()===0);
@@ -189,6 +190,12 @@ try {
      await page.getByRole('button',{name:'Check confirmation',exact:true}).click();
      await page.getByRole('button',{name:'Retry same confirmation',exact:true}).click();await until(()=>hold);hold();hold=null;
      t.check(prefix+': retry body is byte-for-byte identical',calls[0].raw===calls[1].raw);
+     if(mode==='lost-auth') {
+      await page.getByRole('button',{name:'Retry same confirmation',exact:true}).waitFor();
+      t.check(prefix+': login failure retains original uncertain choice',await page.getByRole('button',{name:'Back to matches',exact:true}).count()===0);
+      await page.getByRole('button',{name:'Retry same confirmation',exact:true}).click();await until(()=>hold);hold();hold=null;
+      t.check(prefix+': renewed session replays identical receipt',calls[0].raw===calls[2].raw);
+     }
     }
     if(['expired','no-credits'].includes(mode)) {
      if(mode==='expired')await page.getByRole('button',{name:'Scan photo again · up to 1 credit'}).waitFor();
