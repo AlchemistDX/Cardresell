@@ -288,7 +288,7 @@ await page.waitForFunction(
    real token check is covered by the endpoint suite; here the point is that
    the client SENDS the header it claims to. */
 await page.evaluate(() => {
-  window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = { getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
+  window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = { uid:'photo-owner', getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
 });
 
 const DRAFT_ID = 'drf_2791e2eb72fc4323bf81c0119652577e';
@@ -606,12 +606,10 @@ await T.section('a half-configured host reads as a deployment fault, not as "no 
 
 await T.section('a signed-out seller is told that, not shown an empty column silently', async () => {
   mode = 'ok';
-  /* Signing out means clearing the CACHED token too. `_crIdToken` stores the
-     last good token on `window._googleIdToken` and returns it when no user
-     object is present, so nulling only the user objects leaves a signed-in
-     caller -- the product is right about that, the earlier fixture was not. */
+  // Signing out clears the active account and SDK handle. Keep the old cache
+  // here to prove that a stale bearer cannot authorize photo export.
   await page.evaluate(() => {
-    window._fbCurrentUser = null; window.googleUser = null; window._googleIdToken = '';
+    window._fbCurrentUser = null; window.googleUser = null;
   });
   const report = await runExport();
   T.check('the reason is SIGNED_OUT', report.reason === 'SIGNED_OUT', JSON.stringify(report));
@@ -620,7 +618,7 @@ await T.section('a signed-out seller is told that, not shown an empty column sil
   const line = owed.find((o) => /photo/i.test(o)) || '';
   T.check('the disclosure says the seller is signed out', /signed out/i.test(line), line);
   await page.evaluate(() => {
-    window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = { getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
+    window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = { uid:'photo-owner', getIdToken: async () => 'test-id-token-' + 'x'.repeat(30) };
     window._googleIdToken = '';
   });
 });

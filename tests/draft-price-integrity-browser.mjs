@@ -144,6 +144,9 @@ try {
     const gateAfterAccountChange=await page.evaluate(async()=>{
       window.googleUser.getIdToken=()=>new Promise(r=>window.releaseGateToken=r);
       const request=applySellGate(selectedCard);
+      // Refresh begins on the next microtask. Switch only after the old
+      // session's SDK request is actually pending.
+      await Promise.resolve();
       window.googleUser={uid:'third-local-account'};
       window.releaseGateToken('different-local-token');
       await request;

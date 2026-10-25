@@ -64,6 +64,8 @@ function makeSandbox() {
   }
   const toasts = [];
   const win = { _googleIdToken: 'tok-1', _ovAutoFilled: false };
+  win.googleUser = { uid: 'sell-gate-fixture' };
+  win._fbCurrentUser = { uid: 'sell-gate-fixture', getIdToken: async () => win._googleIdToken };
   const sandbox = {
     window: win,
     document: {
@@ -80,6 +82,7 @@ function makeSandbox() {
     selectedCard: null,
     printSelect: {value:'raw'}, currentPrices: {},
     console,
+    setTimeout, clearTimeout,
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
@@ -192,6 +195,8 @@ console.log('\nan answer applies only to the card that asked for it');
   const p = sandbox.applySellGate(CARD_A);
   await inFlight(q, 1);                      // request left carrying tok-1
   sandbox.window._googleIdToken = '';        // signed out while in flight
+  sandbox.window.googleUser = null;
+  sandbox.window._fbCurrentUser = null;
   q[0](STAMP_OK);
   await p;
 
@@ -208,6 +213,8 @@ console.log('\nan answer applies only to the card that asked for it');
   const p = sandbox.applySellGate(CARD_A);
   await inFlight(q, 1);
   sandbox.window._googleIdToken = 'tok-2';
+  sandbox.window.googleUser = { uid: 'second-sell-gate-fixture' };
+  sandbox.window._fbCurrentUser = { uid: 'second-sell-gate-fixture', getIdToken: async () => 'tok-2' };
   q[0](STAMP_OK);
   await p;
   check('a different account in flight also invalidates the answer',
@@ -232,6 +239,8 @@ console.log('\nan unreachable server is not a verdict');
 {
   const { sandbox, els } = makeSandbox();
   sandbox.window._googleIdToken = '';
+  sandbox.window.googleUser = null;
+  sandbox.window._fbCurrentUser = null;
   await sandbox.applySellGate(CARD_A);
   check('signed out gets its own sentence',
         /Sign in/.test(els.get('crSellBlockedMsg').textContent));

@@ -24,7 +24,7 @@
   const state={dialog,who,closed:false,data:null,reference:null,selected:{aspects:{},descriptors:{},photoIds:[]},photos:[],busy:false,defaults:null,defaultsNote:'',autoDefaults:false};active=state;
   const key=prefix+encodeURIComponent(who)+':'+draftId;
   const defaultsKey='cr_ebay_terms_v1:'+encodeURIComponent(who);
-  const valid=()=>!state.closed&&active===state&&owner()===who;
+  const valid=()=>!state.closed&&dialog.open&&active===state&&owner()===who;
   const header=el('header'),heading=el('h2','eBay listing review');heading.id='ebayListingReviewTitle';header.append(heading,button('Close',()=>dialog.close()));dialog.append(header);
   dialog.append(el('p','Check what this physical card still needs before it can be listed on eBay. Direct publishing is not enabled.'));
   const status=el('p','Loading your draft…');status.setAttribute('role','status');const error=el('p');error.setAttribute('role','alert');
@@ -33,7 +33,8 @@
   dialog.addEventListener('close',()=>{state.closed=true;clearInterval(interval);dialog.remove();if(active===state)active=null;document.querySelector('[data-ebay-review-open]')?.focus();},{once:true});
   async function request(body) {
    if(!valid())throw Error('Your account changed. Reopen the review.');
-   const token=await _crIdToken();if(!valid()||!token)throw Error('Sign in again to continue.');
+   const token=await _crIdToken();if(!valid())throw Error('Your account changed. Reopen this dialog.');
+   if(!token)throw Error('Sign-in refresh could not finish. Try again, or sign in again to continue.');
    const r=await fetch('/api/ebay-listing-review'+(body?'':'?id='+encodeURIComponent(draftId)),{method:body?'POST':'GET',credentials:'same-origin',headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify({...body,draftId,expectedDraftRev:state.data.draftRev,expectedConnectionVersion:state.data.connectionVersion})}:{}),signal:AbortSignal.timeout(60000)});
    const data=await r.json();if(!valid())throw Error('Your account changed. Reopen the review.');if(!r.ok)throw Error(data.error||'Could not check this draft. Try again.');return data;
   }

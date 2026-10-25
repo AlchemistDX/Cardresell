@@ -1389,9 +1389,12 @@ try {
     // Card A in hand, with the seller's shipping typed into the real inputs --
     // not injected into a context object.
     const setup = await page.evaluate(async (A) => {
-      // A signed-in account: creating a draft requires one, and the gate
-      // returns SIGNED_OUT without it.
-      window._googleIdToken = 'x'.repeat(40);
+      // Model the active signed-in SDK user. A cached bearer alone cannot
+      // establish which account owns a newly created draft.
+      const user = { uid: '1029384756', getIdToken: async () => 'x'.repeat(40) };
+      window.googleUser = { uid: user.uid, sub: user.uid };
+      window._fbCurrentUser = user;
+      window._fbAuth = { currentUser: user };
       // Render the card through the real card-panel path, so the Sell row has
       // a visible ancestor for the same reason it does in production rather
       // than because the test forced a style.

@@ -1,17 +1,18 @@
 /* Optional read-only seller connection. No credentials enter browser storage. */
 (() => {
   'use strict';
-  const owner=()=>window.googleUser?.sub||null;
+  const owner=()=>window.googleUser?.sub||window.googleUser?.uid||null;
   const el=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
   const button=(text,fn)=>{const b=el('button',text);b.type='button';b.onclick=fn;return b;};
   let checkedOwner=null,requestNumber=0,active=null;
-  async function request(action,method='GET',expected=owner()) {
-    if(!expected || owner()!==expected)throw Error('Sign in to the CardResell account that started this connection.');
+  async function request(action,method='GET',expected=owner(),isCurrent=()=>true) {
+    if(!expected || owner()!==expected || !isCurrent())throw Error('Sign in to the CardResell account that started this connection.');
     const token=await _crIdToken();
-    if(!token || owner()!==expected)throw Error('Your account changed. Reopen the eBay connection.');
+    if(owner()!==expected || !isCurrent())throw Error('Your account changed. Reopen the eBay connection.');
+    if(!token)throw Error('Sign-in refresh could not finish. Try again, or sign in again to continue.');
     const response=await fetch('/api/ebay-connect?action='+action,{method,credentials:'same-origin',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(45000)});
     const data=await response.json();
-    if(owner()!==expected)throw Error('Your account changed. Reopen the eBay connection.');
+    if(owner()!==expected || !isCurrent())throw Error('Your account changed. Reopen the eBay connection.');
     if(!response.ok)throw Error(data.error||'Could not check the eBay connection. Try again.');
     return data;
   }
@@ -42,7 +43,7 @@
     const error=el('p');error.setAttribute('role','alert');dialog.append(error);
     const details=el('div');dialog.append(details);
     const actions=el('div');actions.className='ebay-connect-actions';dialog.append(actions);
-    const current=()=>active===state&&!state.closed&&owner()===state.owner;
+    const current=()=>active===state&&!state.closed&&dialog.open&&owner()===state.owner;
     const closeOnChange=setInterval(()=>{if(!current()){dialog.close();mount(true);}},300);
     dialog.addEventListener('close',()=>{state.closed=true;clearInterval(closeOnChange);if(active===state)active=null;dialog.remove();(state.returnFocus?.isConnected?state.returnFocus:document.getElementById('ebayConnectionBtn'))?.focus();},{once:true});
     document.body.append(dialog);dialog.showModal();
@@ -53,12 +54,12 @@
     const clearOutcome=()=>{outcomeNote.textContent='';reference.textContent='';};
     async function run(work) {
       if(!current()||state.busy)return;state.busy=true;actions.querySelectorAll('button').forEach(b=>b.disabled=true);error.textContent='';
-      try{await work();}catch(e){if(current()){error.textContent=e.message||'Could not complete this action. Try again.';if(!actions.children.length)actions.append(button('Retry',()=>run(refresh)));}}
+      try{await work();}catch(e){if(current()){error.textContent=e.message||'Could not complete this action. Try again.';if(!actions.children.length){status.textContent='Connection could not be checked. Retry to continue.';actions.append(button('Retry',()=>run(refresh)));}}}
       finally{state.busy=false;if(current())actions.querySelectorAll('button').forEach(b=>b.disabled=false);}
     }
     async function refresh() {
       if(!current())return;
-      const data=await request('status','GET',state.owner);if(!current())return;
+      const data=await request('status','GET',state.owner,current);if(!current())return;
       actions.replaceChildren();details.replaceChildren();mount(true);
       if(!data.available) {
         status.textContent='Direct eBay connection is being prepared. You can prepare listing drafts and export a Seller Hub CSV from Drafts.';
@@ -69,10 +70,10 @@
       if(outcome==='review'&&!data.pending&&!outcomeNote.textContent)outcomeNote.textContent='That eBay approval is no longer available. Start a fresh connection from this dialog.';
       if(data.pending) {
         details.append(el('p','Finish connecting '+data.pending.username+' to your current CardResell account. Confirm only if this is the seller account you intended to use.'));
-        const confirm=button('Confirm eBay connection',()=>run(async()=>{await request('confirm','POST',state.owner);if(current()){outcome=null;clearOutcome();await refresh();}}));confirm.dataset.primary='';actions.append(confirm);
+        const confirm=button('Confirm eBay connection',()=>run(async()=>{await request('confirm','POST',state.owner,current);if(current()){outcome=null;clearOutcome();await refresh();}}));confirm.dataset.primary='';actions.append(confirm);
       } else {
         const connect=button(data.connected?'Reconnect eBay':'Continue to eBay',()=>run(async()=>{
-          const result=await request('start','POST',state.owner);if(!current())return;
+          const result=await request('start','POST',state.owner,current);if(!current())return;
           const url=new URL(result.url);
           if(!['https://auth.ebay.com','https://auth.sandbox.ebay.com'].includes(url.origin)||url.pathname!=='/oauth2/authorize')throw Error('The eBay authorization link could not be confirmed.');
           clearOutcome();
@@ -81,7 +82,7 @@
       }
       if(data.connected)actions.append(button('Check seller setup',()=>run(async()=>{
         details.replaceChildren();status.textContent='Checking seller setup for eBay US…';let report;
-        try{report=await request('readiness','POST',state.owner);}catch(e){if(current())status.textContent='Seller setup could not be refreshed. Check again to see current settings.';throw e;}if(!current())return;
+        try{report=await request('readiness','POST',state.owner,current);}catch(e){if(current())status.textContent='Seller setup could not be refreshed. Check again to see current settings.';throw e;}if(!current())return;
         details.replaceChildren();const list=el('dl');
         const locationCount=Object.hasOwn(report,'usableInventoryLocations')?report.usableInventoryLocations:report.inventoryLocations;
         const rows=[['Seller registration',report.sellerRegistered===true?'Complete':report.sellerRegistered===false?'Incomplete':'Could not check'],['Shipping policies',report.fulfillmentPolicies],['Payment policies',report.paymentPolicies],['Return policies',report.returnPolicies],[Object.hasOwn(report,'usableInventoryLocations')?'Enabled locations with an address':'Enabled inventory locations',locationCount]];
@@ -110,7 +111,7 @@
     }
     function disconnect() {
       details.replaceChildren(el('p','Remove your saved eBay connection? This removes authorization tokens from CardResell. Existing eBay listings stay on eBay.'));
-      actions.replaceChildren(button('Keep connection',()=>run(refresh)),button('Confirm disconnect',()=>run(async()=>{await request('disconnect','DELETE',state.owner);if(current())await refresh();})));
+      actions.replaceChildren(button('Keep connection',()=>run(refresh)),button('Confirm disconnect',()=>run(async()=>{await request('disconnect','DELETE',state.owner,current);if(current())await refresh();})));
     }
     if(!state.owner) {
       status.textContent='Sign in to the CardResell account that started this connection.';

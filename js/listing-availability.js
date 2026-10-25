@@ -7,7 +7,8 @@
  function sync(){if(owner!==account()){owner=account();rows.clear();lastKey='';checkedAt=0;pending=null;serial++;}}
  async function request(body,who) {
   if(!who||account()!==who)throw Error('Sign in again to check listing availability.');
-  const token=await _crIdToken();if(!token||account()!==who)throw Error('Your account changed. Refresh before exporting.');
+  const token=await _crIdToken();if(account()!==who)throw Error('Your account changed. Refresh before exporting.');
+  if(!token)throw Error('Sign-in refresh could not finish. Retry the export, or sign in again. No listing file was created.');
   const response=await fetch('/api/listing-availability',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
   const data=await response.json();if(account()!==who)throw Error('Your account changed. Refresh before exporting.');
   if(!response.ok)throw Error(data.error||'Availability could not be checked. Retry before exporting.');

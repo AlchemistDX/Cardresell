@@ -170,7 +170,7 @@ await page.waitForFunction(
      && typeof window._draftDownloadGo === 'function'
      && typeof window.ensureExportablePhotos === 'function'
 );
-await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; }, token);
+await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = {uid:'photo-owner', getIdToken:async()=>tok}; }, token);
 
 /* ── helpers driven inside the page ───────────────────────────────────────── */
 
@@ -303,7 +303,7 @@ await T.section('SUCCESS: hosted URL lands in Item photo URL when the button is 
     for (const pid of (rows.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
   }, DRAFT_ID);
   await seedOneUsablePhoto();
-  await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; }, token);
+  await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = {uid:'photo-owner', getIdToken:async()=>tok}; }, token);
 
   const out = await driveDownloadButton();
 
@@ -382,8 +382,8 @@ await T.section('FAILURE (SIGNED_OUT + local photo): no CSV, specific reason', a
     for (const pid of (rows.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
   }, DRAFT_ID);
   await seedOneUsablePhoto();
-  // Real signed-out: _crIdToken() returns '' when _googleIdToken is empty.
-  await page.evaluate(() => { window._googleIdToken = ''; });
+  // A stale cached bearer must not authorize export after sign-out.
+  await page.evaluate(() => { window.googleUser = null; window._fbCurrentUser = null; });
 
   const out = await driveDownloadButton();
   T.check('🔴 NO CSV downloaded when signed out with a local photo',
@@ -397,7 +397,7 @@ await T.section('FAILURE (SIGNED_OUT + local photo): no CSV, specific reason', a
 
 await T.section('FAILURE (NOT_CONFIGURED + local photo): no CSV, hosting-off reason', async () => {
   mode = 'not_configured';
-  await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; }, 'stub-id-token');
+  await page.evaluate((tok) => { window._googleIdToken = tok; window.googleUser = {uid:'photo-owner'}; window._fbCurrentUser = {uid:'photo-owner', getIdToken:async()=>tok}; }, 'stub-id-token');
   await page.evaluate(async (id) => {
     const rows = await window.photosList(id).catch(() => ({ order: [] }));
     for (const pid of (rows.order || [])) { await window.photosRemove(id, pid).catch(() => {}); }
