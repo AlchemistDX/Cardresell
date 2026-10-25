@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-25",
+  "baseCommit": "434ab74acce1e52292dd0c07ee48a61a58eafff7",
+  "scope": "selling selection, comparable price evidence, venue comparison, draft handoff",
+  "mainRunner": {
+    "status": "passed",
+    "registeredSlots": 160,
+    "intentionalSkips": [
+      "Live Redis requires explicit live configuration",
+      "Production mutation smoke excluded by --local"
+    ],
+    "runnableChecksPassed": 158,
+    "logSha256": "e423f769070c61be71e3b47315eef881e88bedca8cf30ba0d58c1ac1122bdd87"
+  },
+  "additionalGates": [
+    {
+      "suite": "selling-advice-browser",
+      "exit": 0
+    },
+    {
+      "suite": "selling-plan-browser",
+      "exit": 0
+    },
+    {
+      "suite": "bulk-venues-browser",
+      "exit": 0
+    },
+    {
+      "suite": "bulk-workflow-browser",
+      "exit": 0
+    },
+    {
+      "suite": "scan-finish-browser",
+      "exit": 0
+    },
+    {
+      "suite": "grade-upload-single-draft-browser",
+      "exit": 0
+    },
+    {
+      "suite": "collection-drafts-browser",
+      "exit": 0
+    },
+    {
+      "suite": "ebay-selling-defaults-browser",
+      "exit": 0
+    },
+    {
+      "suite": "customer-journey-browser",
+      "exit": 0
+    },
+    {
+      "suite": "asset-fingerprints",
+      "exit": 0
+    }
+  ],
+  "focusedFinal": [
+    {
+      "suite": "price-evidence.mjs",
+      "exit": 0
+    },
+    {
+      "suite": "selling-price-evidence-browser.mjs",
+      "exit": 0
+    },
+    {
+      "suite": "quick-pricing.mjs",
+      "exit": 0
+    },
+    {
+      "suite": "deeplink-companions.js",
+      "exit": 0
+    },
+    {
+      "suite": "selling-selection-browser.mjs",
+      "exit": 0
+    },
+    {
+      "suite": "draft-price-integrity-browser.mjs",
+      "exit": 0
+    },
+    {
+      "suite": "draft-selection-handoff-browser.mjs",
+      "exit": 0
+    },
+    {
+      "suite": "asset-fingerprints.mjs",
+      "exit": 0
+    }
+  ],
+  "newRegressions": {
+    "priceEvidenceAssertions": 37,
+    "browserAssertions": 84,
+    "browserWidths": [
+      320,
+      390,
+      1280
+    ]
+  },
+  "baseline": {
+    "previousCore": "js/core.22a43581.js",
+    "result": "Unsafe graded identity matching and aggregate averages used as range endpoints reproduced before fixes"
+  },
+  "constraints": [
+    "local Chromium and isolated Redis",
+    "synthetic provider/auth boundaries",
+    "external network blocked in tests",
+    "no live scans, listings, purchases or customer-record writes"
+  ],
+  "pricePolicy": {
+    "askingRangeFreshnessDays": 7,
+    "freshnessThresholdIsProductRule": true,
+    "fallbackAdjustmentPercent": 15,
+    "fallbackIsMeasuredRange": false
+  },
+  "limits": [
+    "Individual market-wide sold feed entitlement not established",
+    "No real-world price error calibration",
+    "No live listing publication, completed sale or scanner recognition benchmark"
+  ],
+  "assets": [
+    {
+      "path": "js/price-evidence.58976d9a.js",
+      "sha256": "58976d9a40d1bce7c2f53f09e2b5299d61dc478d253b53e57e77291b29138db5"
+    },
+    {
+      "path": "js/core.6413c984.js",
+      "sha256": "6413c984dad78863626539377b264218c0fa5d3512f85e7a9cb7782d8f788b3d"
+    }
+  ],
+  "finalSourceChecks": {
+    "launchAudit": {
+      "passed": 440,
+      "failed": 0
+    },
+    "quickPricing": {
+      "passed": 233,
+      "failed": 0
+    }
+  }
+}
