@@ -393,6 +393,7 @@ const dropBlob = (page, photoId) => page.evaluate((pid) => new Promise((resolve,
 // ═════════════════════════════════════════════════════════════════════════
 
 import { generateReadFixtures } from './_draftListFixtures.mjs';
+import { SUB } from './_draftHarness.mjs';
 const FX = await generateReadFixtures();
 
 /** Boot the review screen for one draft, with the draft read stubbed. */
@@ -400,11 +401,19 @@ async function reviewPage(ctx) {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
   await page.route('**/api/drafts*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FX.publishable.body) });
+    // Keep the handler-generated envelope, binding its fixture identity to
+    // the requested photo scenario. A mismatched draft must be rejected.
+    const draftId = new URL(route.request().url()).searchParams.get('id');
+    const body = structuredClone(FX.publishable.body);
+    body.draft.draftId = draftId;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof window.renderReviewView === 'function', { timeout: 15000 });
-  await page.evaluate(() => { window._crIdToken = async () => 'test-id-token'; });
+  await page.evaluate((owner) => {
+    window.googleUser = { uid: owner, sub: owner };
+    window._crIdToken = async () => 'test-id-token';
+  }, SUB);
   return page;
 }
 

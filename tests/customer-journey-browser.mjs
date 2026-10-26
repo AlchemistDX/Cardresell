@@ -13,6 +13,64 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin=`http://127.0.
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM||undefined,args:['--no-sandbox']});let checks=0;
 const check=(label,a,b)=>{assert.deepEqual(a,b,label);checks++;console.log('✓ '+label)};
 try {
+// Same name/number, different finishes: follow actual search responses through
+// selection, research links, Collection persistence and a return visit.
+for (const width of [320,390,1280]) {
+ const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ const cards=['Holofoil','Reverse Holofoil'].map((variant,index)=>({id:'printing-'+index,
+  name:'Mew',number:'76/214',set_name:'Unbroken Bonds',variant,rarity:'Holo Rare',
+  prices:{raw:{near_mint:{tcgplayer:{market:20+index}},lightly_played:{tcgplayer:{market:15+index}}}}}));
+ await page.route('**/*',route=>{
+  const url=new URL(route.request().url());
+  if(url.origin===origin&&url.pathname==='/api/tpl-proxy')return route.fulfill({json:{data:cards}});
+  if(url.origin===origin&&url.pathname==='/api/membership-catalogue')return route.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});
+  if(url.origin===origin&&!url.pathname.startsWith('/api/'))return route.continue();
+  return route.fulfill({status:503,json:{error:'isolated_service'}});
+ });
+ await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
+ await page.goto(origin);
+ check(width+' closed photo guide is absent from accessible controls',await page.getByRole('button',{name:'Got it — start scanning',exact:true}).count(),0);
+ check(width+' closed account panel is absent from accessible controls',await page.getByRole('button',{name:'Sign out',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Settings',exact:true}).click();
+ await page.getByRole('button',{name:'Toggle theme',exact:true}).waitFor({state:'visible'});
+ check(width+' opened settings exposes its controls',await page.getByRole('button',{name:'Toggle theme',exact:true}).isVisible(),true);
+ await page.getByRole('button',{name:'Settings',exact:true}).click();
+ await page.getByRole('button',{name:'Toggle theme',exact:true}).waitFor({state:'hidden'});
+ check(width+' closing settings removes its controls',await page.getByRole('button',{name:'Toggle theme',exact:true}).count(),0);
+ await page.evaluate(()=>openPhotoTipsModal());
+ await page.getByRole('button',{name:'Got it — thanks',exact:true}).waitFor({state:'visible'});
+ check(width+' opened photo guide exposes its controls',await page.getByRole('button',{name:'Got it — thanks',exact:true}).isVisible(),true);
+ await page.locator('#photoTipsOverlay').getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Got it — thanks',exact:true}).waitFor({state:'hidden'});
+ check(width+' closing photo guide removes its controls',await page.getByRole('button',{name:'Got it — thanks',exact:true}).count(),0);
+ await page.getByRole('textbox',{name:'Search card name',exact:true}).fill('Mew 76');
+ await page.getByRole('button',{name:'Search',exact:true}).click();
+ const reverse=page.locator('#searchModalGrid [data-idx="1"]');
+ await reverse.waitFor();
+ check(width+' catalog distinguishes a reverse printing',(await reverse.innerText()).includes('Reverse Holofoil'),true);
+ if(shots)await page.screenshot({path:`${shots}/journey-printings-${width}.png`});
+ await page.getByRole('button',{name:'Switch to list view',exact:true}).click();
+ check(width+' list view keeps the printing',(await reverse.innerText()).includes('Reverse Holofoil'),true);
+ await reverse.click();
+ check(width+' selected card names the printing',(await page.locator('#cardMetaEl').innerText()).includes('Reverse Holofoil'),true);
+ await page.locator('#condPills [data-cond="lp"]').click();
+ const query=new URL(await page.locator('#ebayListBtn').getAttribute('href')).searchParams.get('_nkw');
+ check(width+' condition-based quote keeps exact finish in research',/Reverse Holofoil.*Lightly Played/.test(query),true);
+ await page.locator('#addCollectionBtn').click();
+ check(width+' save form carries selected condition price',await page.locator('#mCurrentValue').inputValue(),'16.00');
+ await page.locator('#flipModal .modal-save').click();
+ const saved=await page.evaluate(()=>loadPortData()[0]);
+ check(width+' blank acquisition cost stays unknown',saved.buyPrice,null);
+ check(width+' selected finish survives Collection',saved.finish,'Reverse Holofoil');
+ check(width+' pricing condition survives as an assumption',saved.pricingSelection?.condition,'lp');
+ check(width+' assumption does not confirm physical condition',!!saved.condition,false);
+ if(shots)await page.screenshot({path:`${shots}/journey-saved-printing-${width}.png`});
+ await page.reload();await page.waitForFunction(()=>typeof loadPortData==='function');
+ check(width+' return visit retains printing and unknown cost',await page.evaluate(()=>({finish:loadPortData()[0].finish,cost:loadPortData()[0].buyPrice})),{finish:'Reverse Holofoil',cost:null});
+ check(width+' no printing journey errors',errors,[]);
+ await page.close();
+}
 for (const width of [390,1280]) {
  const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));

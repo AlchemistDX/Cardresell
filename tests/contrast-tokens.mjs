@@ -242,8 +242,10 @@ try {
     // Closed dialogs now leave the layout/focus tree. Explicitly exercise
     // their visible CSS state, preserving contrast coverage and its floor
     // instead of measuring invisible controls or lowering the assertion.
-    await page.evaluate(() => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('open')));
+    await page.evaluate(() => document.querySelectorAll('.modal-overlay, .scan-gate-overlay, .settings-panel').forEach(el => el.classList.add('open')));
     T.check(`${theme}: save dialog is included in the contrast fixture`, await page.locator('#mCardName').isVisible());
+    await page.locator('#settingsPanel [data-theme-toggle]').waitFor({state:'visible'});
+    T.check(`${theme}: photo guide is included in the contrast fixture`, await page.locator('#photoTipsOverlay').isVisible());
     const nodes = await sweepPage(page, Object.values(resolved).filter(Boolean));
 
     /* SELF-CHECK BEFORE RATIOS. A sweep matching zero nodes passes vacuously

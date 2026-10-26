@@ -35,6 +35,28 @@ try {
   });
   await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
   await page.goto(origin+'/index.html');await page.waitForFunction(()=>typeof loadCardUI==='function');
+  for (const fails of [false,true]) {
+    const result=await page.evaluate(async fails=>{
+      const savedFetch=window.fetch;let release;
+      window.fetch=url=>String(url).startsWith('/api/tcg-price?')
+        ?new Promise((resolve,reject)=>{release=()=>fails?reject(Error('fixture outage')):resolve({ok:true,json:async()=>({market:999})});})
+        :Promise.resolve({ok:false});
+      try {
+        const first={name:'Mew',setName:'Fixture set',number:'1',game:'pokemon',priceVariants:[]};
+        setSelectedCard(first);loadCardUI(first);
+        const next={...first,number:'2',priceVariants:[{key:'normal',label:'Normal',market:6}]};
+        setSelectedCard(next);loadCardUI(next);
+        release();await new Promise(resolve=>setTimeout(resolve,0));
+        return {number:selectedCard.number,key:printSelect.value,price:getEffectivePrice()};
+      } finally {window.fetch=savedFetch;}
+    },fails);
+    check(JSON.stringify(result)===JSON.stringify({number:'2',key:'normal',price:6}),'late '+(fails?'failed':'successful')+' fallback cannot change the next collector number at '+width);
+  }
+  await page.evaluate(()=>{
+    const card={name:'Mew',setName:'Fixture set',number:'1',game:'pokemon',priceVariants:[{key:'tcgplayer_live',label:'TCGPlayer Live',market:5}]};
+    setSelectedCard(card);loadCardUI(card);
+  });
+  check(!/TCGPlayer|Base-printing reference/i.test(new URL(await page.locator('#ebayListBtn').getAttribute('href')).searchParams.get('_nkw')),'price-source labels never enter card research queries at '+width);
   await page.evaluate(()=>{
    const card={id:'workflow-fixture',name:'Mew',number:'76/214',game:'pokemon',setName:'Unbroken Bonds',source:'TCGPlayer',priceVariants:[{key:'holofoil',label:'Holofoil',market:10},{key:'reverseHolofoil',label:'Reverse Holofoil',market:20},{key:'psa_10',label:'PSA 10',market:200}]};
    activeGame='pokemon';setSelectedCard(card);loadCardUI(card);window._venuesEnabled=new Set(['ebay','tcgplayer']);calc();

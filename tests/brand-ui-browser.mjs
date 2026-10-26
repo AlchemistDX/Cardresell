@@ -48,6 +48,7 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
  check('verified badge belongs to avatar',await page.locator('.profile-avatar #verifiedBadge').count(),1);
  await page.locator('.profile-avatar').click();
  check('profile opens account settings',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),true);
+ await page.locator('#settingsPanel [data-theme-toggle]').waitFor({state:'visible'});
  check('theme is in settings',await page.locator('#settingsPanel [data-theme-toggle]').isVisible(),true);
  await page.locator('.settings-btn').click();
  check('settings button closes account panel',await page.locator('#settingsPanel').evaluate(e=>e.classList.contains('open')),false);
@@ -129,6 +130,8 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
     ?r.fulfill({json:{cap:25,total:0,usage:{active:0,remaining:25,bulkLimit}}})
     :r.fulfill({json:(()=>{const b=r.request().postDataJSON();manifests.push(b);return {id:b.id,count:b.rows.length}})()}));
   await page.evaluate(()=>{
+    window._savedBulkIdToken=_crIdToken;
+    _crIdToken=async()=> 'synthetic_ui_token';
     window._savedDraftCreate=_crCreateDraft;window._bulkCalls=[];
     _crCreateDraft=async o=>{window._bulkCalls.push(o);return {ok:true,status:201,draftId:'drf_fixture'}};
     window._bulkResults=[{success:true,rowId:'one',cardName:'Test card',setName:'Test set',qty:2}];
@@ -141,7 +144,7 @@ for(const theme of ['light','dark']) for(const viewport of [{width:320,height:74
   await page.evaluate(()=>bulkCreateSelectedDrafts());
   check('paid bulk prepares one server manifest for physical copies',manifests.length===1&&manifests[0].rows.length===2,true);
   check('each create carries its manifest and account',await page.evaluate(()=>window._bulkCalls.length===2&&window._bulkCalls.every(o=>o.bulkId&&o.batchOwner==='fixture')),true);
-  await page.evaluate(()=>{_crCreateDraft=window._savedDraftCreate;window._bulkResults=[];window._bulkDraftSel=[];window._bulkDraftBusy=false;});
+  await page.evaluate(()=>{_crCreateDraft=window._savedDraftCreate;_crIdToken=window._savedBulkIdToken;window._bulkResults=[];window._bulkDraftSel=[];window._bulkDraftBusy=false;});
   await page.unroute('**/api/drafts**');
  }
 
@@ -225,6 +228,8 @@ for(const theme of ['light','dark']) for(const width of [320,390,1280]) {
  for(const tier of ['free','business']) {
   await page.evaluate(tier=>{window.googleUser={sub:'buy-target-fixture'};window._userTier=tier;window._isPro=tier!=='free';window._membershipVenueAccess={owner:'buy-target-fixture',plan:tier,tier:tier==='business'?'ultimate':'free'};calc()},tier);
   check(`${tier} has one custom buy target`,await page.locator('.max-buy-card').count(),1);
+  if (!await page.locator('#maxBuyMargin').isVisible())
+    await page.getByText('Compare fees and estimated payouts (optional)',{exact:true}).click();
   await page.locator('#maxBuyMargin').fill('25');
   check(`${tier} offer matches the actual net payout`,await page.locator('.max-buy-card').evaluate(e=>{const offer=Number(e.querySelector('output').textContent.replace(/[^\d.-]/g,'')),net=Number(e.dataset.net);return Math.abs(offer-(Math.floor((net-25+1e-9)*100)/100))<1e-9}),true);
   check('typing preserves target focus',await page.evaluate(()=>document.activeElement.id),'maxBuyMargin');

@@ -1,0 +1,152 @@
+{
+  "date": "2026-10-26",
+  "baseCommit": "2286572710bbacd9b4c074c8e9709809d190bca6",
+  "scope": "Seller user walkthrough, local integration checks, public read-only production inspection",
+  "releaseState": "Verified source; deployment evidence is recorded separately after this commit",
+  "assets": {
+    "index.html": "ef8aaca42c3c3df22dccd6fd85c3594596a08b21a34d0ed416d40e98daa0f87b",
+    "js/core.ad8b78ad.js": "ad8b78adc6a52635e47b38180be23c2912df6855aca8215e52f6d98f85636613",
+    "js/ui.4b94275c.js": "4b94275c09da591f016cad1c49c393bf5f9c1141e84cf7c968c399052d2c18e6"
+  },
+  "mainSuite": {
+    "command": "bash tests/run-all.sh --local",
+    "slots": 167,
+    "executed": 165,
+    "passed": 165,
+    "skipped": [
+      "Live managed KV store mutation suite",
+      "Production endpoint mutation suite"
+    ],
+    "logSha256": "d85c418bce1243d2194d1143b9c5d7df8e5576544a0136e6328627d51881b4c4"
+  },
+  "additionalSuites": [
+    {
+      "suite": "bulk-workflow-browser",
+      "exit": 0,
+      "summary": "bulk-workflow-browser: 188 passed, 0 failed -- SUITE COMPLETE",
+      "logSha256": "d09581bdfaeefce54e9012e4f0c888b052e584d66fcd3d8d04e79b5cb4b65018"
+    },
+    {
+      "suite": "bulk-text-rescue-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: bulk-text-rescue-browser: 43 passed, 0 failed",
+      "logSha256": "802c3b4c3edfb49adc5ef598a9c559b989158bd760f87821a2fe54ffeec2320d"
+    },
+    {
+      "suite": "bulk-match-review-browser",
+      "exit": 0,
+      "summary": "bulk-match-review-browser: 446 passed, 0 failed -- SUITE COMPLETE, exit=0",
+      "logSha256": "db50c98ab5c0d1d56f0d3a6bc222bf55ea14958581bdc0138c5b9c12d41a1785"
+    },
+    {
+      "suite": "bulk-lookup-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: bulk-lookup-browser: 100 passed, 0 failed",
+      "logSha256": "4a06bee986cf8f1ff54a804634eeecf8e994a6d23a6c98a8151a0013936cee37"
+    },
+    {
+      "suite": "search-workflow-browser",
+      "exit": 0,
+      "summary": "search-workflow-browser: 36 passed, 0 failed -- SUITE COMPLETE, exit=0",
+      "logSha256": "7eceb7299a2e0083766098402d144535d8865a8aeb8d9e7b7c7b4e449fd9c298"
+    },
+    {
+      "suite": "scan-finish-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: scan-finish-browser: 223 passed, 0 failed",
+      "logSha256": "516e9ee0e29a7620420525bab62b8a3f1d732448da8b453e1ae3603b132a29a7"
+    },
+    {
+      "suite": "selling-advice-browser",
+      "exit": 0,
+      "summary": "Selling advice: 65 passed -- SUITE COMPLETE, exit=0",
+      "logSha256": "84c46072f3335ce8eabeb875385b7f47276228acb089b29596cb351e29981221"
+    },
+    {
+      "suite": "draft-selected-delete-browser",
+      "exit": 0,
+      "summary": "draft-selected-delete-browser: 30 passed, 0 failed -- SUITE COMPLETE, exit=0",
+      "logSha256": "3eb1ce13e85fe9ecfa5967550b69984651609ae2bba43a55851c6b1021d4c78d"
+    },
+    {
+      "suite": "grading-paths-browser",
+      "exit": 0,
+      "summary": "grading-paths-browser: 104 checks passed",
+      "logSha256": "70f93efa308fb6cb206b4c8cfd26f0fea3e99f92d34050d410d9a4537e54383d"
+    },
+    {
+      "suite": "selling-plan-browser",
+      "exit": 0,
+      "summary": "Selling plan: 186 checks passed; no provider calls. -- SUITE COMPLETE, exit=0",
+      "logSha256": "d0c65c0850157ae6b0e62d88aa665049fb4e5558dcbcec938d83e13f0a95deab"
+    },
+    {
+      "suite": "brand-ui-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: brand-ui-browser: 978 passed, 0 failed",
+      "logSha256": "81a3c9238f5d5d373f8975dcc7b27ba05db37eecf8b13fdc9acf2359f59da7bb"
+    },
+    {
+      "suite": "binder-scan-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: binder-scan-browser: 184 passed, 0 failed",
+      "logSha256": "8773e41301df9d2a9956a9717b48988e90bd5e66b9342a4f51203e0192bc48db"
+    },
+    {
+      "suite": "bulk-venues-browser",
+      "exit": 0,
+      "summary": "Bulk venues: 80 passed -- SUITE COMPLETE, exit=0",
+      "logSha256": "d527ff2c7ca8ac9a1e9e13130904a0a8d9f11d9740e074ee866388b6e385d599"
+    },
+    {
+      "suite": "grade-upload-single-draft-browser",
+      "exit": 0,
+      "summary": "844x390: one source choice, two/six upload slots, arbitrary order, replacement, validation, cancellation race, camera persistence and draft regression passed",
+      "logSha256": "dd4c68532a18ad791f4c357febd3e6fd55d764e89885387d5c73d038c5577572"
+    },
+    {
+      "suite": "photo-guide-browser",
+      "exit": 0,
+      "summary": "Photo guide browser flow: 14 scenarios passed across single capture and Rapid Scan; real worker and canvas; no provider calls.",
+      "logSha256": "8ebf41ffc2a07aa9a4441eeeacc205576827e4bc2b624aaafbf3b906aeab6bbd"
+    },
+    {
+      "suite": "membership-photo-policy",
+      "exit": 0,
+      "summary": "96 passed, 0 failed. Dormant pure policy only; no storage ledger, atomic admission, provider enforcement or managed upload proof.",
+      "logSha256": "732532fdc771b89311e60b180f2835401debb11a3a50e6f17e58442be6c9108c"
+    },
+    {
+      "suite": "binder-interaction-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: binder-interaction-browser: 131 passed, 0 failed",
+      "logSha256": "a3abd031ae6d697e827f5af0cbbd4d653e092d1d1acb37a597afc2e7e4b1a33a"
+    },
+    {
+      "suite": "billing-release-browser",
+      "exit": 0,
+      "summary": "billing-release-browser: 34 passed, 0 failed -- SUITE COMPLETE, exit=0",
+      "logSha256": "d7f541ada18e6d04dc595544cd009d4e57db88c7f7bcfea9097e159e02812faf"
+    },
+    {
+      "suite": "listing-photos",
+      "exit": 0,
+      "summary": "listing-photos: 171 passed, 0 failed -- SUITE COMPLETE, exit=0",
+      "logSha256": "2a4639fa3de7429cec420ecafde14ba266c6f45d9953b037891c7201ed64e5c6"
+    },
+    {
+      "suite": "customer-journey-browser",
+      "exit": 0,
+      "summary": "SUITE COMPLETE: customer-journey-browser: 221 passed, 0 failed",
+      "logSha256": "d134fc408a243679018a8aaa3bbc19fa64f4aaa6eafc52c4bde5c570ce2a7fe9"
+    }
+  ],
+  "limitations": [
+    "External account and provider boundaries use synthetic fixtures in automated checks.",
+    "No purchase, paid scan, live listing publication, or customer inventory mutation was performed.",
+    "Recent eBay sold feed was unavailable in the live UI; this release does not restore it.",
+    "The enabled eBay user workflow remains reviewed draft preparation and CSV export; direct publishing and automatic sales synchronization remain disabled.",
+    "Physical binder/MTG recognition accuracy requires original labelled photos and live provider evaluation; screenshots and synthetic tests do not establish accuracy.",
+    "Local Node module-type warnings and the previously observed production DEP0169 warning are not resolved by this change."
+  ]
+}

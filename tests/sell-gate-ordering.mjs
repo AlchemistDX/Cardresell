@@ -31,7 +31,7 @@ const at = SRC.indexOf(MARK);
 check('the D1 block is still findable in core.js', at > 0,
       'if this fails the banner moved and this whole file is testing nothing');
 const BLOCK = SRC.slice(SRC.lastIndexOf('/*', at));
-const helperNames=['_crSellingSelection','isGradedVariant','_scanPhotoSnapshot'];
+const helperNames=['_crFinishLabel','_crSellingSelection','isGradedVariant','_scanPhotoSnapshot'];
 const helperFunctions=parse(SRC,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&helperNames.includes(n.id.name));
 check('draft entry uses the shipped pricing and photo helpers',helperFunctions.length===helperNames.length);
 const HELPERS=helperFunctions.map(n=>SRC.slice(n.start,n.end)).join('\n');

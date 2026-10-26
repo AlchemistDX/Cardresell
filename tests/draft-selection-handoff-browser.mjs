@@ -63,6 +63,12 @@ try {
   check(/pricing assumption/.test(raw.body),'review explains the condition still needs physical confirmation at '+width);
   check(raw.packet?.shipping?.buyerPays?.amount===4&&raw.packet?.shipping?.sellerCost?.amount===2.5,'shipping survives draft handoff at '+width);
 
+  await page.evaluate(()=>loadHandoffCard(tplCardToNormalized({id:'catalog-reverse',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',variant:'Reverse Holofoil',prices:{raw:{near_mint:{tcgplayer:{market:21}},lightly_played:{tcgplayer:{market:16}}}}},'pokemon')));
+  await page.locator('#condPills [data-cond="lp"]').click();
+  const catalogue=await create();
+  check(catalogue.draft.card.finish==='Reverse Holofoil'&&/Reverse Holofoil/.test(catalogue.draft.title),'condition-based catalogue row keeps exact printing in the stored draft at '+width);
+  check(catalogue.draft.price===16&&catalogue.draft.card.pricingSelection?.condition==='lp','catalogue condition and price reach review together at '+width);
+
   await page.evaluate(()=>loadHandoffCard({id:'slab',grader:'PSA',grade:'10',cert:'12345678'}));
   await page.locator('#printingSelect').selectOption('reverseHolofoil');
   await page.locator('#gradedPills [data-val="psa"]').click();
