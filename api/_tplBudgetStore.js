@@ -75,10 +75,15 @@ export function createKvBudgetStore() {
       if (raw == null) return null;
       try {
         const parsed = JSON.parse(raw);
-        // The stale/fresh distinction is the CALLER's, computed from the
-        // stored timestamp. This store does not decide freshness; returning
-        // the envelope unchanged keeps that judgement in one place.
-        return parsed;
+        // The budget policy consumes { value, expired }, not the provider's
+        // raw JSON. Legacy writes lacked this envelope, so reading them as
+        // entries produced a cache hit whose value was undefined.
+        if (parsed?.schemaVersion !== 1 || !parsed.value ||
+            typeof parsed.value !== 'object' || Array.isArray(parsed.value) ||
+            !Number.isFinite(parsed.freshUntil) || !Number.isFinite(parsed.staleUntil)) return null;
+        const now = Date.now();
+        if (now >= parsed.staleUntil) return null;
+        return { value: parsed.value, expired: now >= parsed.freshUntil };
       } catch {
         // A corrupt entry is a cache miss, not a crash. Worst case is one
         // extra upstream call, which is metered like any other.
@@ -86,12 +91,16 @@ export function createKvBudgetStore() {
       }
     },
 
-    async setWithTtl(key, value, _cacheTtlSec, staleTtlSec) {
+    async setWithTtl(key, value, cacheTtlSec, staleTtlSec) {
       // Stored for the STALE lifetime, not the fresh one. An entry past its
       // fresh window is still worth serving when the budget is exhausted or
       // the provider is down, and deleting it at the fresh boundary would
       // throw away the only thing that makes EXHAUSTED_STALE possible.
-      await kv('set', key, JSON.stringify(value), 'ex', String(staleTtlSec));
+      const now = Date.now();
+      const entry = { schemaVersion: 1, value,
+        freshUntil: now + cacheTtlSec * 1000,
+        staleUntil: now + staleTtlSec * 1000 };
+      await kv('set', key, JSON.stringify(entry), 'ex', String(staleTtlSec));
     },
 
     async incr(key, windowSec) {

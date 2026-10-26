@@ -23,7 +23,7 @@ import {
   budgetConfig, cacheKey, OUTCOME, BUDGET_DEFAULTS,
 } from '../api/_tplBudget.js';
 import handler, { setBudgetStore, budgetStoreActive, budgetMode, BUDGET_MODE, resetBudgetStore } from '../api/tpl-proxy.js';
-import { kvConfigured } from '../api/_tplBudgetStore.js';
+import { kvConfigured, createKvBudgetStore } from '../api/_tplBudgetStore.js';
 
 let passed = 0, failed = 0;
 function check(name, cond, hint = '') {
@@ -90,6 +90,14 @@ console.log('\n1. cache hits consume no allowance');
   for (let i = 0; i < 50; i++) await reserveUpstream({ store, ...base, ip: '1.1.1.1', env: ENV });
   check('50 more hits still spend nothing',
         Object.keys(store.counters).length === 0);
+}
+
+for (const malformed of [{ cards: [] }, { expired: false }, { value: null, expired: false }]) {
+  const store = mockStore();
+  store.entries[cacheKey(base.path, base.upstreamQuery)] = malformed;
+  const result = await reserveUpstream({ store, ...base, ip: '1.1.1.1', env: ENV });
+  check('a malformed cache envelope requires a metered miss, never an empty success',
+    result.outcome === OUTCOME.RESERVED && !!result.reservation && !result.cached);
 }
 
 // ── 2. Canonical key: param order does not create a second entry ─────────────
@@ -635,6 +643,9 @@ console.log('\n12. production binding: the function resolves its own store');
     check('…without a second provider call', providerCalls === 1,
           'the cache is only real if it is the one the deployed function reads');
     check('…and says so in the header', r2.headers['x-tpl-cache'] === 'hit');
+    check('a cached lookup returns the same complete body as the first lookup',
+      JSON.stringify(r2.body) === r1.body,
+      'a 200 cache hit with undefined body is a broken lookup, not a success');
 
     // A different card exhausts the budget of 2, and exhaustion is REACHED
     // through the real store rather than a mock's counter.
@@ -648,6 +659,42 @@ console.log('\n12. production binding: the function resolves its own store');
           r4res.body && r4res.body.reason === 'budget_exhausted',
           'these two must stay distinguishable in production');
     check('…and made no further provider call', providerCalls === 2);
+
+    // Exercise the real production adapter's envelope and age handling,
+    // rather than only the in-memory policy mock's already-correct shape.
+    const storedKey = kvOps.find(([op]) => op === 'set')[1];
+    const stored = JSON.parse(kvData.get(storedKey));
+    check('the production writer stores the response and freshness metadata',
+      stored.schemaVersion === 1 && JSON.stringify(stored.value) === r1.body &&
+      stored.freshUntil > Date.now() && stored.staleUntil >= stored.freshUntil);
+    kvData.set(storedKey, JSON.stringify({ ...stored, freshUntil: Date.now() - 1000 }));
+    const stale = mkRes();
+    await handler(req(), stale);
+    check('an expired fresh window can serve the complete body as explicitly stale',
+      stale.code === 200 && stale.headers['x-tpl-cache'] === 'stale' &&
+      stale.headers['cache-control'] === 'no-store' && JSON.stringify(stale.body) === r1.body);
+    check('stale recovery respects exhausted provider allowance', providerCalls === 2);
+    kvData.set(storedKey, JSON.stringify({ ...stored, staleUntil: Date.now() - 1 }));
+    const expired = mkRes();
+    await handler(req(), expired);
+    check('a fully expired cache entry is not served beyond its stale lifetime',
+      expired.code === 503 && expired.body?.reason === 'budget_exhausted' && providerCalls === 2);
+    const realStore = createKvBudgetStore();
+    for (const raw of [r1.body, '{}', 'null', '[]', '{', JSON.stringify({ ...stored, value: null }),
+      JSON.stringify({ ...stored, freshUntil: 'unknown' })]) {
+      kvData.set(storedKey, raw);
+      check('legacy or invalid stored JSON is a cache miss, never an empty hit',
+        await realStore.get(storedKey) === null);
+    }
+    // Repairing an old entry uses the same metered path, then the second read
+    // must return the identical payload without spending again.
+    kvData.set(storedKey, r1.body);
+    process.env.TPL_BUDGET_MAX = '10';
+    const repaired = mkRes(); await handler(req(), repaired);
+    const reused = mkRes(); await handler(req(), reused);
+    check('a legacy entry is replaced by one metered lookup and then reused intact',
+      repaired.code === 200 && reused.code === 200 && providerCalls === 3 &&
+      JSON.stringify(reused.body) === repaired.body && reused.headers['x-tpl-cache'] === 'hit');
 
     // ── The fail-closed case is still fail-closed ──────────────────────────
     // Enforcement on and KV genuinely absent. This is the ONLY situation that

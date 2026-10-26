@@ -122,6 +122,10 @@ export async function reserveUpstream({ store, path, upstreamQuery, ip, now = Da
   } catch {
     entry = null;
   }
+  // A malformed cache record must not become a successful empty HTTP body.
+  // Treat it as a miss; any replacement provider request remains metered.
+  if (entry && (typeof entry.expired !== 'boolean' || !entry.value ||
+      typeof entry.value !== 'object' || Array.isArray(entry.value))) entry = null;
   if (entry && !entry.expired) {
     return { outcome: OUTCOME.CACHE_HIT, cached: entry.value, key, config };
   }
