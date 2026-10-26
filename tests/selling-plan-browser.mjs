@@ -12,7 +12,7 @@ const core=read('core'),ui=read('ui'),module=read('selling-plan');
 const extract=(s,names)=>parse(s,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)||n.type==='VariableDeclaration'&&n.declarations.some(d=>names.includes(d.id.name))).map(n=>s.slice(n.start,n.end)).join('\n');
 const fees=extract(core,['feeEbay','feeTCGPlayer','feeMercari','TCG_LEVELS']);
 const keyTrap=parse(core,{ecmaVersion:'latest'}).body.filter(n=>n.type==='ExpressionStatement'&&core.slice(n.start,n.end).startsWith("document.addEventListener('keydown'")&&core.slice(n.start,n.end).includes('_topOpenDialog')).map(n=>core.slice(n.start,n.end)).join('\n');
-const bulk=extract(ui,['_bulkUpdatePackTracker','_bulkDraftIsSelected','bulkDraftToggleRow','bulkDraftSelectAll','_bulkDraftSelectable','_bulkCopyUids','_bulkNewScanUid','_bulkResetBottomBarButtons','_bulkFinishQueue','_bulkRefreshResultSummary','bulkAddAllToCollection','_bulkDupKey','_bulkDetectDuplicates','_bulkClearDupBanner']);
+const bulk=extract(ui,['_bulkUpdatePackTracker','_bulkDraftIsSelected','bulkDraftToggleRow','bulkDraftSelectAll','_bulkDraftSelectable','_bulkCopyUids','_bulkNewScanUid','_bulkResetBottomBarButtons','_bulkFinishQueue','_bulkRefreshResultSummary','_bulkReadPurchaseCost','bulkAddAllToCollection','_bulkDupKey','_bulkDetectDuplicates','_bulkClearDupBanner']);
 let checks=0;const check=(v,m)=>{assert.ok(v,m);checks++};
 const c={window:{},Intl,Number,Set};vm.createContext(c);vm.runInContext(fees+'\n'+module,c);
 const api=c.window.CardResellSellingPlan;
@@ -75,7 +75,7 @@ try{for(const width of [320,390,844,1280]){
  check(!await page.locator('#bulkCompareSellingBtn').isVisible(),'comparison is collapsed initially');
  await page.locator('#bulkMoreActions summary').click();check(await page.locator('#bulkCompareSellingBtn').isVisible(),'comparison available under More actions');await page.locator('#bulkMoreActions summary').click();
  await page.evaluate(()=>{_bulkStartPackCost=12;bulkAddAllToCollection()});check(await page.evaluate(()=>savedRows.length===2&&savedCosts[0]===4&&savedCosts[1]===4),'save reuses upfront cost per physical copy without cost sheet');
- await page.evaluate(()=>{_bulkStartPackCost=0;bulkAddAllToCollection()});check(await page.evaluate(()=>savedCosts[0]===0&&savedCosts[1]===0),'blank upfront cost saves as zero');
+ await page.evaluate(()=>{_bulkStartPackCost=0;bulkAddAllToCollection()});check(await page.evaluate(()=>savedCosts[0]===null&&savedCosts[1]===null),'blank upfront cost remains unknown');
  await page.evaluate(()=>{_bulkProcessing=true;_bulkDraftSel=['a'];_bulkUpdatePackTracker()});check(await page.locator('#bulkPackTrackerAmt').textContent()==='$120.00','running total covers all cards even with a previous selection');check(!await page.locator('#bulkSelectedValue').isVisible(),'selection details hidden while scanning');
  await page.evaluate(()=>{_bulkResults.push({success:true,scanUid:'c',rowId:'c',marketPrice:5});_bulkUpdatePackTracker()});check(await page.locator('#bulkPackTrackerAmt').textContent()==='$125.00','running total increases as cards finish');
  await page.evaluate(()=>{_bulkResults.pop();_bulkProcessing=false;_bulkDraftSel=[];_bulkUpdatePackTracker();document.getElementById('bulkResultsList').innerHTML='<div style="flex-shrink:0;height:3000px">Test scan results</div>'});

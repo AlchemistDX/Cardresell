@@ -230,7 +230,7 @@ try {
     // Scan costs reserve the same share for unresolved copies as Collection.
     await page.evaluate(()=>{
       _bulkResults=[{success:true,scanUid:'cost-a',rowId:'cost-a',cardName:'Known scan',cardType:'pokemon',marketPrice:10,qty:2},{success:false,scanUid:'cost-b',qty:2}];
-      _bulkDraftSel=[];_bulkStartPackCost=12;_bulkPackUnitCost=null;
+      _bulkDraftSel=[];_bulkStartPackCost=12;_bulkPackUnitCost=undefined;
       document.getElementById('bulkStartPackCost').value='12';
       CardResellSellingPlan.openBulk();
     });
@@ -241,7 +241,7 @@ try {
     await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
     check(await purchaseCost.inputValue()==='6.00','a frozen allocation matches Collection when more results arrive');
     await plan.getByRole('button',{name:'Close',exact:true}).click();
-    await page.evaluate(()=>{_bulkPackUnitCost=null;_bulkStartPackCost=0;document.getElementById('bulkStartPackCost').value='';CardResellSellingPlan.openBulk();});
+    await page.evaluate(()=>{_bulkPackUnitCost=undefined;_bulkStartPackCost=0;document.getElementById('bulkStartPackCost').value='';CardResellSellingPlan.openBulk();});
     await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
     check(await purchaseCost.inputValue()==='','blank optional pack cost remains unknown in the planner');
     await plan.getByRole('button',{name:'Close',exact:true}).click();
