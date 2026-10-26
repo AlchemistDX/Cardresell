@@ -6,9 +6,10 @@ import { harness } from './_assert.mjs';
 import { billingHarness, ambiguous, UID } from './_scanBillingHarness.mjs';
 const t=harness('single-scan-review-browser');
 const root=resolve(new URL('..',import.meta.url).pathname),origin='https://single-review.test';
+const recoveryPhoto=readFileSync(resolve(root,'tests/fixtures/grade-check/front-sharp.jpg')).toString('base64');
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
 async function until(fn){for(let i=0;i<300;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error('request did not reach boundary')}
-const modes=['magic','japanese','magic-japanese','wrong-result','wrong-scan','lost','lost-auth','pending-close','account','token-account','token-timeout','body-timeout','invalid-offer','qc-cancel','qc-error','fastpath-error','compress-error','compress-failure','direct-html','direct-error-html'];
+const modes=['magic','japanese','magic-japanese','wrong-result','wrong-scan','lost','lost-auth','pending-close','account','token-account','token-timeout','body-timeout','invalid-offer','qc-cancel','qc-error','fastpath-error','compress-error','compress-failure','direct-html','direct-error-html','scan-recovery','scan-recovery-account','grade-recovery','grade-recovery-account','grade-cancel','grade-qc-cancel','grade-double-submit'];
 try {
  for(const mode of modes){
   const h=billingHarness({bucket:'free',balance:4});let hold=null,first=true;
@@ -62,6 +63,96 @@ try {
         };
       }
     },{offered,uid:UID,mode});
+    if(mode.startsWith('grade-')){
+      await page.evaluate(mode=>{
+        cancelScan();document.getElementById('scanOverlay').style.display='flex';
+        window._gradeFrontBase64='grade-front';window._gradeBackBase64='grade-back';window.gradeChecks=0;
+        window._gradePhotoCheckAll=async()=>{gradeChecks++;if(mode==='grade-qc-cancel')return new Promise(resolve=>{window.releaseGradeQC=()=>resolve(null)});return null};
+        const timer=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timer(fn,ms===90000?150:ms,...args);
+        const fetch=window.fetch;let first=true;
+        window.fetch=async(...args)=>{
+          const response=await fetch(...args);
+          if(String(args[0])==='/api/scan'){
+            const grade=Response.json({success:true,psa_estimate:8,grade_label:'Fixture estimate',card_name:'Fixture Wizard',card_type:'mtg',creditsUsed:1});
+            if(first){first=false;grade.arrayBuffer=()=>new Promise(resolve=>{window.releaseGradeBody=()=>resolve(new TextEncoder().encode(JSON.stringify({success:true,psa_estimate:8,card_name:'Fixture Wizard',card_type:'mtg',creditsUsed:1})).buffer)})}
+            return grade;
+          }
+          return response;
+        };
+        window.processing=submitGradeScan(false);
+      },mode);
+      if(mode==='grade-qc-cancel'){
+        await page.waitForFunction(()=>!!window.releaseGradeQC);
+        await page.evaluate(()=>{cancelScan();document.getElementById('scanStatus').textContent='Next screen';releaseGradeQC()});
+        await page.evaluate(()=>window.processing);
+        t.check('cancel during grade photo checks sends no scan',scans.length===0);
+        t.check('late photo checks cannot overwrite the next screen',await page.locator('#scanStatus').textContent()==='Next screen');
+        continue;
+      }
+      if(mode==='grade-double-submit'){
+        await page.waitForFunction(()=>!!window.releaseGradeBody);
+        await page.evaluate(()=>submitGradeScan(false));
+        t.check('duplicate grade submission cannot send a second request',scans.length===1&&await page.evaluate(()=>gradeChecks===1));
+        await page.evaluate(()=>releaseGradeBody());await page.evaluate(()=>window.processing);
+        t.check('original grade completes after duplicate tap',await page.locator('#scanStatus .grade-headline').textContent()==='PSA 8');
+        continue;
+      }
+      if(mode==='grade-cancel'){
+        await page.waitForFunction(()=>!!window.releaseGradeBody);
+        await page.evaluate(()=>{cancelScan();document.getElementById('scanStatus').textContent='Next screen';releaseGradeBody()});
+        await page.evaluate(()=>window.processing);
+        t.check('cancelled grade cannot replace the next screen',await page.locator('#scanStatus').textContent()==='Next screen');
+        t.check('cancelled grade cannot replace grade identity',await page.evaluate(()=>!window._deepGradeIdent));
+      }else{
+        await page.evaluate(()=>window.processing);
+        const button=page.getByRole('button',{name:'Retry same photos',exact:true});
+        t.check(mode+': timeout replaces animation with a recovery action',await button.count()===1);
+        if(process.env.CR_SHOT_DIR&&mode==='grade-recovery')await page.screenshot({path:resolve(process.env.CR_SHOT_DIR,'grade-recovery.png')});
+        if(await button.count()){
+          if(mode.endsWith('account'))await page.evaluate(()=>{_fbAuth.currentUser={uid:'other'};googleUser={uid:'other'}});
+          else await page.evaluate(()=>{googleUser.email='changed-after-grade@example.test'});
+          await button.click();await page.waitForTimeout(200);
+          t.check(mode+': recovery reuses exact grade request for the same owner',mode.endsWith('account')?scans.length===1:scans.length===2&&JSON.stringify(scans[0])===JSON.stringify(scans[1]));
+          t.check(mode+': recovery does not repeat photo checks',await page.evaluate(()=>gradeChecks===1));
+          if(!mode.endsWith('account'))t.check('recovered grade is displayed',await page.locator('#scanStatus .grade-headline').textContent()==='PSA 8'&&await page.evaluate(()=>_deepGradeIdent?.name==='Fixture Wizard'));
+          await page.evaluate(()=>releaseGradeBody());
+        }
+      }
+      t.check(mode+': no confirmation, inventory or listing writes',calls.length===0&&!writes.some(x=>/draft|user-data|collection/.test(x)),writes.join(', '));
+      continue;
+    }
+    if(mode.startsWith('scan-recovery')){
+      await page.evaluate(photo=>{
+        cancelScan();window._lastIdentifiedCard=null;
+        window.photoChecks=0;window.photoCompressions=0;window._tryOCRRescue=async()=>null;
+        window.CardResellPhotoQC.check=async()=>{photoChecks++;return {ok:true}};
+        window.CardResellFastPath.scanFile=async()=>({hit:false});
+        window.compressImage=async()=>{photoCompressions++;return 'original-photo-bytes'};
+        const timer=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timer(fn,ms===45000?150:ms,...args);
+        const fetch=window.fetch;let first=true;
+        window.fetch=async(...args)=>{
+          const response=await fetch(...args);
+          if(String(args[0])==='/api/scan'&&first){first=false;response.arrayBuffer=()=>new Promise(resolve=>{window.releaseScanBody=()=>resolve(new TextEncoder().encode('{}').buffer)})}
+          return response;
+        };
+        window.processing=processScanImage({files:[new File([Uint8Array.from(atob(photo),c=>c.charCodeAt(0))],'card.jpg',{type:'image/jpeg'})]});
+      },recoveryPhoto);
+      await page.evaluate(()=>window.processing);
+      t.check(mode+': generic new-photo retry does not compete with recovery',!await page.locator('#scanRetryBtn').isVisible());
+      t.check(mode+': a stalled scan offers recovery in the result screen',await page.getByRole('button',{name:'Retry same photo',exact:true}).count()===1);
+      if(process.env.CR_SHOT_DIR&&mode==='scan-recovery')await page.screenshot({path:resolve(process.env.CR_SHOT_DIR,'scan-recovery.png')});
+      if(await page.getByRole('button',{name:'Retry same photo',exact:true}).count()){
+        if(mode.endsWith('account'))await page.evaluate(()=>{_fbAuth.currentUser={uid:'other'};googleUser={uid:'other'}});
+        else await page.evaluate(()=>{googleUser.email='changed-after-request@example.test'});
+        await page.getByRole('button',{name:'Retry same photo',exact:true}).click();
+        await page.waitForTimeout(200);
+        t.check(mode+': original photo is neither recompressed nor rechecked',await page.evaluate(()=>photoChecks===1&&photoCompressions===1));
+        t.check(mode+': replay is scoped to its owner and exact request',mode.endsWith('account')?scans.length===1:scans.length===2&&JSON.stringify(scans[0])===JSON.stringify(scans[1]));
+        await page.evaluate(()=>window.releaseScanBody?.());
+        t.check(mode+': no confirmation, draft or inventory writes',calls.length===0&&!writes.some(x=>/draft|user-data|collection/.test(x)),writes.join(', '));
+      }
+      continue;
+    }
     if(mode==='magic'){
       const cancel=page.getByRole('button',{name:'None of these — cancel',exact:true});
       await cancel.scrollIntoViewIfNeeded();

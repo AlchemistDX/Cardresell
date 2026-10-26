@@ -1,5 +1,5 @@
-import {completionGuard} from './_complete.mjs';
-const {finish} = completionGuard('scan-request-recovery');
+import {harness} from './_assert.mjs';
+const t = harness('scan-request-recovery');
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
@@ -8,9 +8,10 @@ const source = readFileSync('js/scan-request.js', 'utf8');
 const records = new Map(); let requests = [], status = 200, offline = false, refreshes = 0, flaky = 0;
 const make = (uid='owner-a', storage=true) => {
  const user={uid,getIdToken:async()=> 'synthetic-token'};
- const sandbox={ window:{_fbAuth:{currentUser:user},loadSettingsScanCredits:async()=>{refreshes++;}}, crypto:webcrypto, TextEncoder, setTimeout:(f)=>setTimeout(f,0),
+ const sandbox={ window:{_fbAuth:{currentUser:user},loadSettingsScanCredits:async()=>{refreshes++;}}, crypto:webcrypto, TextEncoder, Response, AbortController,
+  setTimeout:(f,ms)=>setTimeout(f,ms>=45000?100:0),clearTimeout,setInterval,clearInterval,
   sessionStorage:{getItem:k=>records.get(k)??null,setItem:(k,v)=>{if(!storage)throw Error();records.set(k,v);}},
-  fetch:async(url,options)=>{requests.push(JSON.parse(options.body));if(offline)throw Error('offline');if(flaky>0){flaky--;throw Error('Load failed');}return {status,ok:status<400};}};
+  fetch:async(url,options)=>{requests.push(JSON.parse(options.body));if(offline)throw Error('offline');if(flaky>0){flaky--;throw Error('Load failed');}return Response.json({success:true},{status});}};
  vm.runInNewContext(source,sandbox);return sandbox.window;
 };
 const req=(w,body={imageBase64:'synthetic-front',mode:'identify'})=>w.cardResellScanRequest('/api/scan',{method:'POST',headers:{},body:JSON.stringify(body)});
@@ -40,4 +41,85 @@ status=202;await assert.rejects(()=>req(make('pending-check')),/still processing
 const refreshFails=make('refresh-fails');refreshFails.loadSettingsScanCredits=()=>{throw Error('offline');};assert.equal((await req(refreshFails)).status,200);
 console.log('PASS scan recovery: concurrent/reloaded retries, pending/network failures, account isolation, storage failure and all shipped callers');
 
-finish(1, 0); // one end-to-end assertion sequence; exceptions abort before this point
+t.check('existing idempotency, billing refresh and account isolation assertions',true);
+
+// Exercise the real transport with held auth/network/body promises. The outer
+// timeout belongs to the test: returning a response before its body is readable
+// is not a successful scan, and leaving a pending promise is a failed check.
+const delay = ms => new Promise(r=>setTimeout(r,ms));
+const settle = p => Promise.race([p.then(value=>({value}),error=>({error})),delay(160).then(()=>({hung:true}))]);
+function transport() {
+ const state={calls:[],refreshes:0,stored:new Map(),timers:new Set(),intervals:new Set(),deadlines:[]};
+ state.user={uid:'transport-owner',getIdToken:async()=> 'transport-token'};
+ state.fetch=async()=>Response.json({success:true,card_name:'Fixture Wizard'},{headers:{'x-fixture':'preserved'}});
+ const scope={window:{_fbAuth:{currentUser:state.user},loadSettingsScanCredits:()=>{state.refreshes++;}},
+  crypto:webcrypto,TextEncoder,Response,AbortController,
+  sessionStorage:{getItem:k=>state.stored.get(k)??null,setItem:(k,v)=>state.stored.set(k,v)},
+  setTimeout:(fn,ms)=>{if(ms>=45000)state.deadlines.push(ms);const id=setTimeout(()=>{state.timers.delete(id);fn()},ms>=45000?45:1);state.timers.add(id);return id},
+  clearTimeout:id=>{clearTimeout(id);state.timers.delete(id)},
+  setInterval:fn=>{const id=setInterval(fn,2);state.intervals.add(id);return id},
+  clearInterval:id=>{clearInterval(id);state.intervals.delete(id)},
+  fetch:async(u,o)=>{state.calls.push(o);return state.fetch(u,o)}};
+ vm.runInNewContext(source,scope);state.window=scope.window;
+ state.request=(options={})=>scope.window.cardResellScanRequest('/api/scan',{method:'POST',body:JSON.stringify({mode:'identify',imageBase64:'same-photo'}),...options});
+ state.clean=()=>{for(const id of state.timers)clearTimeout(id);for(const id of state.intervals)clearInterval(id)};
+ return state;
+}
+for(const boundary of ['token','headers','body'])await t.section('stalled '+boundary,async()=>{
+ const s=transport();let release;
+ try {
+  if(boundary==='token')s.user.getIdToken=()=>new Promise(r=>{release=r});
+  if(boundary==='headers')s.fetch=()=>new Promise(r=>{release=r});
+  if(boundary==='body')s.fetch=async()=>new Response(new ReadableStream({start(c){release=()=>{c.enqueue(new TextEncoder().encode('{"success":true}'));c.close()}}}));
+  const result=await settle(s.request());
+  t.check(boundary+': deadline returns a recoverable error',!!result.error&&/same photo|same request/i.test(result.error.message));
+  t.check(boundary+': no premature credit refresh',s.refreshes===0);
+  t.check(boundary+': transport does not automatically repeat uncertain work',s.calls.length===(boundary==='token'?0:1));
+  if(s.calls[0])t.check(boundary+': timed-out request is aborted',s.calls[0].signal?.aborted===true);
+  release?.(boundary==='token'?'late-token':Response.json({success:true}));await delay(8);
+  t.check(boundary+': late continuation cannot send or complete a scan',s.refreshes===0&&s.calls.length===(boundary==='token'?0:1));
+  s.user.getIdToken=async()=> 'transport-token';s.fetch=async()=>Response.json({success:true});
+  const retry=await settle(s.request());
+  t.check(boundary+': retry completes',retry.value?.status===200);
+  if(boundary!=='token')t.check(boundary+': retry keeps original operation ID',JSON.parse(s.calls[0].body).operation_id===JSON.parse(s.calls.at(-1).body).operation_id);
+  t.check(boundary+': timers and account watchers are released',s.timers.size===0&&s.intervals.size===0);
+ }finally{s.clean()}
+});
+for(const boundary of ['before','token','body','retry'])await t.section('cancel '+boundary,async()=>{
+ const s=transport(),controller=new AbortController();let release;
+ try {
+  if(boundary==='before')controller.abort();
+  if(boundary==='token')s.user.getIdToken=()=>new Promise(r=>{release=r});
+  if(boundary==='body')s.fetch=async()=>new Response(new ReadableStream({start(c){release=()=>{c.enqueue(new TextEncoder().encode('{}'));c.close()}}}));
+  if(boundary==='retry')s.fetch=async()=>{controller.abort();throw Error('network interrupted')};
+  const request=s.request({signal:controller.signal});
+  if(boundary==='token'||boundary==='body'){await delay(8);controller.abort()}
+  const result=await settle(request);
+  t.check(boundary+': cancellation settles without a scan result',!!result.error&&!result.hung);
+  release?.('late-token');await delay(8);
+  t.check(boundary+': cancel never retries or sends a late request',s.calls.length===(['before','token'].includes(boundary)?0:1));
+  t.check(boundary+': no success balance refresh',s.refreshes===0);
+  t.check(boundary+': cancellation cleans timers',s.timers.size===0&&s.intervals.size===0);
+ }finally{s.clean()}
+});
+await t.section('account changes while response body stalls',async()=>{
+ const s=transport();let release;
+ try {
+  s.fetch=async()=>new Response(new ReadableStream({start(c){release=()=>{c.enqueue(new TextEncoder().encode('{"card_name":"Private result"}'));c.close()}}}));
+  const request=s.request();await delay(8);s.window._fbAuth.currentUser={uid:'next-owner'};
+  const result=await settle(request);
+  t.check('account change rejects the previous seller response',/Account changed/.test(result.error?.message||''));
+  release?.();await delay(8);
+  t.check('late previous-owner response has no success side effects',s.calls.length===1&&s.refreshes===0);
+  t.check('account change releases timers and watchers',s.timers.size===0&&s.intervals.size===0);
+ }finally{s.clean()}
+});
+await t.section('complete responses and grade allowance',async()=>{
+ const s=transport();try {
+  const result=await s.request({body:JSON.stringify({mode:'grade',imageBase64:'front',backBase64:'back'})});
+  t.check('complete response keeps status, headers and JSON',result.status===200&&result.headers.get('x-fixture')==='preserved'&&(await result.json()).card_name==='Fixture Wizard');
+  t.check('grading receives a bounded longer deadline',s.deadlines[0]>45000&&s.deadlines[0]<=120000);
+  t.check('one success refresh and no surviving timers',s.refreshes===1&&s.timers.size===0&&s.intervals.size===0);
+ }finally{s.clean()}
+});
+t.done();

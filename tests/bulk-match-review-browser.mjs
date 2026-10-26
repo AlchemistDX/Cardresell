@@ -36,12 +36,12 @@ try {
    }
    const offered=(await h.scan(stub)).payload, initial=await balance();
    const ctx=await browser.newContext({viewport:mode==='magic'?{width:844,height:390}:{width:390,height:844},serviceWorkers:'block'});
-   let calls=[],writes=[],hold,priceHold,scanHold,drop=mode.startsWith('lost-'),malformed=mode==='malformed',priceRequests=0,scanCalls=0;
+   let calls=[],writes=[],hold,priceHold,scanHold,drop=mode.startsWith('lost-'),malformed=mode==='malformed',priceRequests=0,scanCalls=0,priceUrls=[];
    await ctx.route('**/*',async route=>{
     const req=route.request(),u=new URL(req.url());
     const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
     if(['api.pokemontcg.io','api.scryfall.com'].includes(u.hostname)) {
-     priceRequests++;if(mode==='late-price')await new Promise(r=>{priceHold=r});
+     priceUrls.push(u.href);priceRequests++;if(mode==='late-price')await new Promise(r=>{priceHold=r});
      if(u.hostname==='api.scryfall.com')return json({data:[{name:'Fixture Wizard',set_name:'set6',set:'set6',collector_number:'58',finishes:['nonfoil','foil'],prices:{usd:'7',usd_foil:'9'}}]});
      const cards=mode==='wrong-price'?[catalogue[0]]:catalogue;
      return json({data:u.pathname.split('/').length>3?(mode==='wrong-price'?cards[0]:cards.find(c=>u.pathname.endsWith('/'+c.id))):cards});
@@ -97,7 +97,7 @@ try {
      continue;
     }
     t.check(prefix+': ambiguous top guess never becomes an identity',await page.evaluate(()=>!reviewRow.success&&!reviewRow.cardName&&reviewRow.providerNeedsReview&&_bulkDraftSelectable().length===0&&_bulkDraftUnits(reviewRow).length===0));
-    t.check(prefix+': no price search for pending candidates',priceRequests===0);
+    t.check(prefix+': no price search for pending candidates',priceRequests===0,priceUrls.join(' | '));
     await page.evaluate(()=>bulkAddAllToCollection());
     t.check(prefix+': pending choices cannot save or close out recovery',await page.evaluate(()=>!_bulkSaved&&loadPortData().length===0&&_bulkResults[0]===reviewRow));
     t.check(prefix+': summary distinguishes review from misses',(await page.locator('#bulkSummaryLine').textContent()).includes('2 need match review'));
