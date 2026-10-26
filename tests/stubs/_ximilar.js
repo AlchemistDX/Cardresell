@@ -1,9 +1,10 @@
 /* Test stub. globalThis.__STUB.ximilar controls identify outcome. */
-export async function identifyWithXimilar() {
-  const s = (globalThis.__STUB || {}).ximilar || {};
+export async function identifyWithXimilar(image, mime, token, kind) {
+  const configured = (globalThis.__STUB || {}).ximilar || {};
+  const s = configured[kind] || configured;
   globalThis.__STUB.ximilarCalls = (globalThis.__STUB.ximilarCalls || 0) + 1;
   if (s.providerError) return { ok: false, reason: s.providerError };
-  if (s.miss) return { ok: false, reason: s.miss };
+  if (s.miss) return { ok: false, reason: s.miss, gameHint: s.gameHint || '' };
   return { ok: true, cardInfo: JSON.parse(JSON.stringify(s.cardInfo || {})), records: s.records || [],
     needsPicker: s.needsPicker, candidates: s.candidates && JSON.parse(JSON.stringify(s.candidates)) };
 }

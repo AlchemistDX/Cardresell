@@ -108,6 +108,10 @@ for (const a of assets) {
   }
 }
 
+const recoverySource=readFileSync(new URL('../js/scan-text-recovery.js',import.meta.url));
+const recoveryAsset=readFileSync(new URL('../index.html',import.meta.url),'utf8').match(/src="\/(js\/scan-text-recovery\.[a-f0-9]+\.js)"/);
+check('text recovery asset matches its maintained source',!!recoveryAsset && recoverySource.equals(readFileSync(new URL('../'+recoveryAsset[1],import.meta.url))));
+
 // ── The core bundle specifically: exactly one, and it is live ──────────────
 // Retired bundles stay on disk during a rename transition, so "exactly one
 // referenced core" is the property that keeps the retired copy from being

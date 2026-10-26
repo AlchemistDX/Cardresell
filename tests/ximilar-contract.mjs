@@ -38,12 +38,22 @@ try {
     const c = match({ subcategory: game }); const r = await run([c]);
     assert.equal(r.ok, false); assert.equal(r.reason, 'unsupported_card_type');
   });
-  for (const [game, expected] of [['Pokémon Japanese', 'pokemon'], ['MTG', 'mtg'], ['Yu-Gi-Oh!', 'yugioh'], ['Disney Lorcana', 'lorcana'], ['One Piece', 'onepiece']]) {
+  for (const [game, expected] of [['Pokémon Japanese', 'pokemon'], ['MTG', 'mtg'], ['Yu-Gi-Oh!', 'yugioh'], ['YuGiOh!', 'yugioh'], ['Disney Lorcana', 'lorcana'], ['One Piece', 'onepiece'], ['OnePiece', 'onepiece']]) {
     await test(`game alias ${game}`, async () => assert.equal((await run([match({ subcategory: game })])).cardInfo.card_type, expected));
   }
   await test('object tag remains a supported fallback', async () => {
     const c = match({ subcategory: undefined }); c._tags = { Subcategory: [{ name: 'Magic The Gathering' }] };
     assert.equal((await run([c])).cardInfo.card_type, 'mtg');
+  });
+  for (const reason of ['no_match','low_confidence']) await test(`visual game survives ${reason} without identity`, async () => {
+    const c=match();c._tags={Subcategory:[{name:'Magic The Gathering'}]};
+    if(reason==='no_match')c._identification={};else c._identification.distances=[.8];
+    const r=await run([c]);assert.equal(r.ok,false);assert.equal(r.reason,reason);
+    assert.equal(r.gameHint,'mtg');assert.equal(r.cardInfo,undefined);
+  });
+  await test('rejected nearest match never becomes a game hint',async()=>{
+    const c=match();c._identification.distances=[.8];
+    assert.equal((await run([c])).gameHint,'');
   });
   await test('slab label first cannot impersonate card', async () => {
     const label = card({ name: 'Slab Label', _identification: { best_match: { name: 'LABEL ONLY' }, distances: [0] } });

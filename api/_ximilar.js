@@ -97,9 +97,14 @@ async function identify(imageBase64, apiToken, kind, observe) {
   const obj = identifiedCards[0] || cards[0];
   if (!obj) return { ok: false, reason: 'no_card_detected' };
 
+  // A visual game tag can route free text recovery after a miss. It is not
+  // a card identity and must never be taken from a rejected nearest match.
+  const visualGame = mapSubcategoryToCardType(obj._tags?.Subcategory?.[0]?.name, 'tcg');
+  const gameHint = visualGame || (String(obj._tags?.Category?.[0]?.name || '').toLowerCase().includes('sport') ? 'sports' : '');
+
   const ident = obj._identification || {};
   const best  = ident.best_match;
-  if (!best?.name) return { ok: false, reason: 'no_match' };
+  if (!best?.name) return { ok: false, reason: 'no_match', gameHint };
   if (typeof best.name !== 'string' || !best.name.trim()) return { ok: false, reason: 'invalid_response' };
 
   const alternatives = Array.isArray(ident.alternatives) ? ident.alternatives : [];
@@ -197,7 +202,7 @@ async function identify(imageBase64, apiToken, kind, observe) {
   }
 
   // Too uncertain — preserve the miss instead of presenting a weak guess.
-  return { ok: false, reason: 'low_confidence', distance: dBest };
+  return { ok: false, reason: 'low_confidence', distance: dBest, gameHint };
 }
 
 
@@ -206,9 +211,9 @@ function mapSubcategoryToCardType(subCat, kind) {
   const s = String(subCat || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (s.includes('pokemon'))     return 'pokemon';
   if (s.includes('magic') || s === 'mtg') return 'mtg';
-  if (s.includes('yu-gi'))       return 'yugioh';
+  if (s.replace(/[^a-z]/g, '').includes('yugioh')) return 'yugioh';
   if (s.includes('lorcana'))     return 'lorcana';
-  if (s.includes('one piece'))   return 'onepiece';
+  if (s.replace(/[^a-z]/g, '').includes('onepiece')) return 'onepiece';
   return null;
 }
 

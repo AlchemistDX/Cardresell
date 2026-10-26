@@ -112,6 +112,9 @@
     const savedSearch = searches.get(row);
     if (savedSearch?.owner === s.owner && savedSearch?.file === s.file) {
       game.value=savedSearch.game; name.value=savedSearch.name; number.value=savedSearch.number;
+    } else {
+      const read=window.CardResellScanTextRecovery?.suggestion(row);
+      if(read && ['mtg','pokemon'].includes(read.game)) {game.value=read.game;name.value=read.name;}
     }
     name.placeholder = game.value === 'mtg' ? 'e.g. Elite Interceptor' : 'e.g. Plusle';
     const remember = () => searches.set(row,{owner:s.owner,file:s.file,game:game.value,name:name.value,number:number.value});

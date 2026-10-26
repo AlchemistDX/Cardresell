@@ -1219,6 +1219,7 @@ export default async function handler(req, res) {
     // fall back to sport_id if the first attempt returns no_match/no_card.
     const t0 = Date.now();
     let xim = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'tcg');
+    const recoveryGame = xim.gameHint || '';
     // 2026-10-10 cost: only retry as sports on no_match. no_card_detected
     // means the shared card detector found no card object at all (both
     // endpoints report the same "Top Category: Card" detector), so a second
@@ -1268,6 +1269,8 @@ export default async function handler(req, res) {
         grounded_id: null,
         hp: '',
         card_type: '',
+        // Recovery routing only; a missed identity stays empty and refunded.
+        detected_game: recoveryGame || xim.gameHint || '',
         is_japanese: false,
         jp_name: '',
         rarity: '',

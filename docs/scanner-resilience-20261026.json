@@ -1,0 +1,137 @@
+{
+  "date": "2026-10-26",
+  "scope": "Scanner recovery and exact-printing review; isolated providers/auth, real Chromium and private Redis. No live identification benchmark.",
+  "base_commit": "f16b6787f96f6fb1c267b2e79450283fcb001d25",
+  "totals": {
+    "suites": 21,
+    "passed": 2487,
+    "failed": 0
+  },
+  "suites": [
+    {
+      "suite": "tests/ximilar-contract.mjs",
+      "passed": 36,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scan-recovery-routing.mjs",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scan-text-recovery-browser.mjs",
+      "passed": 62,
+      "failed": 0
+    },
+    {
+      "suite": "tests/bulk-text-rescue.mjs",
+      "passed": 111,
+      "failed": 0
+    },
+    {
+      "suite": "tests/bulk-text-rescue-browser.mjs",
+      "passed": 43,
+      "failed": 0
+    },
+    {
+      "suite": "tests/bulk-lookup-browser.mjs",
+      "passed": 100,
+      "failed": 0
+    },
+    {
+      "suite": "tests/single-scan-review-browser.mjs",
+      "passed": 133,
+      "failed": 0
+    },
+    {
+      "suite": "tests/bulk-match-review-browser.mjs",
+      "passed": 446,
+      "failed": 0
+    },
+    {
+      "suite": "tests/id-confirmation-atomic.mjs",
+      "passed": 366,
+      "failed": 0
+    },
+    {
+      "suite": "tests/membership-scan-intent.mjs",
+      "passed": 70,
+      "failed": 0
+    },
+    {
+      "suite": "tests/binder-scan-browser.mjs",
+      "passed": 184,
+      "failed": 0
+    },
+    {
+      "suite": "tests/binder-interaction-browser.mjs",
+      "passed": 131,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scanner-audit-browser.mjs",
+      "passed": 38,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scanner-catalog-deadlines.mjs",
+      "passed": 16,
+      "failed": 0
+    },
+    {
+      "suite": "tests/bulk-recovery-browser.mjs",
+      "passed": 135,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scan-finish-browser.mjs",
+      "passed": 223,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scan-request-recovery.mjs",
+      "passed": 45,
+      "failed": 0
+    },
+    {
+      "suite": "tests/scan-miss-search-browser.mjs",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "suite": "tests/test-scan.mjs",
+      "passed": 40,
+      "failed": 0
+    },
+    {
+      "suite": "tests/asset-fingerprints.mjs",
+      "passed": 277,
+      "failed": 0
+    },
+    {
+      "suite": "tests/test-registry.mjs",
+      "passed": 12,
+      "failed": 0
+    }
+  ],
+  "assets": [
+    {
+      "path": "js/scan-text-recovery.08af34f0.js",
+      "sha256": "08af34f032fecf1409258a1eb3b134cb32f812160df78246b720e3e7b242ba3a"
+    },
+    {
+      "path": "js/core.70bb6d03.js",
+      "sha256": "70bb6d03ee77d47965f3d5cf438d47228c77a7617b809c76517f84f64633c55e"
+    },
+    {
+      "path": "js/ui.a0580e45.js",
+      "sha256": "a0580e45a7b85abf23e9816c2e8af5c39bdb69db53f8f5b18680a0532ab5953d"
+    },
+    {
+      "path": "js/bulk-lookup.7e9696a9.js",
+      "sha256": "7e9696a9171c05205be0a0d3789795092c3f11473c47372f5814d2de5c7eb0ff"
+    }
+  ],
+  "local_build_inspection": "node tools/membership-release-inspect.mjs: exit 0; ordinary build, no operator flags",
+  "native_text_evaluation": "scanner-text-calibration-20261026.json"
+}

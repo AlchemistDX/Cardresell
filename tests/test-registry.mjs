@@ -70,6 +70,8 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'scan-text-recovery-browser.mjs': 'Required scanner recovery release gate: CR_CHROMIUM=<binary> CR_TESSERACT=<binary> node tests/scan-text-recovery-browser.mjs. Shipped single/binder OCR review, all supported game routes, cancellation, immutable identity and native OCR of synthetic crop fixtures; no paid scans.',
+  'scan-recovery-routing.mjs': 'Required scanner routing release gate: node tests/scan-recovery-routing.mjs. Actual scan handler and isolated Redis verify visual game hints survive refunded misses without new identities or additional paid vision calls.',
   'core-values-browser.mjs': 'Required product-clarity gate: CR_CHROMIUM=<binary> node tests/core-values-browser.mjs. Shipped responsive UI, stale marketplace-link isolation, truthful feature labels and discoverable recovery; external/API traffic blocked.',
   'bulk-workflow-browser.mjs': 'Required scan-to-inventory workflow gate: CR_CHROMIUM=<binary> node tests/bulk-workflow-browser.mjs. Shipped mobile and desktop UI, real browser storage, partial saves, cost allocation, navigation and stale-account protection; synthetic post-scan rows.',
   'bulk-match-review-browser.mjs': 'Required bulk confirmation release gate: CR_CHROMIUM=<binary> node tests/bulk-match-review-browser.mjs. Shipped mobile app, actual scan/confirmation handlers and private Redis in legacy and membership modes; synthetic auth/provider only. Covers exact choice, lost-response replay, stale sessions and downstream save/draft eligibility.',
