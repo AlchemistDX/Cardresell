@@ -1,0 +1,94 @@
+{
+  "date": "2026-10-26",
+  "baseCommit": "cd43ce2334125a43cf7dfc50814502a135ae985b",
+  "releaseGate": {
+    "slots": 167,
+    "exit": 0,
+    "complete": true,
+    "sha256": "49d5013c8aa7f9dd9d9d4db317737d2bdd1565cb1be65860e0b6fb257bd67ade",
+    "executed": 165,
+    "skipped": [
+      "Managed-store mutation tests (no live opt-in)",
+      "Production endpoint mutation smoke (--local)"
+    ]
+  },
+  "additionalSuites": [
+    {
+      "suite": "bulk-match-review-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 47.57
+    },
+    {
+      "suite": "billing-release-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 13.56
+    },
+    {
+      "suite": "grade-upload-single-draft-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 14.75,
+      "completionEvidence": "Both viewport completion lines; assertion-based legacy suite exits 0."
+    },
+    {
+      "suite": "bulk-lookup-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 14.27
+    },
+    {
+      "suite": "bulk-workflow-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 17.15
+    },
+    {
+      "suite": "binder-scan-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 39.72
+    },
+    {
+      "suite": "binder-interaction-browser",
+      "exit": 0,
+      "complete": true,
+      "seconds": 26.15
+    },
+    {
+      "suite": "id-confirmation-atomic",
+      "exit": 0,
+      "complete": true,
+      "seconds": 14.14
+    },
+    {
+      "suite": "membership-scan-intent",
+      "exit": 0,
+      "complete": true,
+      "seconds": 0.73
+    }
+  ],
+  "targetedChecks": {
+    "scan-request-recovery": 45,
+    "single-scan-review-browser": 133,
+    "bulk-match-review-browser": 446
+  },
+  "assets": [
+    {
+      "path": "/js/scan-request.f3d8ec3e.js",
+      "sha256": "f3d8ec3e2e342235c16450433b8d06ec65b7278655ec2a5b9b2b97ab39303b5d",
+      "bytes": 5437
+    },
+    {
+      "path": "/js/core.1315d3d2.js",
+      "sha256": "1315d3d262b7edb1505cb622476b1c37450179c8f1edebe99dec7e53f0abbe25",
+      "bytes": 1531210
+    }
+  ],
+  "limits": [
+    "Provider and auth boundaries are fixtures; no paid scans.",
+    "Original labeled photos and native iPhone testing remain necessary.",
+    "No new sold-data access or marketplace execution."
+  ]
+}
