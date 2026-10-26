@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import {parse} from 'acorn';
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const src=fs.readFileSync(new URL('../'+html.match(/src="(\/js\/ui\.[a-f0-9]{8}\.js)"/)[1].slice(1),import.meta.url),'utf8');
 const start=src.indexOf('const _BULK_TEXT_RESCUE'),end=src.indexOf('window._bulkTextRescueForTest',start);
@@ -74,6 +75,11 @@ for(const type of ['pokemon','zero','uncertain','recovered']){
  check(type+' cannot supply a trusted Magic set',await h.api.run(),0);check(type+' does not load worker',h.log.loads,0);
  if(type==='zero') {Object.assign(first,seed({manualIdentity:true}));check('seller confirmation unlocks zero-match page',await h.api.run(),1)}
 }
+for(const extra of [{scanGameHint:'pokemon'},{providerNeedsReview:true}]){
+ const h=harness({results:[seed(),{...miss(),...extra}]});
+ check('other games and pending choices do not enter Magic set recovery',await h.api.run(),0);
+ check('excluded row does not load OCR',h.log.loads,0);
+}
 // The set supplied later must not be blocked by a miss against an earlier set.
 {
  const h=harness({scry:(_read,set)=>set==='new'?hit('Rubble Rouser',{set:'new'}):null});await h.api.run();
@@ -128,7 +134,20 @@ for(const option of [{loadFailure:true},{loadPending:true,timeouts:{15000:20}},{
  h.results.push(seed({setCode:'new',manualIdentity:true}));h.api.run();gate.resolve();check('new set during active job is processed afterward',await run,1);
  check('new set never starts overlapping workers',[h.log.workers,h.log.terminated],[2,2]);
 }
-check('batch completion still triggers recovery',/_bulkDraftSyncSelectionUI\(\);\n  \/\/ 2026-10-11: printed-name rescue[^\n]*\n  try \{ _bulkTextRescueMisses\(\)\.catch/.test(src));
+{
+ const node=parse(src,{ecmaVersion:'latest'}).body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='_bulkFinishQueue');
+ assert(node,'shipped batch completion function');
+ for(const stopped of [false,true]){
+  const gate=deferred(),calls=[];
+  const window={_bulkResults:[],_bulkQueue:[],_fbAuth:{currentUser:{uid:'fixture'}},CardResellScanTextRecovery:{recoverBatch:()=>calls.push('general')}};
+  const context={window,document:{getElementById:()=>({style:{}})},_bulkResetBottomBarButtons(){},_bulkRefreshResultSummary(){},_bulkDetectDuplicates(){},_bulkDraftSyncSelectionUI(){},_bulkTextRescueMisses:()=>{calls.push('same-set');return gate.promise}};
+  vm.createContext(context);vm.runInContext(src.slice(node.start,node.end),context);context._bulkFinishQueue(2);
+  check('batch completion starts same-set recovery',calls,['same-set']);
+  if(stopped)window._bulkRecoveryStopEpoch=1;
+  gate.resolve();await new Promise(r=>setImmediate(r));
+  check(stopped?'Stop prevents the next recovery stage':'completed recovery attempts general names',calls,stopped?['same-set']:['same-set','general']);
+ }
+}
 check('row clearly labels printed-name recovery',src.includes('Matched from the printed name. Please check it.'));
 check('seller rename clears recovery note',/result\.cardName = trimmed;[\s\S]{0,200}result\.textRescue = false;/.test(src));
 console.log(`bulk-text-rescue: ${checks} passed, 0 failed -- SUITE COMPLETE, exit=0`);

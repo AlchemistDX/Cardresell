@@ -1,0 +1,175 @@
+{
+  "date": "2026-10-26",
+  "scope": "Native Tesseract text on shipped browser crops from one saved Pokémon binder photo. No live Ximilar or catalogue calls; does not measure identity, printing, finish or general recognition accuracy.",
+  "source": {
+    "path": "binder/real_IMG_4652_page.jpg",
+    "sha256": "f6a995fb07479432d86d79997b91d2bf74eec5e730761dea9d90d60565c89952"
+  },
+  "assets": [
+    "/js/scan-text-recovery.08af34f0.js",
+    "/js/core.70bb6d03.js",
+    "/js/ui.a0580e45.js",
+    "/js/binder.b6547bf7.js"
+  ],
+  "total": 9,
+  "exactNamesVisibleToOCR": 5,
+  "rawSuggestionsContainingName": 5,
+  "nativeOCRCalls": 36,
+  "scanRequests": 0,
+  "browserErrors": [],
+  "rows": [
+    {
+      "pocket": 1,
+      "expectedName": "Scovillain",
+      "exactNameVisibleToOCR": false,
+      "rawSuggestionContainsName": false,
+      "suggestion": {
+        "name": "DP Scovillai ZN0",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "a ne S te j a q\nSe aaa :\nOse et ks\nTAP egrAcel, = si\nSe 4 ss ;  viliair A\n| DP Scovillai ZN0@\natl «\n. = 7\n\n“s ey _\n",
+        "i oo ey ey ere ‘\nTe, f , a ;\nv wee)\n4 = i * is \\ 4\n, * 9 aN *\neS See\n",
+        "v ’\n4 ~ - » F * a\n[ & < ; ra |\n",
+        "—_—_?” ’ -\neee Ad 4\nae od\n: = a\n“#0 6\n"
+      ]
+    },
+    {
+      "pocket": 2,
+      "expectedName": "Relicanth",
+      "exactNameVisibleToOCR": true,
+      "rawSuggestionContainsName": true,
+      "suggestion": {
+        "name": "p5— Relicanth",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "p5—/Relicanth\n> ee\n",
+        "Aire Relicanth ~=~—4#, wi\nWem =|\n",
+        "Cty I 4 7, :\n| | Ae Ge Ve\na cs Se * my\nes </ a ™ \"2 hy vd a |\n~~ - et +\nsee \" Sane 3f ;\nye ’ “> ~~ as st\n",
+        ":\n; willy atin ee Se\n—. ~e\ngy @ tole arytecn ets wy - _ |\n— ear , en\n: ee _ ——\n7 Ss Let ee rr ome wr zZ* ; y\n"
+      ]
+    },
+    {
+      "pocket": 3,
+      "expectedName": "Carracosta",
+      "exactNameVisibleToOCR": true,
+      "rawSuggestionContainsName": true,
+      "suggestion": {
+        "name": "ee Carracostal 160.0",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "aE Es a\n| ee Carracostal 160.0\nf kan - Sage Fg\n: Oe eae -\nCl > a ee aI\n",
+        "‘@ ON ee Sar Ae\n4 bn “ph\ni , oy rs\n\nyi ae\n= 2 Ff al\n",
+        "; ( . ,\n\nay » (\n= £ j a\n[Say a oe\n",
+        "et SETS ; OE\nte |\n\"OD 1. l\n‘4\n:\nal }\n"
+      ]
+    },
+    {
+      "pocket": 4,
+      "expectedName": "Heliolisk",
+      "exactNameVisibleToOCR": false,
+      "rawSuggestionContainsName": false,
+      "suggestion": {
+        "name": "a Evoives from Heboptie A a",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "=o : , tere:\n- > am Se\n\\ 5 pay “eholisk s \" »4)\n: : ’ cv :\na Evoives from Heboptie = A a\n: — 3 :\nTn) ~ bea SS) ’\n4 - > N° afr “3\n: F- Pu ve = & 4\n",
+        "ey ~ ee LS TS\naes: 3\n-_ > |\n=< Vite. 4% Xv &\n*, ye a\nPs WV yN\n. Oe 4 > C\n- ‘ hod\n\ni> Se N Jig\n- cay <> ee ee P|\n",
+        "WA2A-74\na _ = |\n",
+        "“ ” isva ss\nQ Ve ae\nows 7 Sa, -\nae Bie. +f. Po.\ni ~ ee, 73 ae ae. ze eats\nWV Tes BAY? | tr2Er) | opemmen / womreny [TEED\nMAYS GIL Ouse) oun eas; UOay seTeF aus OF *# 651/050 4 +e é\nDWE? YIHON | VOU “Apayrudouddy “uc MPO Y\n948u) Paunsean aenwyn) taseo ere. ons ——\n"
+      ]
+    },
+    {
+      "pocket": 5,
+      "expectedName": "Plusle",
+      "exactNameVisibleToOCR": true,
+      "rawSuggestionContainsName": true,
+      "suggestion": {
+        "name": "ae Plusle",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "—e 5 ee ie athe s bres\nRT\n$ — - :\nae Plusle w.30 ; — | Uw Oe v\n* BASIC —— i a\na\" o> fae\n",
+        "| x. ov }\n",
+        "fo . nM 5\n! race!\n",
+        "%. a: wal ia a\n.. » 2 ot = on\nbs ie “i . wie as 27 os i re\n>; - om\n¥ & -* a. wy aed - A\nio Heo —T > “4\n"
+      ]
+    },
+    {
+      "pocket": 6,
+      "expectedName": "Dubwool",
+      "exactNameVisibleToOCR": false,
+      "rawSuggestionContainsName": false,
+      "suggestion": {
+        "name": "Dp BveWesfromWiooloo 4",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "( ze ‘\n|\n<> Dp BveWesfromWiooloo 4 .\n3 —e 7\n",
+        "v—=——~@e 7, ™\nOR 2 ee\n",
+        "Pe Ue\nwo Lae\n",
+        ": = i Se ——————\nltt y.\n=\n- —\n\\\n\"UO 300) 95 NEA pUsWOW JY) BDUNDG 04 TTS * 65/771 F) ne\nBLO, “PuHqodure 4 & 04 1350- Bungawos yam ce\nLethon toe Aen Sle\nPua nod pur ‘oom ASuuds 67) wou jadse>€ ara,\n"
+      ]
+    },
+    {
+      "pocket": 7,
+      "expectedName": "Dwebble",
+      "exactNameVisibleToOCR": true,
+      "rawSuggestionContainsName": true,
+      "suggestion": {
+        "name": "P Dwebble",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        ": P= Dwebble  60@\ni |\n",
+        "SS  —  _ |e\neee ee a\n| Pm. = = Dy\naK\nEM . SR » ay\n‘ —S : . : y A xf\n- YT Se\n",
+        "\"a wy . a ’\n2 \\ . ° ‘eB Ly\nee oc wn ainy ZO oS 2\nae a VY SE |) a\n_ Se\" 2B AVE \"\n” .. — yA 14 = ;\n",
+        "~ GAD TI\n"
+      ]
+    },
+    {
+      "pocket": 8,
+      "expectedName": "Venipede",
+      "exactNameVisibleToOCR": true,
+      "rawSuggestionContainsName": true,
+      "suggestion": {
+        "name": "Venipede",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        ". BASIC Venipede w80 fey .\n\ni) TREN |\n; _ oe : TAN Case, eS AN .\n\nf vn ete SN Gc / 52 on eae\n",
+        "% we © eee — ee AES OB ys eget, oe : :\nie avis nc Nee Te\n; ‘a See Paves Gi AY te '% i= $9 4a = 7\nAe fhe Se VR ie 8 . cS)\n' : ane _ Ms ube. ~ “~ eee aS hs\n; Ae 9, tel Po et CO Oe\ni Be ny $5 % , See Rm\nSes poe / perepers,\n4 mim seets ‘ “ ; ==}\nPik) BH, OP i EF oe feek\n",
+        "neni ts eee) A OO IG.\nBE ats ‘N Py BEF pkey we\nNeerssbense BR\n, 4 re Fee '.4 7 } <3 Sea —< :\n; aM i) C is ‘ Ys 3 aint es : = \":\nj CO ee Wee)\naX wn Lite é * ae =~ |p\n: Vk : : Kaan.)\nSB in\n",
+        "SS\na \" .\nsar pth; iny © poow OM) OY) Lay Hng 0 @0aT6 qo\non els epee ave opoda7 77s put opodhua, - et ay ag\noe\n——————\n—_— Zea wana, oe — Te a> aun\n"
+      ]
+    },
+    {
+      "pocket": 9,
+      "expectedName": "Froslass",
+      "exactNameVisibleToOCR": false,
+      "rawSuggestionContainsName": false,
+      "suggestion": {
+        "name": "Frosiaal oe",
+        "game": "pokemon",
+        "catalogueMatched": false
+      },
+      "reads": [
+        "‘ Frosiaal oe > 90 6 |\n",
+        "” ) <9 <el@ oe y .\n\n, n { 7 .\n“ie — 4 :\n\n« * Y : 8\nfea {x : | |\neg 2 Wy\n\n4 \\ . re g .\ni 4 * | <i\nie em - ||\n",
+        "ty . (By ® 4 » ”~ 2 i\n\ni fie » aie\n| ee\n\nal\n",
+        "aE a\n"
+      ]
+    }
+  ]
+}
