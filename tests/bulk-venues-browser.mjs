@@ -53,6 +53,7 @@ try{for(const width of [320,390,1280]){
  await page.evaluate(()=>{closeVenuePicker();selectedCard={name:'Pikachu',game:'pokemon'};activeGame='pokemon';window.getEffectivePrice=()=>1;calc();});
  ok(await page.locator('article.plat-card[data-bulk-venue]').count()===3,'three quote-only routes render in buylist section');
  ok(!(await page.locator('.payout-rank-row').allTextContents()).some(t=>/Full Grip|Meta TCG|Card Conduit/.test(t)),'no wholesale route is ranked as retail net');
+ await page.getByText('Compare fees and estimated payouts (optional)',{exact:true}).click();
  await page.locator('article[data-bulk-venue="cardconduit"]').getByRole('button').click();
  ok(await page.getByRole('combobox',{name:'Stack game'}).inputValue()==='mtg','Magic tile opens matching game');
  const cd=page.locator('#bulkOfferDialog details[data-bulk-venue="cardconduit"]');
