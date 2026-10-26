@@ -436,6 +436,22 @@ console.log('\n10. proxy calling path (injected mock store, no provider, no KV)'
           'a provider that times out may still have charged us');
     check('no refund was attempted for a call that had already left',
           !store3.calls.some(([op]) => op === 'decr'));
+
+    // An empty successful provider response is a failed lookup, not a cache
+    // value, but the completed provider call may still consume paid quota.
+    const store4 = mockStore();
+    setBudgetStore(store4);
+    globalThis.fetch = async () => ({ status: 200,
+      headers: { get: () => 'application/json' }, text: async () => '' });
+    const res7 = mkRes();
+    await handler(mkReq({ ...query, q: 'Mew 76' }), res7);
+    check('empty provider success becomes a noncacheable 502',
+      res7.code === 502 && res7.headers['cache-control'] === 'no-store');
+    check('empty provider success cannot enter the shared result cache',
+      !store4.calls.some(([op]) => op === 'set'));
+    const emptyCounter = Object.entries(store4.counters).find(([k]) => k.startsWith('tpl:budget:'));
+    check('empty provider response still counts the attempted call',
+      emptyCounter && emptyCounter[1] === 1 && !store4.calls.some(([op]) => op === 'decr'));
   } finally {
     globalThis.fetch = realFetch;
     setBudgetStore(null);
