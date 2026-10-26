@@ -151,6 +151,18 @@ console.log('\nR3: only successes are cacheable');
     check(`upstream ${status} → status passed through`, bad.statusCode === status);
     restoreFetch();
   }
+  for (const body of ['', '   ', '{"data":', '<html>Unavailable</html>', 'null', '[]', '"unavailable"']) {
+    const bad = await call({ path: '/v1/cards/search', q: 'Pikachu' }, { status: 200, body });
+    check(`unusable 200 ${JSON.stringify(body)} → 502`, bad.statusCode === 502);
+    check('unusable success is never cached at the edge', bad.headers['cache-control'] === 'no-store');
+    check('unusable success returns a readable error without upstream bytes',
+      bad.body?.error === 'TPL upstream failed' && typeof bad.body.detail === 'string');
+    restoreFetch();
+  }
+  const empty = await call({ path: '/v1/cards/search', q: 'Pikachu' }, { body: '{"data":[]}' });
+  check('a real empty search is still a valid cacheable success',
+    empty.statusCode === 200 && empty.body === '{"data":[]}' && String(empty.headers['cache-control']).includes('s-maxage=300'));
+  restoreFetch();
 }
 
 // ── 5. Upstream throw → 502, no-store, no key in the body ───────────────────

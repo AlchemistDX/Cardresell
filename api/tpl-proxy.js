@@ -183,12 +183,21 @@ export default async function handler(req, res) {
     // were never cached whatever we asked for. no-store makes the intent
     // explicit and removes the dependency on that platform behaviour.
     if (r.status >= 200 && r.status < 300) {
+      // A 2xx status alone does not establish a usable catalogue response.
+      // An empty/truncated success used to be cached at the edge for five
+      // minutes, making a transient upstream failure persist for every retry.
+      let parsed;
+      try { parsed = JSON.parse(body); }
+      catch { throw new Error('Catalogue response was not readable JSON'); }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Catalogue response was not an object');
+      }
       res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
       if (budgetKeyForResult) {
         try {
-          await storeResult(store, budgetKeyForResult, JSON.parse(body),
+          await storeResult(store, budgetKeyForResult, parsed,
                             budgetConfigForResult);
-        } catch { /* an unparseable body is not cacheable; not the caller's problem */ }
+        } catch { /* a cache write failure must not discard a usable response */ }
       }
     } else {
       res.setHeader('Cache-Control', 'no-store');
