@@ -545,7 +545,19 @@ const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const authPath = html.match(/src="\/js\/(auth\.[a-f0-9]{8}\.js)"/)[1];
 const authSource = fs.readFileSync(new URL('../js/' + authPath, import.meta.url), 'utf8');
 t.check('shipped sign-in and verification completion await automatic setup', (authSource.match(/await window\.ensureMembershipAccount\?\.\(\)/g) || []).length === 2);
-t.check('shipped sign-out clears setup and banner', /window\.googleUser = null;\s+window\.resetMembershipAccountSetup\?\.\(\)/.test(authSource));
+await t.section('shipped sign-out clears account setup through its shared reset', async () => {
+  const h = setup();
+  await h.window.ensureMembershipAccount();
+  t.check('account setup has a visible notice before sign-out', !h.banner.hidden && !!h.banner.textContent);
+  const names = new Set(['_resetVerificationActions', '_resetAuthAccountState', '_clearAuthIdentity']);
+  const functions = parse(authSource, { ecmaVersion: 'latest', sourceType: 'module' }).body
+    .filter(node => node.type === 'FunctionDeclaration' && names.has(node.id.name));
+  const context = { window: h.window, document: { getElementById: () => null }, clearInterval() {},
+    localStorage: { removeItem() {} }, sessionStorage: { removeItem() {} } };
+  vm.runInNewContext('let _authGeneration = 1, _currentAuthUid = "A";\n' +
+    functions.map(node => authSource.slice(node.start, node.end)).join('\n') + '\n_clearAuthIdentity();', context);
+  t.check('shipped sign-out clears setup and banner', h.window.googleUser === null && h.banner.hidden && h.banner.textContent === '');
+});
 
 await t.section('renewal plan changes need confirmation and bind the selected account', async () => {
   const changes=[];

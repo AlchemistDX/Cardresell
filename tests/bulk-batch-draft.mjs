@@ -635,7 +635,7 @@ try {
     // draft as another; that is only safe if the SAVED shape is unchanged, and
     // "unchanged" has to mean this list, not a sample of it. Key ORDER did
     // change (Object.assign builds it differently) and nothing reads order.
-    const EXPECTED_KEYS = ['id', 'updatedAt', 'card', 'set', 'buyPrice', 'currentValue',
+    const EXPECTED_KEYS = ['id', 'updatedAt', 'card', 'set', 'buyPrice', 'costMeta', 'currentValue',
       'condition', 'addedDate', 'source', 'img', 'imageUrl', 'number', 'tcgplayerUrl',
       'game', 'cardType', 'setCode', 'groundedId', 'rarity', 'isJapanese', 'grader',
       'grade', 'sport', 'year', 'lastRefreshed',
@@ -656,6 +656,7 @@ try {
     const got = Object.keys(e).sort();
     eq('the saved entry carries exactly the committed key union',
        got.join(','), EXPECTED_KEYS.slice().sort().join(','));
+    eq('saved purchase cost retains its explicit provenance', e.costMeta.buyPrice, 'value');
 
     // The name field is `card`, not `name` -- the Collection renderer reads
     // `card`, and emitting `name` instead would have been a silent rename.

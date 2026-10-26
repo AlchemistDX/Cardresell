@@ -45,7 +45,7 @@ try{for(const width of [390,1280]){
   await redis(['SET',key,JSON.stringify({portfolio:[{id:'untouched'}],flips:[account],tombstones:{},serverUpdatedAt:Date.now()})]);
   await page.evaluate(device=>{localStorage.setItem(getUserKey('flips'),JSON.stringify([device,{id:'unrelated-sale',card:'Keep this',sellPrice:3}]));localStorage.setItem(getUserKey('portfolio'),JSON.stringify([{id:'local-copy'}]));localStorage.removeItem(getUserKey('sale_conflict_v1'));renderFlipsView();},device);
  }
- const open=async()=>{await page.getByRole('button',{name:'Review sale sync',exact:true}).filter({visible:true}).click();await page.waitForFunction(()=>{const t=document.querySelector('#saleConflictDialog [role=status]')?.textContent;return t&&!t.includes('Reading saved account');});};
+ const open=async()=>{const tools=page.locator('#flipSyncTools');if(!await tools.evaluate(e=>e.open))await tools.locator('summary').click();await tools.getByRole('button',{name:'Review sale sync',exact:true}).click();await page.waitForFunction(()=>{const t=document.querySelector('#saleConflictDialog [role=status]')?.textContent;return t&&!t.includes('Reading saved account');});};
  const status=()=>page.locator('#saleConflictDialog [role=status]');
  const choose=async(which)=>{await page.getByRole('radio',{name:which==='device'?'Use this device':'Use saved account',exact:true}).check();await page.getByRole('button',{name:'Use selected version',exact:true}).click();};
  const done=async()=>page.waitForFunction(()=>document.querySelector('#saleConflictDialog [role=status]')?.textContent.includes('Sale choice saved.'));

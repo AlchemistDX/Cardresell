@@ -70,6 +70,7 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'core-values-browser.mjs': 'Required product-clarity gate: CR_CHROMIUM=<binary> node tests/core-values-browser.mjs. Shipped responsive UI, stale marketplace-link isolation, truthful feature labels and discoverable recovery; external/API traffic blocked.',
   'bulk-workflow-browser.mjs': 'Required scan-to-inventory workflow gate: CR_CHROMIUM=<binary> node tests/bulk-workflow-browser.mjs. Shipped mobile and desktop UI, real browser storage, partial saves, cost allocation, navigation and stale-account protection; synthetic post-scan rows.',
   'bulk-match-review-browser.mjs': 'Required bulk confirmation release gate: CR_CHROMIUM=<binary> node tests/bulk-match-review-browser.mjs. Shipped mobile app, actual scan/confirmation handlers and private Redis in legacy and membership modes; synthetic auth/provider only. Covers exact choice, lost-response replay, stale sessions and downstream save/draft eligibility.',
   'bulk-text-rescue-browser.mjs': 'Required Magic recovery release gate: CR_CHROMIUM=<binary> CR_TESSERACT=<binary> node tests/bulk-text-rescue-browser.mjs. Shipped mobile confirmation/OCR handoff, cancellation and real OCR of synthetic title strips; no paid scans or customer photos.',

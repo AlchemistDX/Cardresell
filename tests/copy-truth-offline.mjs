@@ -67,7 +67,8 @@ ok(/<th scope="row">Free<\/th><td>\$0.00<\/td><td>5<\/td><td>1<\/td>/.test(pr), 
 ok(pr.includes('one-time bonus of 10 ID + 1 Grade, separate from their monthly allowance'), 'welcome bonus remains distinct from recurring credits');
 // CR-014
 ok(!idx.includes('Live eBay sold comps'), 'unconditional "Live eBay sold comps" claim removed');
-ok(idx.includes('when eBay serves them'), 'eBay comps claim is now conditional');
+ok(idx.includes('Use eBay research links to check recent sales') && idx.includes('automatic sold data may be unavailable'),
+   'eBay research links are distinguished from unavailable automatic sold data');
 ok(!idx.includes('pulls live sold comps'), 'hero paragraph claim qualified');
 // CR-015
 ok(!ac.includes('href="/photo-tips/"'), 'accuracy.html no longer links the dead /photo-tips/ path');

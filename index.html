@@ -1651,7 +1651,17 @@ footer a{color:var(--text-muted);text-decoration:underline;text-underline-offset
    read what it said. Wrap instead, and never exceed the viewport. */
 white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center;line-height:1.35;overflow-wrap:anywhere}
 .cs-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-  </style>
+
+/* Keep occasional recovery tools out of the everyday selling actions. */
+.workspace-recovery{max-width:100%;margin:.4rem 0}
+.workspace-recovery summary{width:fit-content;max-width:100%;box-sizing:border-box;min-height:44px;display:flex;align-items:center;gap:.5rem;padding:8px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:.8rem;color:var(--text);background:var(--surface)}
+.workspace-recovery summary::after{content:'⌄'}
+.workspace-recovery[open] summary::after{content:'⌃'}
+.workspace-recovery summary::-webkit-details-marker{display:none}
+.workspace-recovery summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.workspace-recovery>div{display:flex;flex-wrap:wrap;gap:.5rem;padding:.6rem 0;max-width:100%}
+.workspace-recovery button{min-height:44px;white-space:normal}
+</style>
   <!-- SEO / Open Graph / Twitter Card -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.cardresell.org/" />
@@ -2451,7 +2461,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
             </a>
             <a id="tcgpListBtn" href="#" target="_blank" rel="noopener" class="sell-btn" style="margin-top:0;background:#f0b429;color:#000">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M2 12h20"/></svg>
-              Sell on TCGplayer
+              TCGplayer research
             </a>
           </div>
           <div id="cardSellTip" style="display:none;font-size:.68rem;color:var(--muted);text-align:center;margin-top:.4rem;line-height:1.35">
@@ -2516,7 +2526,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
             </a>
             <a id="gradedSellLink" href="#" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.3rem;font-size:.73rem;font-weight:700;color:#000;background:var(--gold);text-decoration:none;padding:.25rem .55rem;border:1px solid var(--gold);border-radius:99px">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-              <span>List on eBay</span>
+              <span>eBay sold research</span>
             </a>
           </div>
           <!-- Inline grading CTA removed — grading CTA lives only in #scanGradeCTA (post-scan overlay) -->
@@ -2895,7 +2905,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <li><span class="welcome-step-number" aria-hidden="true">3</span><div><h3>Choose your next move</h3><p>Sell a single, group lower-value cards, or save them to Collection.</p></div></li>
       </ol>
       <div class="welcome-bulk"><div><strong>Working through a stack or binder?</strong><p>Scan multiple cards and adjust only what needs correcting.</p></div><button type="button" onclick="openScanMenuOnTab('id')">Scan your cards <span aria-hidden="true">→</span></button></div>
-      <p class="welcome-source-note">Price references vary by card. eBay sold comps are available when eBay serves them. <a href="/accuracy">How estimates work</a></p>
+      <p class="welcome-source-note">Price references vary by card. Use eBay research links to check recent sales; automatic sold data may be unavailable. <a href="/accuracy">How estimates work</a></p>
       <div id="introTodayBadge" class="welcome-activity" style="display:none"><span id="introTodayCount">0</span> cards searched today</div>
     </section>
   </div>
@@ -2911,7 +2921,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div id="flipsSignInWall" style="display:none;padding:2.5rem 1.5rem;text-align:center">
     <div style="font-size:2.5rem;margin-bottom:.75rem">📈</div>
     <div style="font-size:1.05rem;font-weight:800;color:var(--text);margin-bottom:.4rem">Track your card flips</div>
-    <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Log every buy &amp; sell, see your total profit,<br>and track cards you still own — all free.</div>
+    <div style="font-size:.82rem;color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem">Track what you paid, what you sold, and what you kept.<br>The Free plan includes up to 10 flips. Paid plans add more tracking.</div>
     <div style="display:flex;flex-direction:column;gap:.6rem;max-width:260px;margin:0 auto 1.5rem">
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--gold-text);font-weight:700"><span style="font-weight:700">🎁</span> 10 ID scans + 1 grade after email verification</div>
       <div style="display:flex;align-items:center;gap:.6rem;font-size:.8rem;color:var(--text-muted)"><span style="color:#4ade80;font-weight:700">✓</span> Flip log with profit/loss per card</div>
@@ -2952,9 +2962,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
   <div class="fl-header">
     <div class="fl-title">Flip Log</div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <details id="flipSyncTools" class="workspace-recovery"><summary>Sync and recovery</summary><div>
       <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
       <button class="fl-sub-btn" onclick="CardResellInventoryConflicts.open()">Review inventory sync</button>
       <button class="fl-sub-btn" onclick="CardResellInventoryRecovery.open()">Recover inventory</button>
+      </div></details>
       <button class="fl-sub-btn" id="flipReportToggle" aria-expanded="false" aria-controls="flipReportPanel" onclick="toggleFlipReport()">Sales report</button>
       <button class="fl-sub-btn" onclick="exportFlips()">⬇ Export CSV</button>
       <button class="fl-add-btn" onclick="openAddFlip('flip')">+ Log a Flip</button>
@@ -3064,9 +3076,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <h1 class="workspace-title">Your collection</h1>
     <p id="collectionSyncStatus" role="status" style="display:none;font-size:.8rem"></p>
     <div id="saleRecoveryNotice" role="status" hidden style="margin:.8rem 0;padding:.8rem;border:1px solid var(--gold);border-radius:10px;font-size:.85rem"></div>
-    <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
+    <details id="collectionSyncTools" class="workspace-recovery"><summary>Sync and recovery</summary><div>
+      <button class="fl-sub-btn" onclick="CardResellSaleConflicts.open()">Review sale sync</button>
       <button class="fl-sub-btn" onclick="CardResellInventoryConflicts.open()">Review inventory sync</button>
       <button class="fl-sub-btn" onclick="CardResellInventoryRecovery.open()">Recover inventory</button>
+    </div></details>
     <button id="collectionSyncRetry" class="fl-sub-btn" style="display:none" onclick="_pushUserData()">Retry cloud sync</button>
     <p class="workspace-intro">Track cards you own. Open Drafts to prepare a listing.</p>
     <section class="collection-grade-history" aria-labelledby="collectionGradesTitle">
@@ -3232,7 +3246,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div class="scan-gate-opt" onclick="handleScanOption('pay')">
         <div class="scan-gate-opt-info">
           <div class="scan-gate-opt-name" id="scanGateOptName">Buy ID credits</div>
-          <div class="scan-gate-opt-desc" id="scanGateOptDesc">Card name &middot; Set &middot; Live prices</div>
+          <div class="scan-gate-opt-desc" id="scanGateOptDesc">Card name &middot; Set &middot; Available price references</div>
         </div>
         <div class="scan-gate-opt-price" id="scanGateOptPrice">See packs</div>
       </div>
@@ -3773,8 +3787,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       Or research it on a marketplace
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.35rem">
-      <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">🛍 List on eBay</a>
-      <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">💰 List on TCGplayer</a>
+      <a id="ccmSellBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#e53935;color:#fff;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">eBay sold research</a>
+      <a id="ccmLookupBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:.35rem;padding:.7rem;background:#f0b429;color:#000;border-radius:10px;font-size:.82rem;font-weight:800;text-decoration:none">TCGplayer research</a>
     </div>
     <div style="font-size:.68rem;color:var(--text-muted);text-align:center;margin-bottom:.5rem;line-height:1.35">
       💡 Tip: on eBay, click any sold listing → <strong>“Sell one like this”</strong> to auto-fill your listing
@@ -3954,7 +3968,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/sale-corrections.ba658815.js"></script>
 <script defer src="/js/inventory-edits.827690a8.js"></script>
 <script defer src="/js/price-evidence.02c7df5f.js"></script>
-<script defer src="/js/core.62122bf2.js"></script>
+<script defer src="/js/core.04100676.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
