@@ -40,6 +40,10 @@ check(api.calculate([{price:0}],options,feeFor).summary.missing===0,'explicit ze
 check(api.calculate([{price:.01}],{...options,singlePostage:5},feeFor).split.net===-529,'negative net is retained');
 check(api.calculate(rows.map(r=>({...r,selected:false})),options,feeFor).split===null,'empty selection cannot produce a recommendation');
 check(api.calculate(rows,{...options,venues:[]},feeFor).split===null,'no unlocked enabled venues means no winner');
+for(const key of ['singleShip','singlePostage','lotShip','lotPostage'])for(const value of [null,undefined,NaN,Infinity,-1,'']){
+ const incomplete=api.calculate(rows,{...options,[key]:value},feeFor);
+ check(incomplete.split===null&&incomplete.singles.length===0&&incomplete.lots.length===0,'missing or invalid '+key+' cannot produce a payout ranking');
+}
 const caps=api.calculate([{price:4000,qty:2,game:'pokemon'}],{...options,lotPrice:8000},feeFor);
 check(caps.singles.find(q=>q.pid==='tcgplayer').fees===35060,'TCG commission cap charged per physical single');
 check(caps.lots.find(q=>q.pid==='tcgplayer').fees===27530,'lot commission cap applies once');

@@ -831,6 +831,7 @@ await T.section('ACCEPTANCE — ids never reach the page as executable source', 
        regex. */
     const ALLOWED = [
       'tiers.find(x => x.id === id)',       // venue fee tiers, ids are fixed slugs
+      'tiers?.find(x => x.id === id)',      // quick-price choices, not physical inventory copies
     ];
     // Exact expressions reviewed in their modules: these identify catalogue
     // cards, subscription plans, camera detections, worker messages and batch
