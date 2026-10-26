@@ -19,10 +19,15 @@
   function tcgEligible(r) {
     return games.has(r.game) && !r.graded && !r.japanese;
   }
+  function purchaseCost(rows) {
+    let known=0, missing=0;
+    for(const r of rows){if(validPrice(r.cost))known+=r.cost*quantity(r);else missing+=quantity(r);}
+    return {known:cents(known)/100,missing,total:missing?null:cents(known)/100};
+  }
   function calculate(rows, options, feeFor) {
     const selected = rows.filter(r => r.selected !== false), summary = summarize(selected);
     const out = {summary, singles:[], lots:[], split:null};
-    if (!summary.count || summary.missing) return out;
+    if (!summary.count || summary.missing || !['singleShip','singlePostage','lotShip','lotPostage'].every(key=>validPrice(options[key]))) return out;
     const one = (pid, price, ship, postage) => {
       const fees = cents(feeFor(pid,price,ship));
       return {gross:cents(price)+cents(ship), fees, postage:cents(postage), net:cents(price)+cents(ship)-fees-cents(postage)};
@@ -125,16 +130,22 @@
   }
 
   function fromBulk() {
-    const rows=(window._bulkResults||[]).filter(r=>r && r.success);
+    const allRows=(window._bulkResults||[]).filter(Boolean), rows=allRows.filter(r=>r.success);
     const selected=rows.filter(r=>typeof _bulkDraftIsSelected==='function' && _bulkDraftIsSelected(r));
     const chosen=selected.length ? selected : rows;
-    const allCount=rows.reduce((n,r)=>n+quantity(r),0), count=chosen.reduce((n,r)=>n+quantity(r),0);
-    const packCost=Math.max(0,Number(window._bulkStartPackCost)||0), perCopy=allCount?packCost/allCount:0;
-    return {rows:chosen.map(r=>({name:r.cardName||'Unnamed card',price:r.marketPrice,cost:perCopy,qty:quantity(r),game:r.cardType||'',japanese:r.isJapanese||r.cardType==='pokemonjp',graded:false,source:r.priceSource==='seller'?'Your price':'Scan price',scanUid:r.scanUid,original:r,originalSnapshot:JSON.stringify(r)})), cost:perCopy*count};
+    // Match Collection's allocation: unresolved copies keep their share, and
+    // an allocation frozen by a previous save is not divided again.
+    const allCount=allRows.reduce((n,r)=>n+quantity(r),0), count=chosen.reduce((n,r)=>n+quantity(r),0);
+    const entered=document.getElementById('bulkStartPackCost'), rawCost=window._bulkStartPackCost;
+    const explicitZero=entered&&!entered.validity.badInput&&entered.value.trim()!==''&&Number(entered.value)===0;
+    const packCost=validPrice(rawCost)&&(rawCost>0||explicitZero)?rawCost:null;
+    const perCopy=validPrice(window._bulkPackUnitCost)?window._bulkPackUnitCost:packCost!==null&&allCount?packCost/allCount:null;
+    return {rows:chosen.map(r=>({name:r.cardName||'Unnamed card',price:r.marketPrice,cost:perCopy,qty:quantity(r),game:r.cardType||'',japanese:r.isJapanese||r.cardType==='pokemonjp',graded:false,source:r.priceSource==='seller'?'Your price':'Scan price',scanUid:r.scanUid,original:r,originalSnapshot:JSON.stringify(r)})), cost:perCopy===null?null:perCopy*count};
   }
   function openBulk() { const batch=fromBulk(); open(batch.rows,batch.cost,'Bulk scan'); }
   function openCollection(cards) {
-    open(cards.map(r=>({name:r.card||'Unnamed card',price:r.currentValue,cost:validPrice(r.buyPrice)?r.buyPrice:0,qty:1,game:r.game||r.cardType||'',japanese:r.isJapanese||r.game==='pokemonjp',graded:!!(r.grader && r.grade!=null && r.grade!==''),source:'Saved value',copyId:r.id,originalSnapshot:JSON.stringify(r)})),cards.reduce((n,r)=>n+(validPrice(r.buyPrice)?r.buyPrice:0),0),'Collection');
+    const rows=cards.map(r=>({name:r.card||'Unnamed card',price:r.currentValue,cost:validPrice(r.buyPrice)?r.buyPrice:null,qty:1,game:r.game||r.cardType||'',japanese:r.isJapanese||r.game==='pokemonjp',graded:!!(r.grader && r.grade!=null && r.grade!==''),source:'Saved value',copyId:r.id,originalSnapshot:JSON.stringify(r)}));
+    open(rows,purchaseCost(rows).total,'Collection');
   }
   function open(input,cost,source) {
     if (!input.length) { if(typeof showToast==='function') showToast('Select at least one identified card.'); return; }
@@ -154,6 +165,7 @@
     const venues=Object.keys(names).filter(pid=>typeof venueEligible==='function' && venueEligible(pid,true,_venueTier()) && (typeof isFeeStale!=='function'||!isFeeStale(pid)));
     const venueNote=el('p',`Compared venues: ${venues.map(v=>names[v]).join(', ')||'none enabled'}. Based on your enabled venues and plan.`,'sp-note');
     const summary=el('div');summary.id='sellingPlanSummary';summary.setAttribute('role','status');body.append(summary);
+    const costStatus=el('p');costStatus.id='sellingPlanCostStatus';costStatus.setAttribute('role','status');body.append(costStatus);
     const refreshAdvice=window.CardResellAdvice?.mountBatch(body,()=>rows.filter(r=>r.selected),{
       comparison:()=>comparison,
       prepare:()=>{
@@ -187,20 +199,22 @@
       note:source==='Collection'?'Next: review the selected inventory copies, prices and shipping before confirming. Estimate edits here are not applied to drafts.':'Next: return to scan results with exactly these cards selected. Check finishes before creating drafts. Estimate edits here do not change scan prices.'
     });
     const settings=el('details');settings.append(el('summary','Adjust lot price, shipping and purchase cost'));body.append(settings);
-    const fields=el('div',null,'sp-inputs');settings.append(fields);const inputs={};let lotEdited=false,costEdited=false;
-    function field(key,label,value) {const wrap=el('label',label), i=el('input');i.type='number';i.min='0';i.step='.01';i.value=String(value);i.setAttribute('aria-label',label);i.oninput=()=>{if(key==='lotPrice')lotEdited=true;if(key==='cost')costEdited=true;render();};inputs[key]=i;wrap.append(i);fields.append(wrap);}
+    const fields=el('div',null,'sp-inputs');settings.append(fields);const inputs={};let lotEdited=false,costEdited=false,costSelectionChanged=false;
+    function field(key,label,value) {const wrap=el('label',label), i=el('input');i.type='number';i.min='0';i.step='.01';i.value=value==null?'':String(value);i.setAttribute('aria-label',label);i.oninput=()=>{if(key==='lotPrice')lotEdited=true;if(key==='cost'){costEdited=true;costSelectionChanged=false;}render();};inputs[key]=i;wrap.append(i);fields.append(wrap);}
     const initial=summarize(rows);
     field('lotPrice','Target price for the whole lot ($)',initial.missing?'':(initial.valueCents/100).toFixed(2));
     field('lotPostage','Lot: your postage + packing ($)',0);field('lotShip','Lot: shipping paid by buyer ($)',0);
     field('singlePostage','Singles: postage + packing per card ($)',0);field('singleShip','Singles: shipping paid by buyer per card ($)',0);
-    field('cost','Purchase cost of these cards ($)',validPrice(cost)?cost.toFixed(2):0);
+    field('cost','Purchase cost of these cards ($)',validPrice(cost)?cost.toFixed(2):null);
+    inputs.cost.placeholder='Unknown';
+    const resetCost=el('button',source==='Collection'?'Use saved purchase costs':'Use scan purchase costs');resetCost.type='button';resetCost.onclick=()=>{costEdited=false;costSelectionChanged=false;syncDefaults();render();};settings.append(resetCost);
     const tl=el('label','TCGplayer seller-shipped Marketplace account'), tier=el('select');tier.setAttribute('aria-label','TCGplayer Marketplace account');
     for(const [v,t] of [['l14','Level 1–4'],['pro','Pro (non-Direct)']]){const o=el('option',t);o.value=v;tier.append(o);}tier.value=profile.tcgLevel==='pro'?'pro':'l14';tier.onchange=render;tl.append(tier);fields.append(tl);
     settings.append(el('p','Lot price starts at the sum of known singles values; change it to your intended asking price. It is not a lot appraisal or a buyer offer. Shipping starts at $0—enter your real costs. Singles assume a separate sale and shipment for every copy.','sp-note'));
     const detail=el('details'), ds=el('summary','Review cards and adjust prices');detail.append(ds);body.append(detail);
-    function syncDefaults(){const chosen=rows.filter(r=>r.selected),s=summarize(chosen);if(!lotEdited)inputs.lotPrice.value=s.missing?'':(s.valueCents/100).toFixed(2);if(!costEdited)inputs.cost.value=chosen.reduce((n,r)=>n+(validPrice(r.cost)?r.cost:0)*quantity(r),0).toFixed(2);}
+    function syncDefaults(selectionChanged=false){const chosen=rows.filter(r=>r.selected),s=summarize(chosen);if(!lotEdited)inputs.lotPrice.value=s.missing?'':(s.valueCents/100).toFixed(2);if(selectionChanged&&costEdited){inputs.cost.value='';costSelectionChanged=true;}if(!costEdited){const total=purchaseCost(chosen).total;inputs.cost.value=total===null?'':total.toFixed(2);}}
     const resetLot=el('button','Use selected singles total as lot price');resetLot.type='button';resetLot.onclick=()=>{lotEdited=false;syncDefaults();render();};detail.append(resetLot);
-    rows.forEach(r=>{const line=el('div',null,'sp-card'), check=el('input');check.type='checkbox';check.checked=true;check.setAttribute('aria-label','Include '+r.name);check.onchange=()=>{r.selected=check.checked;syncDefaults();render();};const label=el('div',`${r.name} × ${quantity(r)} · ${r.source}`), price=el('input');price.type='number';price.min='0';price.step='.01';price.value=validPrice(r.price)?r.price.toFixed(2):'';price.setAttribute('aria-label','Price per copy: '+r.name);price.oninput=()=>{r.price=price.value.trim()===''?null:Number(price.value);syncDefaults();render();};line.append(check,label,price);detail.append(line);});
+    rows.forEach(r=>{const line=el('div',null,'sp-card'), check=el('input');check.type='checkbox';check.checked=true;check.setAttribute('aria-label','Include '+r.name);check.onchange=()=>{r.selected=check.checked;syncDefaults(true);render();};const label=el('div',`${r.name} × ${quantity(r)} · ${r.source}`), price=el('input');price.type='number';price.min='0';price.step='.01';price.value=validPrice(r.price)?r.price.toFixed(2):'';price.setAttribute('aria-label','Price per copy: '+r.name);price.oninput=()=>{r.price=price.value.trim()===''?null:Number(price.value);syncDefaults();render();};line.append(check,label,price);detail.append(line);});
     const assumptions=el('p',null,'sp-note');assumptions.id='sellingPlanAssumptions';settings.after(assumptions);
     const comparisonDetails=el('details');comparisonDetails.id='sellingPlanComparison';comparisonDetails.append(el('summary','Compare fees and estimated payouts (optional)'),venueNote);body.append(comparisonDetails);
     comparisonDetails.append(assumptions);
@@ -214,26 +228,31 @@
       const section=el('section');section.append(el('h3',caption));
       if(!quotes.length){section.append(el('p','No compared venue can cover this selection. TCGplayer needs supported raw cards; a lot must use one game. Check your enabled venues.'));return section;}
       const wrap=el('div',null,'sp-table'), t=el('table'), head=el('tr');for(const s of ['Venue','Net payout','After cost'])head.append(el('th',s));t.append(head);
-      quotes.forEach(q=>{const tr=el('tr'), venue=el('td',names[q.pid]);const costs=el('div',`Fees ${money(q.fees/100)} · Postage ${money(q.postage/100)}`,'sp-note');costs.style.fontSize='.72rem';venue.append(costs);tr.append(venue,el('td',money(q.net/100)),el('td',money((q.net-costCents)/100)));t.append(tr);});wrap.append(t);section.append(wrap);return section;
+      quotes.forEach(q=>{const tr=el('tr'), venue=el('td',names[q.pid]);const costs=el('div',`Fees ${money(q.fees/100)} · Postage ${money(q.postage/100)}`,'sp-note');costs.style.fontSize='.72rem';venue.append(costs);tr.append(venue,el('td',money(q.net/100)),el('td',costCents===null?'Cost unknown':money((q.net-costCents)/100)));t.append(tr);});wrap.append(t);section.append(wrap);return section;
     }
     function render() {
       refreshBulk();
       comparison=null;
       const selected=rows.filter(r=>r.selected), s=summarize(selected);summary.textContent=`${s.count} selected card${s.count===1?'':'s'} · ${s.missing?'Known subtotal':'Selected value'} ${money(s.valueCents/100)}${s.missing?` · ${s.missing} missing a price`:''}`;
-      const opts={venues}, invalid=[];for(const [key,i] of Object.entries(inputs)){const n=i.value.trim()===''?0:Number(i.value);if(i.validity.badInput||!Number.isFinite(n)||n<0)invalid.push(key);opts[key]=n;}
-      opts.lotPrice=inputs.lotPrice.value.trim()===''?null:opts.lotPrice;
-      assumptions.textContent=invalid.length?'Check the amounts above.':`Lot target: ${opts.lotPrice==null?'not set':money(opts.lotPrice)}. Your postage + packing: ${money(opts.lotPostage)} for the lot or ${money(opts.singlePostage)} per single. Purchase cost: ${money(opts.cost)}. Change these assumptions above.`;
+      const opts={venues}, invalid=[];for(const [key,i] of Object.entries(inputs)){const n=i.value.trim()===''?null:Number(i.value);if(i.validity.badInput||(n===null?!['lotPrice','cost'].includes(key):!validPrice(n)))invalid.push(key);opts[key]=n;i.setAttribute('aria-invalid',String(invalid.includes(key)));}
+      const costs=purchaseCost(selected);
+      costStatus.hidden=!s.count;
+      costStatus.textContent=invalid.includes('cost')?'Enter a non-negative, finite purchase cost, or leave it blank if unknown.':opts.cost!==null?`Purchase cost used: ${money(opts.cost)} for these ${s.count} selected card${s.count===1?'':'s'}.`:
+        costSelectionChanged?'Your selection changed. Enter its total purchase cost, or use the saved costs below. After-cost amounts are unavailable until the total is known.':
+        costs.missing?`Purchase cost is unknown for ${costs.missing} selected card${costs.missing===1?'':'s'}; known costs total ${money(costs.known)}. After-cost amounts are unavailable until the full cost is known.`:
+        'Purchase cost is not set. Enter the total or use the saved costs below. After-cost amounts are unavailable.';
+      assumptions.textContent=invalid.length?'Complete the amounts above using non-negative values. Enter 0 only when a cost or charge is known to be zero.':`Lot target: ${opts.lotPrice==null?'not set':money(opts.lotPrice)}. Your postage + packing: ${money(opts.lotPostage)} for the lot or ${money(opts.singlePostage)} per single. Purchase cost: ${opts.cost===null?'unknown':money(opts.cost)}. Change these assumptions above.`;
       results.replaceChildren();if(!s.count){results.append(el('p','Select at least one card.'));refreshAdvice?.();return;}
-      if(s.missing||invalid.length){results.append(el('p',s.missing?'Add the missing prices under “Review cards” to compare the complete selection.':'Use non-negative, finite amounts for every cost and price.','sp-error'));refreshAdvice?.();return;}
+      if(s.missing||invalid.length){results.append(el('p',s.missing?'Add the missing prices under “Review cards” to compare the complete selection.':'Complete the shipping amounts and use non-negative, finite amounts for every cost and price. Enter 0 only when known to be zero.','sp-error'));refreshAdvice?.();return;}
       const feeFor=(pid,price,ship)=>{const lines=pid==='ebay'?feeEbay(price,ship,profile.ebayStore,Number(profile.ebayPromo)||0,false,profile.ebayBuyerTaxRate):pid==='tcgplayer'?feeTCGPlayer(price,ship,tier.value):feeMercari(price,ship);return lines.reduce((n,f)=>n+f.a,0);};
-      const calc=calculate(rows,opts,feeFor), costCents=cents(opts.cost);
+      const calc=calculate(rows,opts,feeFor), costCents=opts.cost===null?null:cents(opts.cost);
       comparison={...calc,lots:calc.lots.map(q=>({...q,name:names[q.pid]}))};
       refreshAdvice?.();
       if(calc.lots.length){const q=calc.lots[0];results.append(el('p',`Best estimated lot payout among compared venues: ${names[q.pid]} · ${money(q.net/100)} at your ${money(opts.lotPrice)} lot price.`,'sp-highlight'));}
       else if(opts.lotPrice==null)results.append(el('p','Enter a target lot price to compare selling together.'));
       results.append(table('Sell together as one lot',calc.lots,costCents),table('Sell as singles on one venue',calc.singles,costCents));
       if(calc.singles.length){const q=calc.singles[0];results.append(el('p',`Best estimated venue for all singles: ${names[q.pid]} · ${money(q.net/100)} net payout.`));}
-      if(calc.split){results.append(el('p',`Best venue for each single: ${money(calc.split.net/100)} estimated net payout · ${money((calc.split.net-costCents)/100)} after purchase cost.`,'sp-highlight'));
+      if(calc.split){results.append(el('p',`Best venue for each single: ${money(calc.split.net/100)} estimated net payout${costCents===null?' · After-cost amount unavailable.':` · ${money((calc.split.net-costCents)/100)} after purchase cost.`}`,'sp-highlight'));
         const d=el('details');d.append(el('summary','See each card’s recommended venue'));for(const a of calc.split.assignments)d.append(el('p',`${a.row.name} × ${a.qty} → ${names[a.pid]} · ${money(a.net/100)} net`));results.append(d);
         if(calc.lots.length){const delta=calc.split.net-calc.lots[0].net;results.append(el('p',`${delta>=0?'Singles return':'The lot returns'} ${money(Math.abs(delta)/100)} more under these assumptions. A lot needs one sale and shipment; singles need ${s.count}.`));}}
       results.append(el('p','Net payout = sale price + buyer-paid shipping − modeled fees − your postage and packing. “After cost” also subtracts the purchase cost entered above.','sp-note'));

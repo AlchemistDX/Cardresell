@@ -1,0 +1,185 @@
+{
+  "date": "2026-10-26",
+  "scope": "Batch selling planner cost accuracy and selection recovery",
+  "baseCommit": "b252bee63f34ce81824371f87307ed0621fedd2f",
+  "suites": [
+    {
+      "suite": "selling-next-step-browser",
+      "exit": 0,
+      "seconds": 20.2,
+      "summary": [
+        "Selling next step: 237 passed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/selling-next-step-browser-final.log",
+      "logSha256": "eaa7a152496676a66fef893b01c3a02e4467f65aa823d184b16e6e1d1329b8c7"
+    },
+    {
+      "suite": "selling-plan-browser",
+      "exit": 0,
+      "seconds": 8.4,
+      "summary": [
+        "Selling plan: 210 checks passed; no provider calls. -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/selling-plan-browser.log",
+      "logSha256": "c4d6a45f440e21e1a50780410427e2a3cb0da37a2cd05f9507a097b5a8f9b798"
+    },
+    {
+      "suite": "selling-advice-browser",
+      "exit": 0,
+      "seconds": 4.8,
+      "summary": [
+        "Selling advice: 65 passed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/selling-advice-browser.log",
+      "logSha256": "84c46072f3335ce8eabeb875385b7f47276228acb089b29596cb351e29981221"
+    },
+    {
+      "suite": "selling-price-evidence-browser",
+      "exit": 0,
+      "seconds": 11.8,
+      "summary": [
+        "selling-price-evidence-browser: 180 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/selling-price-evidence-browser.log",
+      "logSha256": "da4fbae5c4831f866c2086e88f40110f9a6a5f79d724c438f427411c17b68503"
+    },
+    {
+      "suite": "selling-selection-browser",
+      "exit": 0,
+      "seconds": 12.7,
+      "summary": [
+        "selling-selection-browser: 150 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/selling-selection-browser.log",
+      "logSha256": "4526ea96781bbec493256ef20bdc911bce9c65eff0c6727622a1f5487ed3e81e"
+    },
+    {
+      "suite": "quick-pricing",
+      "exit": 0,
+      "seconds": 0.3,
+      "summary": [
+        "235 passed, 0 failed",
+        "quick-pricing: 235 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/quick-pricing.log",
+      "logSha256": "6d92dab73f81c9099423044c4afef7929af90e5abcecdf09fd8c00bf1df2ad8c"
+    },
+    {
+      "suite": "price-evidence",
+      "exit": 0,
+      "seconds": 0.6,
+      "summary": [
+        "price-evidence: 42 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/price-evidence.log",
+      "logSha256": "19bea655b32aaa54b298e9bcff77793ceaf4bce0eca6203cfb604dc5e9a9d675"
+    },
+    {
+      "suite": "ebay-buyer-tax-browser",
+      "exit": 0,
+      "seconds": 7.8,
+      "summary": [
+        "eBay buyer-tax browser: 75 passed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/ebay-buyer-tax-browser.log",
+      "logSha256": "1dcc9cf659cdd3a2e9f1585f497066e9a6f892c26180aa2021150308de944654"
+    },
+    {
+      "suite": "bulk-venues-browser",
+      "exit": 0,
+      "seconds": 6.3,
+      "summary": [
+        "Bulk venues: 80 passed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/bulk-venues-browser.log",
+      "logSha256": "d527ff2c7ca8ac9a1e9e13130904a0a8d9f11d9740e074ee866388b6e385d599"
+    },
+    {
+      "suite": "draft-selection-handoff-browser",
+      "exit": 0,
+      "seconds": 15.4,
+      "summary": [
+        "draft-selection-handoff-browser: 62 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/draft-selection-handoff-browser.log",
+      "logSha256": "8bea1ea74b393249f25be191474841f512a6cd49bc2b91eb2a0fd007be7c64a0"
+    },
+    {
+      "suite": "entry-identity",
+      "exit": 0,
+      "seconds": 9.7,
+      "summary": [
+        "entry-identity: 139 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/entry-identity-final.log",
+      "logSha256": "61c1289bd2345f44587aec5c3f5ed92b13339956767e4314fb62f7c5212e9b02"
+    },
+    {
+      "suite": "listing-export-e2e",
+      "exit": 0,
+      "seconds": 2.3,
+      "summary": [
+        "listing-export-e2e: 111 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/listing-export-e2e.log",
+      "logSha256": "7592d65d067149db2c0a63424413c846d62d0e772a9f767b75e7080f3268400d"
+    },
+    {
+      "suite": "listing-photos",
+      "exit": 0,
+      "seconds": 31.7,
+      "summary": [
+        "listing-photos: 171 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/listing-photos.log",
+      "logSha256": "f6094cdb5e172943cbb678f141808964e3a6147f5f02b76a484ae9b4e96887f2"
+    },
+    {
+      "suite": "brand-ui-browser",
+      "exit": 0,
+      "seconds": 54.9,
+      "summary": [
+        "SUITE COMPLETE: brand-ui-browser: 978 passed, 0 failed"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/brand-ui-browser-final.log",
+      "logSha256": "0611b3c34c61df0e7fc01f59ce42e82445ec9aede3c63672776a237dcc528fa2"
+    },
+    {
+      "suite": "asset-fingerprints",
+      "exit": 0,
+      "seconds": 0.4,
+      "summary": [
+        "asset-fingerprints: 272 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/asset-fingerprints-final.log",
+      "logSha256": "dfd013aea61013d5de5d31449725da82a861c2438045382feeed93731e202ad9"
+    },
+    {
+      "suite": "test-registry",
+      "exit": 0,
+      "seconds": 0.1,
+      "summary": [
+        "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-selling-workflow-followup/test-registry-final.log",
+      "logSha256": "d02b5f7f4abe9a30331f35ac7f2bf3f94b661364226122da7b5c966c1fcabf16"
+    }
+  ],
+  "assetSha256": {
+    "index.html": "f4c6981f6d46a9e04aac9c610842db4a0793fb9bac44a1aa2321b80e9563dfaa",
+    "js/selling-plan.js": "e84c1c0d3f725793a4a7b04e4933b2fa16a7128772b4df3c0728a69b241e8b64",
+    "js/selling-plan.e84c1c0d.js": "e84c1c0d3f725793a4a7b04e4933b2fa16a7128772b4df3c0728a69b241e8b64"
+  },
+  "initialRunFindings": [
+    "entry-identity source check misclassified an optional-chained quick-price tier lookup as an inventory ID lookup; exact non-inventory exception added",
+    "brand-ui welcome controls raced the timed example-card tour; fixture now pins the landing-seen flag",
+    "new purchase-cost notice had low contrast in light theme; it now inherits readable main text and contrast is checked in both themes"
+  ],
+  "limits": [
+    "Controlled provider/account boundaries; no live marketplace or inventory mutations",
+    "Shipping defaults remain explicit zero assumptions; blanking a required shipping amount retracts estimates",
+    "Existing saved zero costs are treated as known; this release does not reinterpret historical inventory",
+    "No recognition, fee schedule, eBay sold-data access, publishing or sales-sync changes",
+    "This is a focused 16-suite run, not a rerun of the 165-suite full gate"
+  ]
+}

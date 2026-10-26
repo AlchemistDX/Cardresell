@@ -15,6 +15,9 @@ const check=(label,a,b)=>{assert.deepEqual(a,b,label);checks++;console.log('✓ 
 try{
 for(const theme of ['light','dark']) for(const viewport of [{width:320,height:740},{width:390,height:844},{width:844,height:390},{width:1280,height:900}]){
  const page=await browser.newPage({viewport,colorScheme:theme,reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ // This suite interacts with the welcome controls, not the timed example-card
+ // tour. Keep the demo from replacing those controls midway through a click.
+ await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
  await page.route('**/*',r=>{const u=r.request().url();if(u.endsWith('/api/membership-catalogue'))return r.fulfill({json:{...publicMembershipCatalogue(),purchaseEnabled:false}});if(u.startsWith(origin)&&!u.includes('/api/'))return r.continue();return r.fulfill({status:503,contentType:'application/json',body:'{"error":"offline_fixture"}'})});
  await page.goto(origin);
  await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;window.googleUser=null;updateProUI();document.getElementById('dropList').style.display='none'},theme);

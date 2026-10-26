@@ -159,6 +159,96 @@ try {
       if(process.env.CR_SHOT_DIR){mkdirSync(process.env.CR_SHOT_DIR,{recursive:true});await page.screenshot({path:`${process.env.CR_SHOT_DIR}/next-step-${width}-${theme}.png`});}
     }
     await plan.getByRole('button',{name:'Close',exact:true}).click();
+    // Unknown purchase costs must not become zero-profit assumptions. The
+    // read-only comparison remains useful without inventing an after-cost result.
+    await page.evaluate(()=>{
+      window.costInventory=[{id:'unknown-cost',card:'Unknown cost',game:'pokemon',currentValue:100,buyPrice:null},{id:'known-cost',card:'Known cost',game:'pokemon',currentValue:50,buyPrice:20},{id:'zero-cost',card:'Gift',game:'pokemon',currentValue:10,buyPrice:0}];
+      CardResellSellingPlan.openCollection(costInventory);
+    });
+    const costStatus=plan.locator('#sellingPlanCostStatus'),costResults=plan.locator('#sellingPlanResults');
+    await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
+    await plan.getByText('Review cards and adjust prices',{exact:true}).click();
+    await plan.locator('#sellingPlanComparison > summary').click();
+    const purchaseCost=plan.getByRole('spinbutton',{name:'Purchase cost of these cards ($)',exact:true});
+    check(await purchaseCost.inputValue()==='','one unknown cost leaves the full selection cost unknown');
+    check((await costStatus.innerText()).includes('unknown for 1 selected card')&&(await costStatus.innerText()).includes('$20.00'),'known subtotal and missing copy count are visible outside optional comparisons');
+    check(await costResults.locator('td:last-child').evaluateAll(cells=>cells.length>0&&cells.every(e=>e.textContent==='Cost unknown')),'every after-cost cell stays unknown');
+    check((await costResults.innerText()).includes('estimated net payout')&&!(await costResults.innerText()).match(/\$[\d,.]+ after purchase cost/),'payout research remains available without inventing profit');
+    check(await batch.locator('[data-prepare-ebay]').isEnabled(),'unknown purchase cost does not block draft review');
+    await plan.getByRole('checkbox',{name:'Include Unknown cost',exact:true}).uncheck();
+    check(await purchaseCost.inputValue()==='20.00','known selected copies use their saved total, including explicit zero');
+    await plan.getByRole('checkbox',{name:'Include Known cost',exact:true}).uncheck();
+    check(await purchaseCost.inputValue()==='0.00'&&!(await costResults.innerText()).includes('Cost unknown'),'explicit zero remains a known cost');
+    await plan.getByRole('checkbox',{name:'Include Unknown cost',exact:true}).check();
+    await plan.getByRole('checkbox',{name:'Include Known cost',exact:true}).check();
+    await purchaseCost.fill('60');
+    check(!(await costResults.innerText()).includes('Cost unknown'),'seller-entered complete purchase cost enables after-cost estimates');
+    const originalValues=await page.evaluate(()=>JSON.stringify(costInventory));
+    await plan.getByRole('spinbutton',{name:'Price per copy: Unknown cost',exact:true}).fill('110');
+    check(await purchaseCost.inputValue()==='60','price-only changes preserve the same selection’s manual cost');
+    await plan.getByRole('checkbox',{name:'Include Known cost',exact:true}).uncheck();
+    check(await purchaseCost.inputValue()===''&&(await costStatus.innerText()).includes('selection changed'),'a different selection cannot reuse the old manually entered total');
+    check((await costResults.innerText()).includes('Cost unknown'),'selection change retracts prior after-cost estimates');
+    await plan.getByRole('checkbox',{name:'Include Known cost',exact:true}).check();
+    check(await purchaseCost.inputValue()==='','returning to an earlier selection does not revive an unconfirmed total');
+    await plan.getByRole('checkbox',{name:'Include Unknown cost',exact:true}).uncheck();
+    await plan.getByRole('button',{name:'Use saved purchase costs',exact:true}).click();
+    check(await purchaseCost.inputValue()==='20.00','explicit reset restores the selected saved costs');
+    await purchaseCost.fill('');
+    check((await costResults.innerText()).includes('Cost unknown')&&(await costStatus.innerText()).includes('not set'),'clearing a known cost is unknown, not free');
+    await purchaseCost.fill('0');
+    check(!(await costResults.innerText()).includes('Cost unknown'),'explicitly entering zero restores known after-cost math');
+    await purchaseCost.fill('-1');
+    check(await purchaseCost.getAttribute('aria-invalid')==='true'&&await costResults.locator('table').count()===0,'negative costs retract figures and identify the invalid field');
+    await plan.getByRole('button',{name:'Use saved purchase costs',exact:true}).click();
+    await batch.getByRole('combobox',{name:'Selling priority'}).selectOption('money');
+    for(const label of ['Singles: postage + packing per card ($)','Singles: shipping paid by buyer per card ($)','Lot: your postage + packing ($)','Lot: shipping paid by buyer ($)']){
+      const shipping=plan.getByRole('spinbutton',{name:label,exact:true});
+      await shipping.fill('');
+      check(await shipping.getAttribute('aria-invalid')==='true'&&await costResults.locator('table').count()===0,'blank '+label+' retracts payout tables');
+      check(!(await batch.innerText()).includes('leaves about')&&(await batch.innerText()).includes('payout estimate unavailable'),'blank '+label+' retracts advice quotes too');
+      check(await batch.locator('[data-prepare-ebay]').isEnabled(),'blank shipping leaves draft review available');
+      await shipping.fill('0');
+      check(await shipping.getAttribute('aria-invalid')==='false'&&await costResults.locator('table').count()>0,'explicit zero '+label+' restores estimates');
+    }
+    check(await page.evaluate(()=>JSON.stringify(costInventory))===originalValues,'planner price and cost edits never mutate saved inventory');
+    await plan.getByRole('checkbox',{name:'Include Unknown cost',exact:true}).check();
+    for(const theme of ['light','dark']){
+      await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+      await plan.evaluate(e=>e.scrollTop=0);
+      check(await plan.evaluate(e=>e.scrollWidth<=e.clientWidth+1),'cost recovery controls fit '+width+' '+theme);
+      const contrast=await costStatus.evaluate(el=>{
+        const rgb=value=>value.match(/[\d.]+/g).map(Number),bg=rgb(getComputedStyle(el.closest('dialog')).backgroundColor),fg=rgb(getComputedStyle(el).color);
+        const alpha=fg[3]??1,color=fg.slice(0,3).map((v,i)=>v*alpha+bg[i]*(1-alpha));
+        const lum=values=>values.slice(0,3).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+        const values=[lum(color),lum(bg)].sort((a,b)=>b-a);return (values[0]+.05)/(values[1]+.05);
+      });
+      check(contrast>=4.5,'unknown purchase-cost notice is readable at '+width+' '+theme+' ('+contrast.toFixed(2)+':1)');
+      if(process.env.CR_SHOT_DIR)await page.screenshot({path:`${process.env.CR_SHOT_DIR}/cost-recovery-${width}-${theme}.png`});
+    }
+    await plan.getByRole('button',{name:'Close',exact:true}).click();
+    // Scan costs reserve the same share for unresolved copies as Collection.
+    await page.evaluate(()=>{
+      _bulkResults=[{success:true,scanUid:'cost-a',rowId:'cost-a',cardName:'Known scan',cardType:'pokemon',marketPrice:10,qty:2},{success:false,scanUid:'cost-b',qty:2}];
+      _bulkDraftSel=[];_bulkStartPackCost=12;_bulkPackUnitCost=null;
+      document.getElementById('bulkStartPackCost').value='12';
+      CardResellSellingPlan.openBulk();
+    });
+    await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
+    check(await purchaseCost.inputValue()==='6.00','unresolved physical copies retain their share of pack cost');
+    await plan.getByRole('button',{name:'Close',exact:true}).click();
+    await page.evaluate(()=>{_bulkPackUnitCost=2;_bulkResults.push({success:true,scanUid:'cost-c',rowId:'cost-c',cardName:'Later scan',cardType:'pokemon',marketPrice:15});CardResellSellingPlan.openBulk();});
+    await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
+    check(await purchaseCost.inputValue()==='6.00','a frozen allocation matches Collection when more results arrive');
+    await plan.getByRole('button',{name:'Close',exact:true}).click();
+    await page.evaluate(()=>{_bulkPackUnitCost=null;_bulkStartPackCost=0;document.getElementById('bulkStartPackCost').value='';CardResellSellingPlan.openBulk();});
+    await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
+    check(await purchaseCost.inputValue()==='','blank optional pack cost remains unknown in the planner');
+    await plan.getByRole('button',{name:'Close',exact:true}).click();
+    await page.evaluate(()=>{document.getElementById('bulkStartPackCost').value='0';CardResellSellingPlan.openBulk();});
+    await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
+    check(await purchaseCost.inputValue()==='0.00','explicit zero pack cost is known');
+    await plan.getByRole('button',{name:'Close',exact:true}).click();
     // Scan planning hands the exact chosen rows back for finish review. No write.
     await page.evaluate(()=>{
       _bulkResults=[{success:true,scanUid:'scan-a',rowId:'a',cardName:'Scan A',cardType:'pokemon',marketPrice:10,qty:2},{success:true,scanUid:'scan-b',rowId:'b',cardName:'Scan B',cardType:'pokemon',marketPrice:20}];
