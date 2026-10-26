@@ -84,7 +84,7 @@ try{for(const width of [390,1280]){
   check(await page.evaluate(()=>localStorage.getItem(getUserKey('portfolio')))==='{broken','corrupt local inventory is not overwritten by pull');
  }
  async function seedConflict(){await localSeed([device,other]);await cloudSeed();await setup('x'.repeat(40));}
- const openReview=async()=>{await page.getByRole('button',{name:'Review inventory sync',exact:true}).filter({visible:true}).click();await page.waitForFunction(()=>{const t=document.querySelector('#inventoryConflictDialog [role=status]')?.textContent;return t&&!t.includes('Reading saved account');});};
+ const openReview=async()=>{const tools=page.locator('#collectionSyncTools');if(!await tools.evaluate(e=>e.open))await tools.locator('summary').click();await tools.getByRole('button',{name:'Review inventory sync',exact:true}).click();await page.waitForFunction(()=>{const t=document.querySelector('#inventoryConflictDialog [role=status]')?.textContent;return t&&!t.includes('Reading saved account');});};
  const status=()=>page.locator('#inventoryConflictDialog [role=status]');
  const choose=async(which)=>{await page.getByRole('radio',{name:which==='device'?'Use this device':'Use saved account',exact:true}).check();await page.getByRole('button',{name:'Use selected version',exact:true}).click();};
  const done=async()=>page.waitForFunction(()=>document.querySelector('#inventoryConflictDialog [role=status]')?.textContent.includes('Inventory choice saved.'));

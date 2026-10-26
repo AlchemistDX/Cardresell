@@ -36,7 +36,7 @@ try{for(const width of [390,1280]){
   await redis(['SET',key,JSON.stringify({...state,portfolio:[...state.portfolio,{id:'account-keep',card:'Keep this account copy'}]})]);
  }
  const dlg=()=>page.locator('#inventoryRecoveryDialog'),status=()=>dlg().getByRole('status');
- const open=async()=>page.getByRole('button',{name:'Recover inventory',exact:true}).filter({visible:true}).click();
+ const open=async()=>{const tools=page.locator('#collectionSyncTools');if(!await tools.evaluate(e=>e.open))await tools.locator('summary').click();await tools.getByRole('button',{name:'Recover inventory',exact:true}).click();};
  const upload=async(data=backup())=>{await dlg().getByLabel('CardResell recovery backup (.json)',{exact:true}).setInputFiles({name:'inventory.json',mimeType:'application/json',buffer:Buffer.from(typeof data==='string'?data:JSON.stringify(data))});await page.waitForFunction(()=>{const t=document.querySelector('#inventoryRecoveryDialog [role=status]').textContent;return t.length>0;});};
  const preview=async(data=backup(),source='Device inventory in backup')=>{await upload(data);await dlg().getByRole('radio',{name:source,exact:true}).check();await dlg().getByRole('button',{name:'Review missing inventory',exact:true}).click();await page.waitForFunction(()=>{const t=document.querySelector('#inventoryRecoveryDialog [role=status]').textContent;return t&&!t.includes('Checking current account');});};
  const commit=async()=>{await dlg().getByRole('checkbox').check();await dlg().getByRole('button',{name:/^Recover \d+ cop(?:y|ies)$/}).click();};
