@@ -1,0 +1,202 @@
+{
+  "date": "2026-10-26",
+  "scope": "Purchase-cost continuity from scanned cards through Collection and sale records",
+  "baseCommit": "d78fed37485a6b4e1f9e2dd0d7c985f9b1e18fd3",
+  "suites": [
+    {
+      "suite": "inventory-cost-continuity-browser",
+      "exit": 0,
+      "seconds": 5.1,
+      "summary": [
+        "inventory-cost-continuity-browser: 66 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/inventory-cost-continuity-browser.log",
+      "logSha256": "bd891e2fd3677bf354e4878fdceb68b8efa1163134052fa8d04a59cc95dbd5c2"
+    },
+    {
+      "suite": "bulk-workflow-browser",
+      "exit": 0,
+      "seconds": 16.1,
+      "summary": [
+        "bulk-workflow-browser: 188 passed, 0 failed -- SUITE COMPLETE"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/bulk-workflow-browser.log",
+      "logSha256": "d09581bdfaeefce54e9012e4f0c888b052e584d66fcd3d8d04e79b5cb4b65018"
+    },
+    {
+      "suite": "selling-plan-browser",
+      "exit": 0,
+      "seconds": 9.9,
+      "summary": [
+        "Selling plan: 210 checks passed; no provider calls. -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/selling-plan-browser.log",
+      "logSha256": "c4d6a45f440e21e1a50780410427e2a3cb0da37a2cd05f9507a097b5a8f9b798"
+    },
+    {
+      "suite": "selling-next-step-browser",
+      "exit": 0,
+      "seconds": 24.1,
+      "summary": [
+        "Selling next step: 237 passed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/selling-next-step-browser.log",
+      "logSha256": "eaa7a152496676a66fef893b01c3a02e4467f65aa823d184b16e6e1d1329b8c7"
+    },
+    {
+      "suite": "scan-hygiene-2026-09-04",
+      "exit": 0,
+      "seconds": 0.7,
+      "summary": [
+        "182 passed, 0 failed",
+        "scan-hygiene-2026-09-04: 182 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/scan-hygiene-2026-09-04.log",
+      "logSha256": "38dfaa1ddba056ceb1403935c65b02b6e89d0b879448cb2a0332cc6770b7cb1a"
+    },
+    {
+      "suite": "majors-flip-and-pack-2026-09-04",
+      "exit": 0,
+      "seconds": 0.2,
+      "summary": [
+        "  majors-flip-and-pack-2026-09-04: 100 passed, 0 failed",
+        "majors-flip-and-pack-2026-09-04: 100 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/majors-flip-and-pack-2026-09-04.log",
+      "logSha256": "e5b32798a9c36a7ea89c86b292489b999847824983e795db89f3f21f981a4ddb"
+    },
+    {
+      "suite": "flip-report-browser",
+      "exit": 0,
+      "seconds": 17.1,
+      "summary": [
+        "flip-report-browser: 72 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/flip-report-browser.log",
+      "logSha256": "3ae3194d3b456b713d537c36fa544cac91e5f01983cbaf078ae51cfb71ec2882"
+    },
+    {
+      "suite": "sale-recovery-browser",
+      "exit": 0,
+      "seconds": 5.4,
+      "summary": [
+        "sale-recovery-browser: 60 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/sale-recovery-browser.log",
+      "logSha256": "a09f9ab1f76ea32b306a3e729fabc20b5885d46f5fae7acdc55852da732c064a"
+    },
+    {
+      "suite": "collection-export",
+      "exit": 0,
+      "seconds": 0.2,
+      "summary": [
+        "collection-export: 17 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/collection-export.log",
+      "logSha256": "5091450f25bb8173bfa3be6ba8e641e09f1213d13eae821575f69737b58f43b7"
+    },
+    {
+      "suite": "scan-finish-browser",
+      "exit": 0,
+      "seconds": 14.9,
+      "summary": [
+        "SUITE COMPLETE: scan-finish-browser: 223 passed, 0 failed"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/scan-finish-browser.log",
+      "logSha256": "788a447dd1d64b0147e4fffcb8cc84fe6244d9c481beb07a6ccdb36316bdbbe8"
+    },
+    {
+      "suite": "customer-journey-browser",
+      "exit": 0,
+      "seconds": 44.3,
+      "summary": [
+        "\u2713 390 failed cloud sync offers recovery",
+        "\u2713 390 failed cloud sync does not claim account save",
+        "\u2713 1280 failed cloud sync offers recovery",
+        "\u2713 1280 failed cloud sync does not claim account save",
+        "SUITE COMPLETE: customer-journey-browser: 221 passed, 0 failed"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/customer-journey-browser.log",
+      "logSha256": "c8f4cfa7141e87791fe53c5cc3a4695e13f721826556065dac9a147b3210c36d"
+    },
+    {
+      "suite": "entry-identity",
+      "exit": 0,
+      "seconds": 13.1,
+      "summary": [
+        "entry-identity: 139 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/entry-identity.log",
+      "logSha256": "61c1289bd2345f44587aec5c3f5ed92b13339956767e4314fb62f7c5212e9b02"
+    },
+    {
+      "suite": "listing-export-e2e",
+      "exit": 0,
+      "seconds": 2.1,
+      "summary": [
+        "listing-export-e2e: 111 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/listing-export-e2e.log",
+      "logSha256": "7592d65d067149db2c0a63424413c846d62d0e772a9f767b75e7080f3268400d"
+    },
+    {
+      "suite": "listing-photos",
+      "exit": 0,
+      "seconds": 44.1,
+      "summary": [
+        "  ok   a failed attachment reports rather than throwing, and tells the seller",
+        "\u25b6 ATTACH_FAILED copy warns against refreshing, and the retry stays offered",
+        "  ok   precondition \u2014 the attach really failed via ATTACH_FAILED",
+        "  ok   precondition \u2014 first attach failed and a snapshot is pending",
+        "listing-photos: 171 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/listing-photos.log",
+      "logSha256": "09adc8a8c5b6f553e3ec701b26e76e269b124b28e05458c22927f79d173224ad"
+    },
+    {
+      "suite": "brand-ui-browser",
+      "exit": 0,
+      "seconds": 64.5,
+      "summary": [
+        "SUITE COMPLETE: brand-ui-browser: 978 passed, 0 failed"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/brand-ui-browser.log",
+      "logSha256": "6140d85cd82e72ca6dafae5bf0d35d08994c4cbe138201fcb0d37d67bcd461f8"
+    },
+    {
+      "suite": "asset-fingerprints",
+      "exit": 0,
+      "seconds": 1.3,
+      "summary": [
+        "asset-fingerprints: 272 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/asset-fingerprints.log",
+      "logSha256": "301feafa148ed55fec5e80c1c878483ad8f67b8426fbc69d18161c09feb18736"
+    },
+    {
+      "suite": "test-registry",
+      "exit": 0,
+      "seconds": 0.2,
+      "summary": [
+        "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+      ],
+      "log": "/tmp/cardresell-inventory-cost-checks/test-registry.log",
+      "logSha256": "4be50b2759b948fc2dbf18dadf42cf04bab45324261ceee756136230fde908d7"
+    }
+  ],
+  "assetSha256": {
+    "index.html": "33deea516a780b7af5748b5f198918542aaabcb9f12d805c5a8435b96fa4c697",
+    "js/core.62122bf2.js": "62122bf2751d197bce50a0e861d822905db9e1c0a6eaeb5db118de103efeb22c",
+    "js/ui.0b956b73.js": "0b956b737840f1a771f8c3d65b71a6edcbc678f75ed149fc0650b80907dbb9f1",
+    "js/selling-plan.js": "9de9581d46f759378b03008c017f4005a2b8daef2537c14d335efea17feb1dc9",
+    "js/selling-plan.9de9581d.js": "9de9581d46f759378b03008c017f4005a2b8daef2537c14d335efea17feb1dc9"
+  },
+  "reproduction": "New shipped-browser test failed on base: blank scan cost persists unknown for each physical copy. Base saved zero instead.",
+  "limits": [
+    "Synthetic post-scan cards and account boundaries; external/API requests blocked in the new continuity test.",
+    "Historical stored zero costs are not reinterpreted; zero may have been intentional.",
+    "Pack allocation remains frozen after the first acknowledged save, including an unknown allocation.",
+    "No recognition-model accuracy, eBay fee/sold-data access, publishing, or sales-sync change.",
+    "Focused 17-suite verification; not a full-site or live-provider certification."
+  ]
+}

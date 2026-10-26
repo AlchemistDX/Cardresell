@@ -83,6 +83,7 @@ const EXCLUDED = {
   'grading-paths-browser.mjs':
     'Required grading-path release gate: CR_CHROMIUM=<binary> node tests/grading-paths-browser.mjs. Conditional economics, current-tier eligibility, and shipped mobile UI; synthetic inputs, no paid calls.',
   'selling-plan-browser.mjs': 'Required selling-plan release gate: CR_CHROMIUM=<chromium> node tests/selling-plan-browser.mjs; real browser with synthetic results, no provider calls.',
+  'inventory-cost-continuity-browser.mjs': 'Required purchase-cost continuity gate: CR_CHROMIUM=<chromium> node tests/inventory-cost-continuity-browser.mjs; real shipped UI, local storage, reload, export and sale handoff, with external/API requests blocked.',
   'restore-navigation.mjs':
     'Required navigation release regression: node tests/restore-navigation.mjs. Shipped restore callback, controlled timers, no network or customer data.',
   'brand-ui-browser.mjs':

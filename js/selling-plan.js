@@ -135,12 +135,14 @@
     const chosen=selected.length ? selected : rows;
     // Match Collection's allocation: unresolved copies keep their share, and
     // an allocation frozen by a previous save is not divided again.
-    const allCount=allRows.reduce((n,r)=>n+quantity(r),0), count=chosen.reduce((n,r)=>n+quantity(r),0);
+    const allCount=allRows.reduce((n,r)=>n+quantity(r),0);
     const entered=document.getElementById('bulkStartPackCost'), rawCost=window._bulkStartPackCost;
     const explicitZero=entered&&!entered.validity.badInput&&entered.value.trim()!==''&&Number(entered.value)===0;
     const packCost=validPrice(rawCost)&&(rawCost>0||explicitZero)?rawCost:null;
-    const perCopy=validPrice(window._bulkPackUnitCost)?window._bulkPackUnitCost:packCost!==null&&allCount?packCost/allCount:null;
-    return {rows:chosen.map(r=>({name:r.cardName||'Unnamed card',price:r.marketPrice,cost:perCopy,qty:quantity(r),game:r.cardType||'',japanese:r.isJapanese||r.cardType==='pokemonjp',graded:false,source:r.priceSource==='seller'?'Your price':'Scan price',scanUid:r.scanUid,original:r,originalSnapshot:JSON.stringify(r)})), cost:perCopy===null?null:perCopy*count};
+    const perCopy=window._bulkPackUnitCost!==undefined ? (validPrice(window._bulkPackUnitCost)?window._bulkPackUnitCost:null)
+      : packCost!==null&&allCount?packCost/allCount:null;
+    const planned=chosen.map(r=>({name:r.cardName||'Unnamed card',price:r.marketPrice,cost:r.collectionSaved&&Object.hasOwn(r,'collectionUnitCost')?(validPrice(r.collectionUnitCost)?r.collectionUnitCost:null):perCopy,qty:quantity(r),game:r.cardType||'',japanese:r.isJapanese||r.cardType==='pokemonjp',graded:false,source:r.priceSource==='seller'?'Your price':'Scan price',scanUid:r.scanUid,original:r,originalSnapshot:JSON.stringify(r)}));
+    return {rows:planned,cost:purchaseCost(planned).total};
   }
   function openBulk() { const batch=fromBulk(); open(batch.rows,batch.cost,'Bulk scan'); }
   function openCollection(cards) {

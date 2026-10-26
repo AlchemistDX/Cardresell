@@ -2944,7 +2944,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div class="pnl-card">
       <div class="pnl-label">Unrealized Gain</div>
       <div class="pnl-value" id="pnlUnrealized">$0.00</div>
-      <div class="pnl-sub">vs. cost basis</div>
+      <div class="pnl-sub" id="pnlUnrealizedNote">vs. cost basis, before selling expenses</div>
     </div>
   </div>
 
@@ -3749,7 +3749,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
              (e.g. PSA 10). Hidden by default; populated by openCollectionCardDetail. -->
         <div id="ccmGradeChip" style="display:none;margin-bottom:.35rem"><span id="ccmGradeChipText" style="display:inline-block;padding:.15rem .45rem;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.4);border-radius:6px;font-size:.68rem;font-weight:700;color:var(--gold-text);letter-spacing:.02em"></span></div>
         <div id="ccmValue" style="font-size:1.15rem;font-weight:800;color:var(--gold-text);line-height:1.1">$—</div>
-        <div id="ccmPnL" style="font-size:.72rem;margin-top:.15rem;color:#aaa">—</div>
+        <div id="ccmPnL" style="font-size:.72rem;margin-top:.15rem;color:var(--text)">—</div>
       </div>
     </div>
 
@@ -3954,7 +3954,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/sale-corrections.ba658815.js"></script>
 <script defer src="/js/inventory-edits.827690a8.js"></script>
 <script defer src="/js/price-evidence.02c7df5f.js"></script>
-<script defer src="/js/core.1315d3d2.js"></script>
+<script defer src="/js/core.62122bf2.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
@@ -4038,11 +4038,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/membership-shop.045bc4d7.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
 <script defer src="/js/scan-finish.c4f4ee59.js"></script>
-<script defer src="/js/ui.4b94275c.js"></script>
+<script defer src="/js/ui.0b956b73.js"></script>
 <script defer src="/js/bulk-match-review.0e9f639e.js"></script>
 <script defer src="/js/bulk-workflow.e228c20c.js"></script>
 <script defer src="/js/bulk-lookup.640d2183.js"></script>
-<script defer src="/js/selling-plan.e84c1c0d.js"></script>
+<script defer src="/js/selling-plan.9de9581d.js"></script>
 <script defer src="/js/selling-advice.b7470777.js"></script>
 <style>
 
@@ -4291,7 +4291,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <span style="padding:0 .55rem;font-size:.95rem;color:rgba(255,255,255,.55)">$</span>
           <input type="number" min="0" step="0.01" placeholder="0.00" id="bulkStartPackCost" inputmode="decimal"
             style="background:transparent;border:none;color:#fff;font-size:.95rem;flex:1;padding:.55rem .3rem .55rem 0;outline:none;-moz-appearance:textfield"
-            oninput="window._bulkStartPackCost = parseFloat(this.value) || 0;">
+            oninput="window._bulkStartPackCost = this.validity.badInput ? NaN : this.value.trim() === '' ? null : Number(this.value);">
         </div>
         <div style="font-size:.66rem;color:rgba(139,92,246,.75);margin-top:.4rem;line-height:1.4">See how close each scan gets you to breaking even.</div>
       </div>
@@ -4525,7 +4525,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <div id="bulkCostSheet" style="display:none;flex-direction:column;flex:1;overflow:hidden">
       <div style="padding:.75rem 1.25rem .6rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
         <div style="font-size:.85rem;font-weight:700;color:#fff">What did you pay?</div>
-        <div style="font-size:.72rem;color:rgba(255,255,255,.4);margin-top:.15rem">Optional — leave $0 to skip. Used for P&amp;L tracking.</div>
+        <div style="font-size:.72rem;color:#b8b8b8;margin-top:.15rem">Leave blank if unknown. Enter 0 only if the cards cost nothing.</div>
         <!-- Cost mode toggle: pack/set total vs per-card -->
         <div style="display:flex;gap:.35rem;margin-top:.65rem;background:#0a0a0a;padding:.25rem;border-radius:8px">
           <button id="bulkCostModePack" onclick="setBulkCostMode('pack')" style="flex:1;padding:.42rem;background:rgba(139,92,246,.85);border:none;color:#fff;border-radius:6px;font-weight:700;font-size:.72rem;cursor:pointer">📦 Pack / Set cost</button>
@@ -4534,7 +4534,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       </div>
       <!-- Pack-cost mode: single total input, auto-split across cards -->
       <div id="bulkPackCostPanel" style="padding:1rem 1.25rem;border-bottom:1px solid #1a1a1a;flex-shrink:0">
-        <label style="font-size:.72rem;color:rgba(255,255,255,.55);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Total paid for pack / set</label>
+        <label for="bulkPackCostInput" style="font-size:.72rem;color:#b8b8b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Total paid for pack / set</label>
         <div style="display:flex;align-items:center;background:#1a1a1a;border:1.5px solid #2a2a2a;border-radius:8px;overflow:hidden;margin-top:.4rem">
           <span style="padding:0 .6rem;font-size:1rem;color:rgba(255,255,255,.5)">$</span>
           <input type="number" min="0" step="0.01" placeholder="0.00" id="bulkPackCostInput"
@@ -4542,7 +4542,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
             inputmode="decimal"
             oninput="updateBulkPackCostHint()">
         </div>
-        <div id="bulkPackCostHint" style="font-size:.7rem;color:rgba(255,255,255,.35);margin-top:.4rem">Split evenly across the <span id="bulkPackCostN">0</span> cards below.</div>
+        <div id="bulkPackCostHint" style="font-size:.7rem;color:#b8b8b8;margin-top:.4rem">Split evenly across the <span id="bulkPackCostN">0</span> cards below.</div>
       </div>
       <div id="bulkCostList" style="flex:1;overflow-y:auto;padding:.5rem 1rem 1rem"></div>
       <div style="padding:.85rem 1.25rem;border-top:1px solid #1a1a1a;background:#0a0a0a;flex-shrink:0">
@@ -4550,7 +4550,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
           <button onclick="_bulkShowSection('processing')" style="flex:1;padding:.65rem;background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:10px;font-weight:700;font-size:.85rem;cursor:pointer">← Back</button>
           <button onclick="confirmBulkCostSave()" style="flex:2;padding:.65rem;background:rgba(139,92,246,1);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.85rem;cursor:pointer">💾 Save to Collection</button>
         </div>
-        <button onclick="bulkSkipPricingAndSave()" style="width:100%;margin-top:.5rem;padding:.5rem;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:.75rem;cursor:pointer;text-decoration:underline">Skip pricing — save with $0 cost each</button>
+        <button onclick="bulkSkipPricingAndSave()" style="width:100%;margin-top:.5rem;padding:.5rem;background:transparent;border:none;color:rgba(255,255,255,.4);font-size:.75rem;cursor:pointer;text-decoration:underline">Skip cost — add it later</button>
       </div>
     </div>
   </div>
