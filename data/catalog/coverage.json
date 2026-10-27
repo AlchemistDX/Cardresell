@@ -5232,6 +5232,74 @@
       "represented_sets": 1032,
       "asset_sha256": "88b8cbb13943f399fcec81e8f753a9c954690d53529116ee027e82816c6fd547",
       "missing_images": 45205
+    },
+    "mtg": {
+      "provider": "Scryfall default_cards JSONL",
+      "scope": "Every English paper printing in the dated Scryfall default_cards snapshot; no prices or identity inference.",
+      "searchable_records": 107402,
+      "represented_sets": 967,
+      "asset_sha256": "e30d9736f646c6c07aec8ee0735eb29af9832041b918752640368a40b52f4646",
+      "source_sha256": "4c5befc3114350d923e8a5482bb56ef56e10009a9fd6944e0d5de0611be1cdb6",
+      "source_updated_at": "2026-10-26T21:05:59.438+00:00",
+      "excluded": {
+        "nonEnglishOrNonPaper": 11929
+      },
+      "missing_images": 162,
+      "reviewed_removed_ids": [],
+      "parts": [
+        {
+          "url": "/data/catalog/mtg-part.6a22c9594cd1.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.366419e90158.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.f2c4178e4119.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.6655e1c04672.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.0c557bf8bb18.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.549508ce56e8.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.24524b854327.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.f6e64802b2ff.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.d004a4309a40.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.64272e71f793.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.25b2edf8a1b0.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.b8b8d3a0b048.json",
+          "count": 8500
+        },
+        {
+          "url": "/data/catalog/mtg-part.d81c343d9feb.json",
+          "count": 5402
+        }
+      ]
     }
   },
   "tcgcsv_updated_at": "2026-10-26T20:05:56+0000",

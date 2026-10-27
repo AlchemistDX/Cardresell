@@ -2,15 +2,15 @@
    Run tools/build-search-catalogs.py, then tools/version-search-catalog.mjs. */
 (function(root) {
   'use strict';
-  const MANIFEST = '/data/catalog/manifest.083369bdc979.json';
+  const MANIFEST = '/data/catalog/manifest.4f12e29f2833.json';
   const pending = new Map();
   const names = new WeakMap();
   function fold(value) { return String(value || '').normalize('NFKC').toLowerCase().replace(/[’']/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim(); }
-  async function read(url) {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 15000);
+  async function read(url, signal) {
+    const abort = signal ? null : new AbortController();
+    const timer = abort && setTimeout(() => abort.abort(), 15000);
     try {
-      const res = await fetch(url, {signal:abort.signal});
+      const res = await fetch(url, {signal:signal || abort.signal});
       if (!res.ok) throw Error('Catalog unavailable');
       return await res.json();
     } finally { clearTimeout(timer); }
@@ -25,13 +25,40 @@
       const meta = manifest?.games?.[game];
       if (manifest?.schema !== 1 || !meta || !new RegExp('^/data/catalog/'+game+'\\.[a-f0-9]{12}\\.json$').test(meta.url)) throw Error('Catalog not available for this game');
       const data = await read(meta.url);
+      if (data?.schema !== 1 || data.game !== game || !Array.isArray(data.cards) || !data.sets || typeof data.sets !== 'object' || Array.isArray(data.sets)) throw Error('Incomplete catalog');
+      if (game === 'mtg' && Array.isArray(meta.parts)) {
+        if (!meta.parts.length || meta.parts.length > 64 || !Array.isArray(data.parts) || data.parts.length !== meta.parts.length || data.cards.length !== 0) throw Error('Invalid Magic shard index');
+        const urls=new Set();let declared=0;
+        for (let i=0;i<meta.parts.length;i++) {
+          const part=meta.parts[i];
+          if (!part || !/^\/data\/catalog\/mtg-part\.[a-f0-9]{12}\.json$/.test(part.url) || urls.has(part.url) || !Number.isSafeInteger(part.count) || part.count < 1 || part.count > 8500 || part.url !== data.parts[i]?.url || part.count !== data.parts[i]?.count) throw Error('Invalid Magic shard');
+          urls.add(part.url);declared+=part.count;
+        }
+        if (declared !== meta.count) throw Error('Incomplete Magic shard index');
+        // One deadline for the whole generation; limit concurrent transfers on phones.
+        const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),20000);
+        const chunks=new Array(meta.parts.length);let next=0;
+        async function worker() {
+          while (next<meta.parts.length) {
+            const i=next++,part=meta.parts[i],shard=await read(part.url,abort.signal);
+            if (shard?.schema!==1 || shard.game!=='mtg' || !Array.isArray(shard.cards) || shard.cards.length!==part.count) throw Error('Incomplete Magic shard');
+            chunks[i]=shard.cards;
+          }
+        }
+        try { await Promise.all(Array.from({length:Math.min(3,meta.parts.length)},worker)); }
+        finally {clearTimeout(timer);abort.abort();}
+        data.cards=chunks.flat();
+      }
       if (data?.schema !== 1 || data.game !== game || !Array.isArray(data.cards) || data.cards.length !== meta.count || !data.cards.length || !data.sets) throw Error('Incomplete catalog');
       if ((data.nativeCards?.length || 0) !== (meta.nativeCount || 0)) throw Error('Incomplete native catalog');
-      const ids = new Set();
+      const ids = new Set(), represented = new Set();
       for (const c of [...data.cards,...(data.nativeCards || [])]) {
         if (!Array.isArray(c) || c.length < 7 || typeof c[0] !== 'string' || !c[0] || typeof c[1] !== 'string' || !c[1] || ids.has(c[0]) || typeof data.sets[c[2]] !== 'string' || c[6] !== (game === 'pokemonjp' ? 'ja' : 'en')) throw Error('Invalid catalog identity');
+        if (game === 'mtg' && (c.length !== 10 || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(c[0]) || !c[1].trim() || typeof c[2] !== 'string' || !Object.prototype.hasOwnProperty.call(data.sets,c[2]) || !data.sets[c[2]].trim() || typeof c[3] !== 'string' || !c[3].trim() || c[8] !== false || !Array.isArray(c[9]) || c[9].some(a => typeof a !== 'string' || !a.trim()))) throw Error('Invalid Magic printing');
         ids.add(c[0]);
+        represented.add(c[2]);
       }
+      if (game === 'mtg' && (data.provider !== 'Scryfall' || !Number.isSafeInteger(meta.sets) || represented.size !== meta.sets || Object.keys(data.sets).length !== meta.sets || data.nativeCards?.length)) throw Error('Invalid Magic set inventory');
       return data;
     });
   }
@@ -41,7 +68,7 @@
     const nativeQuery = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(q);
     const candidates = nativeQuery && data.nativeCards?.length ? data.nativeCards : data.cards;
     const rows = candidates.filter(c => {
-      const text = fold([c[1],data.sets[c[2]],c[3]].join(' '));
+      const text = fold([c[1],data.sets[c[2]],c[3],...(game === 'mtg' && Array.isArray(c[9]) ? c[9] : [])].join(' '));
       return tokens.every(t => text.includes(t));
     });
     rows.sort((a,b) => Number(fold(b[1]) === q) - Number(fold(a[1]) === q));
@@ -55,7 +82,10 @@
     if (!names.has(data)) {
       const index = new Map();
       for (const c of [...data.cards,...(data.nativeCards || [])]) {
-        if (c[8] !== true) index.set(fold(c[1]),c[1]);
+        if (c[8] !== true) {
+          index.set(fold(c[1]),c[1]);
+          if (game === 'mtg' && Array.isArray(c[9])) for (const face of c[9]) index.set(fold(face),face);
+        }
       }
       names.set(data,index);
     }
@@ -83,13 +113,19 @@
     }
     return best<=limit && matches.length===1 ? hit(matches[0]) : null;
   }
+  async function byId(game, id) {
+    if (game !== 'mtg' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id || '')) return null;
+    const data = await load(game);
+    const card = data.cards.find(c => c[0] === id);
+    return card ? {data, rows:[card]} : null;
+  }
   function normalized(data,c) {
     const provider = c[0].startsWith('tcgdex:') ? 'TCGdex' : data.provider;
-    const id = c[0].startsWith('tcgdex:') ? c[0] : provider === 'TCGCSV / TCGplayer' ? 'tcgplayer:'+c[0] : provider === 'TCGdex' ? 'tcgdex:'+c[0] : 'ygoprodeck:'+c[0];
+    const id = data.game === 'mtg' && provider === 'Scryfall' ? c[0] : c[0].startsWith('tcgdex:') ? c[0] : provider === 'TCGCSV / TCGplayer' ? 'tcgplayer:'+c[0] : provider === 'TCGdex' ? 'tcgdex:'+c[0] : 'ygoprodeck:'+c[0];
     const image = /^https:\/\//i.test(c[5]) ? c[5] : '';
     return {id, name:c[1],game:data.game,setName:data.sets[c[2]],setCode:c[2],number:c[3],rarity:c[4],language:c[6],
       images:{small:image,large:image.replace(/\/low\.webp$/, '/high.webp')},priceVariants:[],
       source:provider+' catalog — price not checked',updatedAt:'',catalogAsOf:data.asOf,catalogPresale:c[8]===true,releaseDate:c[7] || '',_localCatalogFallback:true};
   }
-  root.CardResellCatalog = Object.freeze({load,search,suggest,normalized});
+  root.CardResellCatalog = Object.freeze({load,search,suggest,byId,normalized});
 })(typeof window === 'undefined' ? globalThis : window);

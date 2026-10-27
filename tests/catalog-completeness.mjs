@@ -14,10 +14,21 @@ const module=readFileSync(join(ROOT,'js/search-catalog.js'),'utf8');
 const hash=b=>createHash('sha256').update(b).digest('hex');
 for(const [game,meta] of Object.entries(manifest.games)){
  const raw=readFileSync(join(ROOT,meta.url)),d=JSON.parse(raw);
+ if(game==='mtg' && Array.isArray(meta.parts)){
+   assert.equal(d.cards.length,0);
+   assert.deepEqual(d.parts,meta.parts);
+   d.cards=meta.parts.flatMap(part=>{
+     assert.match(part.url,/^\/data\/catalog\/mtg-part\.[a-f0-9]{12}\.json$/);
+     const content=readFileSync(join(ROOT,part.url));
+     assert.ok(part.url.includes(hash(content).slice(0,12)));
+     const json=JSON.parse(content);assert.equal(json.schema,1);assert.equal(json.game,'mtg');assert.equal(json.cards.length,part.count);
+     return json.cards;
+   });
+ }
  check(game+': optional native-language catalog has the declared count',()=>assert.equal((d.nativeCards||[]).length,meta.nativeCount||0));
  check(game+': all imported IDs are unique and manifest matches bytes',()=>{assert.equal(d.cards.length,meta.count);assert.equal(new Set(d.cards.map(c=>c[0])).size,meta.count);assert.equal(hash(raw),build.games[game].asset_sha256);assert.ok(meta.url.includes(hash(raw).slice(0,12)))});
  check(game+': every identity belongs to a known set and correct language',()=>assert.ok(d.cards.every(c=>typeof d.sets[c[2]]==='string'&&c[6]===(game==='pokemonjp'?'ja':'en'))));
- check(game+': prices are not stored in the catalog',()=>assert.ok(d.cards.every(c=>Array.isArray(c)&&c.length<=9)));
+ check(game+': prices are not stored in the catalog',()=>assert.ok(d.cards.every(c=>Array.isArray(c)&&(game==='mtg' ? c.length===10 && Array.isArray(c[9]) && c[9].every(x=>typeof x==='string') : c.length<=9))));
  if(game==='pokemon')check('Pocket sets cannot appear in physical-card lookup',()=>assert.ok(d.cards.every(c=>!build.games.pokemon.excluded_pocket_sets.includes(c[2]))));
  if(game==='yugioh')check('YGO card-wide artwork is never sold as an exact-printing image',()=>assert.ok(d.cards.every(c=>c[5]==='')));
 }
@@ -65,7 +76,7 @@ try{
   await page.addInitScript(()=>{localStorage.setItem('cr_landing_seen','1');localStorage.setItem('cs_landing_seen','1')});
   await page.route('**/*',r=>{const u=r.request().url();if(!u.startsWith(origin))return r.abort();if(u.includes('/api/'))return r.fulfill({status:200,contentType:'application/json',body:'{"data":[],"results":[]}'});return r.continue()});
   await page.goto(origin,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>typeof searchPokemon==='function'&&!!window.CardResellCatalog);
-  for(const [game,q] of [['pokemon','Pikachu'],['pokemonjp','Pikachu'],['pokemonjp','ピカチュウ'],['lorcana','Mickey'],['onepiece','Luffy'],['yugioh','Dark Magician']]){
+  for(const [game,q] of [['pokemon','Pikachu'],['pokemonjp','Pikachu'],['pokemonjp','ピカチュウ'],['lorcana','Mickey'],['onepiece','Luffy'],['yugioh','Dark Magician'],['mtg','Sol Ring']]){
    await page.evaluate(async({game,q})=>{onGameSelectChange(game);searchInput.value=q;await openCatalog(q)}, {game,q});
    await page.locator('#searchModalGrid .cat-result').first().waitFor();
    const before=await page.locator('#searchModalGrid .cat-result').count();
