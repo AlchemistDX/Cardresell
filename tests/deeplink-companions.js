@@ -6,10 +6,26 @@
 const fs = require('fs');
 const { readAppSource } = require('./_appsource.cjs');
 const path = require('path');
+const vm = require('node:vm');
+const {parse} = require('acorn');
 
 const INDEX  = readAppSource();
 const RESOLVE = fs.readFileSync(path.join(__dirname, '..', 'api', 'tcgp-resolve.js'), 'utf8');
 
+// Inspect and execute the functions from the bundles actually referenced by HTML.
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+function bundle(name) {
+  const rel = html.match(new RegExp('src="(/js/' + name + '\\.[a-f0-9]+\\.js)"'))[1];
+  const source = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+  return {source, nodes:parse(source,{ecmaVersion:'latest'}).body};
+}
+function declaration(bundle, name) {
+  const node=bundle.nodes.find(n=>n.id?.name===name || n.declarations?.some(d=>d.id.name===name));
+  if(!node)throw Error('Missing shipped declaration: '+name);
+  return bundle.source.slice(node.start,node.end);
+}
+const coreBundle=bundle('core'),uiBundle=bundle('ui');
+async function main() {
 let pass = 0, fail = 0;
 const check = (label, cond) => {
   const ok = !!cond;
@@ -258,8 +274,15 @@ console.log('\n[Launch analytics 2026-08-13]');
 check('Vercel Insights script loaded',                          INDEX.includes("/_vercel/insights/script.js"));
 check('trackEvent helper defined',                              INDEX.includes("window.trackEvent = function trackEvent(name, props)"));
 check('trackEvent uses safe try/catch',                         INDEX.includes("analytics must never break the app"));
-check('search_zero_results event fires',                        INDEX.includes("'search_zero_results'"));
-check('search_results event fires',                             INDEX.includes("'search_results'"));
+// The pre-release baseline already replaced the raw-query analytics branches
+// with structured search outcomes. Check those outcomes instead of requiring
+// obsolete telemetry event strings.
+const searchOutcome=vm.runInNewContext(declaration(coreBundle,'TPL_UNAVAILABLE_MSG')+'\n'+declaration(coreBundle,'tplOutcomeHtml')+';tplOutcomeHtml');
+check('a completed empty search retains its no-match result',searchOutcome({ok:true,cards:[]},'EMPTY_RESULT')==='EMPTY_RESULT');
+check('an unavailable provider is never reported as zero matches', ['network','budget','rate_limited','unavailable','not_configured'].every(reason=>{
+  const rendered=searchOutcome({ok:false,reason},'EMPTY_RESULT');
+  return rendered.includes('data-tpl-state="unavailable"') && !rendered.includes('EMPTY_RESULT');
+}));
 check('collection_add event fires on single save',              INDEX.includes("'collection_add'"));
 check('bulk_scan_save event fires on bulk save',                INDEX.includes("'bulk_scan_save'"));
 check('checkout_attempt event fires on Pro monthly',            INDEX.includes("plan: 'pro_monthly'"));
@@ -325,8 +348,21 @@ check('_bulkFetchPriceMTG routes to Scryfall',                      INDEX.includ
 check('_bulkFetchPriceYGO routes to YGOProDeck',                    INDEX.includes("db.ygoprodeck.com/api/v7/cardinfo.php"));
 check('_bulkFetchPriceLorcana routes to lorcana-api',               INDEX.includes("api.lorcana-api.com/cards/fetch"));
 check('_bulkFetchPrice dispatches by cardType',                     INDEX.includes("if (type === 'mtg') return _bulkFetchPriceMTG"));
-check('_bulkFetchPrice tries JP live-price endpoint first',         INDEX.includes("tcg-price?name=") && INDEX.includes("if (isJapanese)"));
-check('bulkOpenCardInLookup uses detected cardType not pokemon',    INDEX.includes("const targetGame = GAME_MAP[(r.cardType"));
+let jpCalls=0, englishCalls=0;
+const jpPrice=vm.runInNewContext(declaration(uiBundle,'_bulkFetchPrice')+';_bulkFetchPrice',{
+  _bulkFetchPricePokemonJP:async()=>{jpCalls++;return {marketPrice:7};},
+  fetch:async()=>{englishCalls++;throw Error('English lookup must not run');}
+});
+const flagQuote=await jpPrice('Pikachu','JP set','025','pokemon',true);
+const gameQuote=await jpPrice('Pikachu','JP set','025','pokemonjp',false);
+check('Japanese flag and game both use only Japanese pricing',jpCalls===2 && englishCalls===0 && flagQuote.marketPrice===7 && gameQuote.marketPrice===7);
+const lookupNode=uiBundle.nodes.find(n=>n.id?.name==='bulkOpenCardInLookup');
+const gameDeclarations=lookupNode.body.body.filter(n=>n.type==='VariableDeclaration'&&n.declarations.some(d=>['GAME_MAP','targetGame'].includes(d.id.name)));
+const gameCode=gameDeclarations.map(n=>uiBundle.source.slice(n.start,n.end)).join('\n')+';targetGame';
+check('details retain the detected game and Japanese identity',[
+  [{cardType:'mtg'},'mtg'],[{cardType:'yugioh'},'yugioh'],[{cardType:'lorcana'},'lorcana'],
+  [{cardType:'pokemon',isJapanese:true},'pokemonjp'],[{cardType:'pokemonjp'},'pokemonjp']
+].every(([r,expected])=>vm.runInNewContext(gameCode,{r})===expected));
 check('bulkOpenCardInLookup no longer force-sets pokemon',          !INDEX.includes("Bulk scanner always identifies Pokemon"));
 check('bulkOpenCardInLookup routes non-Pokemon to searchInput',     INDEX.includes("Non-Pokemon: prefill search, trigger the tab"));
 check('bulkOpenCardInLookup auto-clicks best-match dropdown row',   INDEX.includes("auto-click the row that best matches"));
@@ -347,3 +383,6 @@ check('async TPL fallback injects hidden option for graded key',    INDEX.includ
 console.log('\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
 console.log(`Total: ${pass + fail} checks, ${fail} failure(s)`);
 process.exit(fail > 0 ? 1 : 0);
+
+}
+main().catch(error=>{console.error(error);process.exit(1);});
