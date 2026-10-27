@@ -1,3 +1,4 @@
+import { isolateFixtureAuth } from './_fixtureAuth.mjs';
 /**
  * tests/bulk-batch-draft.mjs — batch drafting from Bulk/Rapid Scan, in a real
  * browser, against the real api/drafts.js handler and real store code.
@@ -123,6 +124,7 @@ const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM,
 async function boot({ sub, scanPlan = null, photos = 2 } = {}) {
   const tok = await tokenFor(sub);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await isolateFixtureAuth(ctx);
   const page = await ctx.newPage();
   const errors = [];
   const wire = [];

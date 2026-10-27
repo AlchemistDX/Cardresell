@@ -1,3 +1,4 @@
+import { isolateFixtureAuth } from './_fixtureAuth.mjs';
 /**
  * The photo column, and the sentence next to it.
  *
@@ -272,7 +273,8 @@ blockedOrigin = `http://localhost:${blocker.address().port}`;
 const { chromium } = (await import(PW)).default;
 const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || undefined, args: ['--no-sandbox'] });
 const ctx = await browser.newContext();
-const page = await ctx.newPage();
+await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
 await page.goto(`${B}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(
   () => typeof window.photosAdd === 'function'

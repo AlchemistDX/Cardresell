@@ -1,3 +1,4 @@
+import { isolateFixtureAuth } from './_fixtureAuth.mjs';
 /**
  * tests/draft-list-screen.mjs — D2.1 drafts screen, in a real browser.
  *
@@ -200,6 +201,7 @@ const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM,
 /** Fresh page per case: _draftsState is module-level, so cases must not share it. */
 async function withPage(plan, fn) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await isolateFixtureAuth(ctx);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
   try {

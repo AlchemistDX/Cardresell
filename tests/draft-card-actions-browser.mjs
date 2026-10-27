@@ -1,3 +1,4 @@
+import { isolateFixtureAuth } from './_fixtureAuth.mjs';
 /**
  * tests/draft-card-actions-browser.mjs — Edit, Delete and Download from the
  * draft card, in a real browser, against the real handler and a real store.
@@ -111,6 +112,7 @@ const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM,
 async function boot({ sub, collection = [], viewport = { width: 1280, height: 900 } } = {}) {
   const tok = await tokenFor(sub);
   const ctx = await browser.newContext({ viewport, acceptDownloads: true });
+  await isolateFixtureAuth(ctx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
