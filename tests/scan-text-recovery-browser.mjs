@@ -104,7 +104,7 @@ try{
   const value=await CardResellScanTextRecovery.find(await makePhoto(),{game:'pokemon',lookup:async(name)=>{queries.push(name);return name.includes('Plusle')?{name:'Plusle'}:null}});return [value,queries];});
  check('sleeve noise cannot hide a later title line',noisy,[{name:'Plusle',game:'pokemon',catalogueMatched:true},['ae Plusle']]);
  check('Pokémon catalogue tolerates a leading noise token',await page.evaluate(async()=> (await _confirmCardByName('ae Plusle','pokemon'))?.name),'Plusle');
- check('catalogue queries the title word, not sleeve noise',new URL(requests.filter(r=>r.url.includes('api.pokemontcg.io')).at(-1).url).searchParams.get('q'),'name:Plusle*');
+ check('name recovery uses the audited local catalog',requests.some(r=>/\/data\/catalog\/pokemon\.[a-f0-9]+\.json/.test(r.url)),true);
  const capped=await page.evaluate(async()=>{readerReset(['Name Alpha\nName Bravo','Name Charlie\nName Delta','Name Echo\nName Foxtrot','Name Golf\nName Hotel']);let calls=0;
   const value=await CardResellScanTextRecovery.find(await makePhoto(),{game:'onepiece',lookup:async()=>{calls++;return null}});return [value,ocrReads,calls];});
  check('catalogue attempts bounded; raw text stays unconfirmed',capped,[{name:'Name Alpha',game:'onepiece',catalogueMatched:false},4,6]);

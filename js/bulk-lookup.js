@@ -3,6 +3,8 @@
   'use strict';
   let active = null;
   const searches = new WeakMap();
+  const games = {mtg:'Magic: The Gathering (English)',pokemon:'Pokémon (English)',pokemonjp:'Pokémon (Japanese)',yugioh:'Yu-Gi-Oh! (English)',lorcana:'Disney Lorcana (English)',onepiece:'One Piece (English)'};
+  const gameKey = row => row?.isJapanese || String(row?.cardType).toLowerCase()==='pokemonjp' ? 'pokemonjp' : String(row?.cardType || '').toLowerCase();
   const text = value => typeof value === 'string' ? value.trim().slice(0,240) : '';
   const quote = value => '"' + text(value).replace(/["\\\x00-\x1f]/g, ' ') + '"';
   const price = value => (typeof value === 'number' || typeof value === 'string' && value.trim() !== '') && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
@@ -10,7 +12,7 @@
     try {
       const u = new URL(value);
       return u.protocol === 'https:' && !u.username && !u.password &&
-        ['cards.scryfall.io','c1.scryfall.com','images.pokemontcg.io'].includes(u.hostname) ? u.href : '';
+        ['cards.scryfall.io','c1.scryfall.com','images.pokemontcg.io','assets.tcgdex.net','tcgplayer-cdn.tcgplayer.com'].includes(u.hostname) ? u.href : '';
     } catch (_) { return ''; }
   }
   function candidate(card, game) {
@@ -37,8 +39,18 @@
       imageUrl:artwork(game === 'mtg' ? card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal : card.images?.large || card.images?.small),
       info:{prices,variant,marketPrice:prices[variant] ?? null}};
   }
+  function snapshotCandidate(data, row) {
+    const card = window.CardResellCatalog.normalized(data,row);
+    // Identity-only YGO records and announced products cannot confirm a
+    // physical printing. Missing images and unnumbered DON!! remain usable.
+    if (!text(card.setName) || card.catalogPresale || data.game==='yugioh' && !text(card.number)) return null;
+    return {cardName:card.name,setName:card.setName,cardNumber:card.number,groundedId:card.id,
+      setCode:card.setCode,cardType:card.game==='pokemonjp'?'pokemon':card.game,isJapanese:card.language==='ja',
+      rarity:card.rarity,foilHint:'',imageUrl:artwork(card.images.large || card.images.small),catalogCard:card,
+      info:{prices:{},variant:'',marketPrice:null}};
+  }
   const eligible = row => row && !window._bulkProcessing && !window._bulkSaved && !window._bulkDraftBusy &&
-    !row.success && (row.definiteMiss || row.photoRejected) &&
+    !row.success && !row.providerNeedsReview && (row.definiteMiss || row.photoRejected) &&
     !row._rescanning && !row._photoChecking && !row._replacementPhoto;
   function current(s) {
     return active === s && window._bulkResults === s.results && s.results.includes(s.row) &&
@@ -103,10 +115,12 @@
     const form = node('form','',searchView);
     const field = (label,tag,attrs) => node(tag,'',node('label',label,form),attrs);
     const game = field('Game','select',{name:'game'});
-    node('option','Magic: The Gathering (English)',game,{value:'mtg'});
-    node('option','Pokémon (English)',game,{value:'pokemon'});
-    const existingGames = [...new Set(results.filter(r=>r?.success).map(r=>r.cardType))];
-    game.value = existingGames.length === 1 && existingGames[0] === 'pokemon' ? 'pokemon' : 'mtg';
+    for(const [value,label] of Object.entries(games))node('option',label,game,{value});
+    const existingGames = [...new Set(results.filter(r=>r?.success).map(gameKey))];
+    const selected=String(window.activeGame || '').toLowerCase();
+    const hint=String(row.scanGameHint || '').toLowerCase();
+    const inferred=hint==='pokemon'&&selected==='pokemonjp'?'pokemonjp':hint || (existingGames.length===1?existingGames[0]:selected);
+    game.value = games[inferred] ? inferred : 'mtg';
     const name = field('Card name','input',{name:'name',required:'',maxlength:'120',autocomplete:'off',placeholder:'e.g. Elite Interceptor'});
     const number = field('Card number (optional)','input',{name:'number',maxlength:'30',autocomplete:'off',placeholder:'e.g. 123'});
     const savedSearch = searches.get(row);
@@ -114,9 +128,13 @@
       game.value=savedSearch.game; name.value=savedSearch.name; number.value=savedSearch.number;
     } else {
       const read=window.CardResellScanTextRecovery?.suggestion(row);
-      if(read && ['mtg','pokemon'].includes(read.game)) {game.value=read.game;name.value=read.name;}
+      if(read && games[read.game]) {game.value=read.game;name.value=read.name;}
     }
-    name.placeholder = game.value === 'mtg' ? 'e.g. Elite Interceptor' : 'e.g. Plusle';
+    const placeholders = () => {
+      name.placeholder = 'e.g. '+({mtg:'Elite Interceptor',pokemon:'Plusle',pokemonjp:'ピカチュウ',yugioh:'Dark Magician',lorcana:'Mickey Mouse',onepiece:'Monkey.D.Luffy'}[game.value] || 'Printed name');
+      number.placeholder = 'e.g. '+({yugioh:'LOB-EN005',onepiece:'OP01-003'}[game.value] || '123');
+    };
+    placeholders();
     const remember = () => searches.set(row,{owner:s.owner,file:s.file,game:game.value,name:name.value,number:number.value});
     const submit = node('button','Search catalogue',form,{type:'submit',class:'lookup-primary'});
     const status = node('p','',searchView,{role:'status','aria-live':'polite'});
@@ -124,23 +142,25 @@
     const paging = node('div','',searchView,{class:'lookup-actions'});
     const previous = node('button','Previous page',paging,{type:'button',hidden:''});
     const next = node('button','Next page',paging,{type:'button',hidden:''});
+    const browse = node('button','Browse all catalog printings',paging,{type:'button',hidden:''});
     const confirm = node('section','',dialog,{hidden:''});
     let query = null, page = 1, more = false;
     const invalidate = () => {
       s.generation++; s.request?.abort(); list.replaceChildren(); status.textContent='';
-      query=null; previous.hidden=next.hidden=true; submit.disabled=false;
+      query=null; previous.hidden=next.hidden=browse.hidden=true; submit.disabled=false;
     };
     name.oninput = number.oninput = () => { remember(); invalidate(); };
-    game.onchange = () => { remember(); invalidate(); name.placeholder = game.value === 'mtg' ? 'e.g. Elite Interceptor' : 'e.g. Plusle'; };
+    game.onchange = () => { remember(); invalidate(); placeholders(); };
     function choose(card) {
       if (!current(s)) return close();
       searchView.hidden=true; confirm.hidden=false; confirm.replaceChildren();
       node('h3',card.cardName,confirm);
-      node('p',`${card.setName} · #${card.cardNumber} · English`,confirm);
+      node('p',[card.setName,card.cardNumber?'#'+card.cardNumber:'',card.rarity,card.isJapanese?'Japanese':'English'].filter(Boolean).join(' · '),confirm);
       const compare = node('div','',confirm,{class:'lookup-compare'});
       const yours = node('div','',compare); node('p','Your photo',yours); picture(row.objectUrl || row.imageDataUrl,'Your card',yours);
       const reference = node('div','',compare); node('p','Catalogue printing',reference); picture(card.imageUrl,'Selected catalogue printing',reference);
       node('p','Check the artwork, set and number against your card. You can set its condition and finish in the batch.',confirm);
+      if(card.catalogCard) node('p','This catalog confirms identity only. No market price is included.',confirm);
       if (card.cardType === 'mtg') node('p','We’ll also try to recover other cards from this set. No extra scan credits.',confirm);
       const actions = node('div','',confirm,{class:'lookup-actions'});
       node('button','Back to results',actions,{type:'button'}).onclick=()=>{confirm.hidden=true;searchView.hidden=false;submit.focus()};
@@ -151,7 +171,7 @@
         // condition and seller metadata remain intact; nothing is saved yet.
         const {info,...identity} = card;
         searches.delete(row);
-        Object.assign(row,identity,{success:true,manualIdentity:true,error:'',definiteMiss:false,photoRejected:false,
+        Object.assign(row,identity,{catalogCard:card.catalogCard || null,success:true,manualIdentity:true,error:'',definiteMiss:false,photoRejected:false,
           textRescue:false,marketPrice:null,priceVariant:'',priceSource:null,tcgplayerUrl:'',unavailableReason:''});
         window._scanApplyFinishReview?.(row,info);
         close();
@@ -171,31 +191,56 @@
       const version = ++s.generation, controller = new AbortController();
       s.request?.abort(); s.request=controller;
       const timeout = setTimeout(()=>controller.abort(),15000);
-      submit.disabled=true; previous.hidden=next.hidden=true; list.replaceChildren(); status.textContent='Searching…';
+      submit.disabled=true; previous.hidden=next.hidden=browse.hidden=true; list.replaceChildren(); status.textContent='Searching…';
       const snapshot = query;
       try {
         const mtg = snapshot.game === 'mtg';
+        let cards, source, hasMore;
+        const local = async () => {
+          if(!window.CardResellCatalog) throw Error('Catalog unavailable. Your batch is unchanged; try again.');
+          const found = snapshot.catalog || await window.CardResellCatalog.search(snapshot.game,snapshot.name);
+          snapshot.catalog = found; snapshot.useCatalog = true;
+          const clean = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s/g,'').replace(/\/.*$/,'').replace(/^0+(?=\d)/,'');
+          const matches = found.rows.filter(r=>!snapshot.number || clean(r[3])===clean(snapshot.number)).map(r=>snapshotCandidate(found.data,r)).filter(Boolean);
+          cards=matches.slice((target-1)*24,target*24);hasMore=target*24<matches.length;
+          source=found.data.provider+' catalog · '+found.data.asOf+' · prices not included';
+        };
+        if(!mtg && (snapshot.game!=='pokemon' || snapshot.useCatalog)) await local();
+        else {
         const url = new URL(mtg ? 'https://api.scryfall.com/cards/search' : 'https://api.pokemontcg.io/v2/cards');
         url.searchParams.set('q', (mtg ? `name:${quote(snapshot.name)} game:paper lang:en` : `name:${quote(snapshot.name)}`) +
           (snapshot.number ? ` ${mtg?'cn':'number'}:${quote(snapshot.number)}` : ''));
         url.searchParams.set('page',String(target));
-        if (mtg) { url.searchParams.set('unique','prints'); url.searchParams.set('order','released'); url.searchParams.set('dir','desc'); }
+        if (mtg) { url.searchParams.set('unique','prints'); url.searchParams.set('order','released'); url.searchParams.set('dir','desc'); url.searchParams.set('include_extras','true'); url.searchParams.set('include_variations','true'); }
         else { url.searchParams.set('pageSize','24'); url.searchParams.set('orderBy','-set.releaseDate'); url.searchParams.set('select','id,name,set,number,rarity,images,tcgplayer'); }
+        try {
         const response = await fetch(url.href,{signal:controller.signal,credentials:'omit',headers:{Accept:'application/json'}});
         const body = response.status === 404 && mtg ? {data:[]} : response.ok ? await response.json() : null;
         if (version !== s.generation || !current(s)) return;
         if (!body || !Array.isArray(body.data)) throw new Error(response.status === 429 ? 'Catalogue is busy. Wait a moment and search again.' : 'Catalogue could not be reached. Please try again.');
-        const cards = body.data.map(c=>candidate(c,snapshot.game)).filter(Boolean);
-        page=target; more = mtg ? body.has_more === true : target * 24 < Number(body.totalCount);
+        cards = body.data.map(c=>candidate(c,snapshot.game)).filter(Boolean);
+        hasMore = mtg ? body.has_more === true : target * 24 < Number(body.totalCount);
+        source=mtg?'Scryfall':'Pokémon TCG API';
+        if(!mtg && !cards.length && target===1) await local();
+        } catch(error) {
+          if(mtg || version!==s.generation || !current(s))throw error;
+          // Switching sources starts at page one; live and saved offsets are
+          // different and must not hide the first saved matches.
+          target=1; await local();
+        }
+        }
+        if(version!==s.generation || !current(s))return;
+        page=target;more=hasMore;
         status.textContent = cards.length ? `Page ${page} · Choose the printing that matches your card.` : 'No matching cards. Check the name or try without the card number.';
         for (const card of cards) {
           const button = node('button','',list,{type:'button'});
           picture(card.imageUrl,'',button); node('strong',card.cardName,button);
-          node('span',`${card.setName} · #${card.cardNumber}`,button);
+          node('span',[card.setName,card.cardNumber?'#'+card.cardNumber:'',card.rarity].filter(Boolean).join(' · '),button);
           button.onclick=()=>choose(card);
         }
         previous.hidden=page<=1; next.hidden=!more;
-        node('p',mtg?'Card data: Scryfall':'Card data: Pokémon TCG API',list).style.gridColumn='1 / -1';
+        browse.hidden=mtg || snapshot.useCatalog || snapshot.game!=='pokemon';
+        node('p','Card data: '+source,list).style.gridColumn='1 / -1';
       } catch (error) {
         if (version === s.generation && current(s)) {
           status.textContent=error.name==='AbortError'?'Search timed out. Your batch is unchanged; try again.':error.message;
@@ -213,6 +258,7 @@
       page=1;more=false;search(1);
     };
     previous.onclick=()=>search(page-1); next.onclick=()=>search(page+1);
+    browse.onclick=()=>{if(query){query.useCatalog=true;page=1;more=false;search(1)}};
     dialog.addEventListener('cancel',event=>{event.preventDefault();close()});
     // A result may finish rescuing, be removed, or change accounts while open.
     s.watch=setInterval(()=>{if (!current(s)) close()},250);
