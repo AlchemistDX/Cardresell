@@ -1,0 +1,103 @@
+{
+  "scope": "Targeted catalog, scanner recovery, printing identity, source and user journey gates. Not the full repository suite and not a live Ximilar accuracy benchmark.",
+  "suites": [
+    {
+      "suite": "catalog-completeness-test",
+      "passed": 79,
+      "failed": 0,
+      "completion": "catalog-completeness: 79 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-asset-fingerprints",
+      "passed": 281,
+      "failed": 0,
+      "completion": "asset-fingerprints: 281 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-catalog-search",
+      "passed": 24,
+      "failed": 0,
+      "completion": "catalog-search: 24 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-catalog-outage",
+      "passed": 21,
+      "failed": 0,
+      "completion": "SUITE COMPLETE: catalog-outage.mjs: 21 passed, 0 failed"
+    },
+    {
+      "suite": "catalog-client-printing-evidence",
+      "passed": 28,
+      "failed": 0,
+      "completion": "client-printing-evidence: 28 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-catalog-printing-evidence",
+      "passed": 23,
+      "failed": 0,
+      "completion": "catalog-printing-evidence: 23 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-catalog-read-sharing",
+      "passed": 217,
+      "failed": 0,
+      "completion": "catalog-read-sharing: 217 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-search-workflow",
+      "passed": 20,
+      "failed": 0,
+      "completion": "search-workflow: 20 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-test-registry",
+      "passed": 12,
+      "failed": 0,
+      "completion": "test-registry: 12 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-launch-audit-regressions",
+      "passed": 426,
+      "failed": 0,
+      "completion": "launch-audit-regressions: 426 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-search-workflow-browser-browser",
+      "passed": 36,
+      "failed": 0,
+      "completion": "search-workflow-browser: 36 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-customer-journey-browser-browser",
+      "passed": 221,
+      "failed": 0,
+      "completion": "SUITE COMPLETE: customer-journey-browser: 221 passed, 0 failed"
+    },
+    {
+      "suite": "catalog-scan-text-recovery-browser-browser",
+      "passed": 62,
+      "failed": 0,
+      "completion": "scan-text-recovery-browser: 62 passed, 0 failed -- SUITE COMPLETE"
+    },
+    {
+      "suite": "catalog-bulk-lookup-browser-browser",
+      "passed": 100,
+      "failed": 0,
+      "completion": "SUITE COMPLETE: bulk-lookup-browser: 100 passed, 0 failed"
+    },
+    {
+      "suite": "catalog-tpl-outcome",
+      "passed": 142,
+      "failed": 0,
+      "completion": "tpl-outcome-render: 142 passed, 0 failed -- SUITE COMPLETE, exit=0"
+    },
+    {
+      "suite": "catalog-snapshot-import.py",
+      "passed": 15,
+      "failed": 0,
+      "completion": "15 passed; malformed/truncated sources, foreign game, atomic failure and deleted-ID guard"
+    }
+  ],
+  "total_passed": 1707,
+  "failed": 0
+}

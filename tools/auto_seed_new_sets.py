@@ -2,7 +2,7 @@
 """
 Weekly auto-seeder for card-index.json (v2).
 
-Runs from a scheduled task every Sunday. Detects newly released Pokemon
+Can be invoked by a scheduled task. Detects newly released Pokemon
 sets that our offline pHash index doesn't yet cover, seeds them, and
 prints a JSON report the calling agent turns into a user notification.
 
@@ -46,45 +46,17 @@ from seed_set_v2 import (  # type: ignore
 REPO = Path(__file__).resolve().parents[1]
 MAX_CARDS_PER_RUN = int(os.environ.get("AUTOSEED_MAX_CARDS", "500"))
 MAX_SETS_PER_RUN = int(os.environ.get("AUTOSEED_MAX_SETS", "3"))
-GIT_EMAIL = "willsep200@gmail.com"
-GIT_NAME = "CardResell"
+def prepare_catalog_assets() -> tuple[bool, str]:
+    """Refresh browser URLs; leave changes reviewable for the release gate.
 
-
-def run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    cmd = ["git", "-c", f"user.email={GIT_EMAIL}", "-c", f"user.name={GIT_NAME}", *args]
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-
-
-def git_commit_and_push(seeded: list[dict[str, Any]]) -> tuple[bool, str]:
-    """Stage card-index.json, commit with a descriptive message, and push."""
-    r = run_git(["add", "card-index.json"], REPO)
-    if r.returncode != 0:
-        return False, f"git add failed: {r.stderr.strip()}"
-
-    r = run_git(["diff", "--cached", "--quiet"], REPO)
-    if r.returncode == 0:
-        return False, "no changes to commit"
-
-    lines = ["Auto-seed new Pokemon sets", ""]
-    for s in seeded:
-        line = f"- {s['set_id']:12s}  +{s['added']:4d} cards  {s.get('set_name') or s['set_id']}"
-        if s.get("failed"):
-            line += f"  ({s['failed']} failed)"
-        lines.append(line)
-    lines.append("")
-    lines.append("Weekly auto-seeder run. Source: pokemontcg.io (catalog + images).")
-    lines.append("Non-destructive: additive-only to card-index.json.")
-    msg = "\n".join(lines)
-
-    r = run_git(["commit", "-m", msg], REPO)
-    if r.returncode != 0:
-        return False, f"commit failed: {r.stderr.strip()}"
-
-    r = run_git(["push", "origin", "main"], REPO)
-    if r.returncode != 0:
-        return False, f"push failed: {r.stderr.strip()}"
-
-    return True, "committed and pushed"
+    The old helper pushed `main` although production uses another branch, and
+    never versioned the changed index. An import is not a verified release.
+    """
+    result = subprocess.run(['node', 'tools/version-catalog-assets.mjs'], cwd=REPO,
+                            capture_output=True, text=True)
+    if result.returncode:
+        return False, 'asset versioning failed: ' + result.stderr.strip()
+    return True, 'catalog and asset URLs prepared; verify and publish through the release workflow'
 
 
 def main() -> int:
@@ -175,12 +147,12 @@ def main() -> int:
                 "failed": stats.get("failed", 0),
             })
 
-    # Commit + push if anything landed.
+    # Prepare cache-safe URLs. Publication follows the verified release workflow.
     committed = False
     if seeded_summaries:
         try:
-            ok, git_msg = git_commit_and_push(seeded_summaries)
-            committed = ok
+            ok, git_msg = prepare_catalog_assets()
+            committed = False
             if not ok:
                 errors.append(f"git: {git_msg}")
             print(f"[autoseed] git: {git_msg}", flush=True)
@@ -194,6 +166,7 @@ def main() -> int:
         "skipped": skipped,
         "errors": errors,
         "committed": committed,
+        "requires_verified_release": bool(seeded_summaries),
         "index_size_before": starting_size,
         "index_size_after": len(index),
         "cards_added": cards_this_run,

@@ -112,6 +112,16 @@ async function isolate(p) {
   // not the condition under test. Here every provider must reply "nothing
   // found" so the give-up point is genuinely reached with no provider result.
   const EMPTY_JSON = { status: 200, contentType: 'application/json', body: '{"data":[],"results":[]}' };
+  // The imported catalogs are another provider boundary. A complete fixture
+  // with no matching name permits the empty-result cases; never read live data.
+  await p.route('**/data/catalog/*.json', r => {
+    const games=['pokemon','pokemonjp','lorcana','onepiece','yugioh'];
+    const file=new URL(r.request().url()).pathname.split('/').pop();
+    const body=file.startsWith('manifest.') ? {schema:1,games:Object.fromEntries(games.map(g=>[g,{url:'/data/catalog/'+g+'.aaaaaaaaaaaa.json',count:1}]))}
+      : {schema:1,game:file.split('.')[0],sets:{s:'Fixture set'},cards:[['fixture','Unmatched fixture identity','s','1','','',file.startsWith('pokemonjp.')?'ja':'en']]};
+    return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+  });
+
   for (const pat of ['**://api.pokemontcg.io/**', '**://api.lorcana**',
     '**://db.ygoprodeck.com/**', '**://*.tcgdex.net/**']) {
     await p.route(pat, r => r.fulfill(EMPTY_JSON));
@@ -288,7 +298,10 @@ try {
       const reason = (html.match(/data-tpl-reason="([a-z_]+)"/) || [])[1] || null;
       const text = html.replace(/<[^>]*>/g, ' ');
 
-      if (cond.key === null) {
+      if (/drop-item/.test(html)) {
+        T.check(`B/${c.fn}/${cond.label}: usable local identities survive a live-price failure`, /No live price/.test(text) && !/drop-price/.test(html));
+        T.check(`B/${c.fn}/${cond.label}: lookup preserves the seller input`, (await inputValue(page)) === c.args[0]);
+      } else if (cond.key === null) {
         T.check(`B/${c.fn}: a genuine empty search does NOT claim unavailability`,
           reason === null, `rendered reason=${reason}`);
       } else {
@@ -369,8 +382,8 @@ try {
   const f3 = await withProvider('**://db.ygoprodeck.com/**',
     r => r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"server"}' }),
     CALLERS[5], CONDITIONS[3].act);
-  T.check('F3: a 500 from YGOProDeck reads as unavailable, not as an absence',
-    f3.reason === 'unavailable', `reason=${f3.reason} :: ${f3.html.replace(/<[^>]*>/g, ' ').slice(0, 140)}`);
+  T.check('F3: upstream outage does not invalidate the imported YGO snapshot',
+    f3.reason === null && /No matches in this catalog snapshot/.test(f3.html), `reason=${f3.reason} :: ${f3.html.replace(/<[^>]*>/g, ' ').slice(0, 140)}`);
 
   // F4 — the discrimination has to cut both ways: YGOProDeck answers 400 for a
   // name that matches nothing, so 400 IS an absence for THIS provider.
@@ -378,8 +391,8 @@ try {
     r => r.fulfill({ status: 400, contentType: 'application/json',
       body: '{"error":"No card matching your query was found in the database."}' }),
     CALLERS[5], CONDITIONS[3].act);
-  T.check('F4: a 400 from YGOProDeck is a genuine no-match and says so',
-    f4.reason === null && /no yu-gi-oh! cards found/i.test(f4.html),
+  T.check('F4: catalog miss is scoped to the snapshot, not all printed cards',
+    f4.reason === null && /No matches in this catalog snapshot/.test(f4.html),
     `reason=${f4.reason} :: ${f4.html.replace(/<[^>]*>/g, ' ').slice(0, 140)}`);
 
   T.check('F: no uncaught rejection escaped any caller during these four cases',
@@ -485,12 +498,15 @@ try {
     T.check(`G/scan-revisit/${cond.label}: the scanned card is still presented, not erased`,
       g.value === SNAP.name, `input value ${JSON.stringify(g.value)} :: ${surface}`);
 
-    if (cond.label === '200 with zero results') {
+    const identityFallback = /drop-item/.test(g.drop) && /No live price/.test(g.drop) && !/drop-price/.test(g.drop);
+    if (identityFallback) {
+      T.check(`G/scan-revisit/${cond.label}: unpriced catalog identities remain selectable`, true);
+    } else if (cond.label === '200 with zero results') {
       // A completed lookup that found nothing: an absence may be stated here.
       T.check('G/scan-revisit/200 with zero results: a completed empty search IS allowed to say "not found"',
         reason === null && /no pok/i.test(dropText), surface);
     } else {
-      T.check(`G/scan-revisit/${cond.label}: the dropdown it opens carries the unavailable state`,
+      T.check(`G/scan-revisit/${cond.label}: an unsuccessful dropdown carries the unavailable state`,
         reason !== null, surface);
       T.check(`G/scan-revisit/${cond.label}: and no surface tells the seller the card was not found`,
         !NOT_FOUND_WORDING.test(dropText), surface);
@@ -515,7 +531,7 @@ try {
         !!g.missPanel && /nothing is lost/i.test(g.missPanel),
         (g.missPanel || '').slice(0, 160));
       T.check(`G/scan-revisit/${cond.label}: panel and dropdown now agree on the reason`,
-        !!ps && ps.reason === reason, `panel=${ps && ps.reason}, dropdown=${reason}`);
+        !!ps && (identityFallback || ps.reason === reason), `panel=${ps && ps.reason}, dropdown=${reason}`);
     }
   }
   T.check(`G: one revisit of one card issued ${revisitHits} proxy request(s)`, true,

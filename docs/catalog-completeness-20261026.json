@@ -1,0 +1,5008 @@
+{
+  "as_of": "2026-10-26",
+  "claim": "Coverage is relative to named source snapshots, not a certification of all printings or scanner recognition.",
+  "games": {
+    "onepiece": {
+      "searchable_records": 7332,
+      "provider": "TCGCSV / TCGplayer",
+      "represented_sets": 85,
+      "scope": "All published provider groups; products with single-card identity fields only. Includes announced products. Not a certification of every regional printing.",
+      "full_physical_catalog_verified": false,
+      "empty_groups": [
+        "24834"
+      ],
+      "provider_groups": 87,
+      "groups_checked": 87
+    },
+    "lorcana": {
+      "searchable_records": 3622,
+      "provider": "TCGCSV / TCGplayer",
+      "represented_sets": 20,
+      "scope": "All published provider groups; products with single-card identity fields only. Includes announced products. Not a certification of every regional printing.",
+      "full_physical_catalog_verified": false,
+      "empty_groups": [],
+      "provider_groups": 21,
+      "groups_checked": 21
+    },
+    "pokemonjp": {
+      "searchable_records": 30408,
+      "provider": "TCGCSV / TCGplayer",
+      "represented_sets": 455,
+      "scope": "All published provider groups; products with single-card identity fields only. Includes announced products. Not a certification of every regional printing.",
+      "full_physical_catalog_verified": false,
+      "empty_groups": [
+        "23797",
+        "24002",
+        "24003"
+      ],
+      "provider_groups": 461,
+      "groups_checked": 461,
+      "supplemental_native_records": 12781,
+      "native_scope": "Separate Japanese-name TCGdex lookup; may overlap TCGplayer identities, so not added to the physical-product count.",
+      "secondary_tcgdex_set_count_mismatches": [
+        {
+          "id": "web1",
+          "name": "ポケモンカード★web",
+          "declared": 48,
+          "returned": 47
+        },
+        {
+          "id": "ADV1",
+          "name": "拡張パック",
+          "declared": 55,
+          "returned": 0
+        },
+        {
+          "id": "ADV2",
+          "name": "砂漠のきせき",
+          "declared": 53,
+          "returned": 0
+        },
+        {
+          "id": "ADV3",
+          "name": "天空の覇者",
+          "declared": 54,
+          "returned": 0
+        },
+        {
+          "id": "ADV4",
+          "name": "強化拡張パックex1マグマVSアクア ふたつの野望",
+          "declared": 80,
+          "returned": 0
+        },
+        {
+          "id": "ADV5",
+          "name": "とかれた封印",
+          "declared": 83,
+          "returned": 0
+        },
+        {
+          "id": "PCG10",
+          "name": "ワールドチャンピオンズパック",
+          "declared": 108,
+          "returned": 0
+        },
+        {
+          "id": "L1a",
+          "name": "ハートゴールドコレクション",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "L1b",
+          "name": "ソウルシルバーコレクション",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "L2",
+          "name": "よみがえる伝説",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "LL",
+          "name": "強化パック ロストリンク",
+          "declared": 40,
+          "returned": 0
+        },
+        {
+          "id": "L3",
+          "name": "頂上大激突",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "XY1b",
+          "name": "コレクションY",
+          "declared": 60,
+          "returned": 0
+        },
+        {
+          "id": "XY1a",
+          "name": "コレクションX",
+          "declared": 60,
+          "returned": 0
+        },
+        {
+          "id": "XY2",
+          "name": "ワイルドブレイズ",
+          "declared": 80,
+          "returned": 0
+        },
+        {
+          "id": "XY3",
+          "name": "ライジングフィスト",
+          "declared": 96,
+          "returned": 0
+        },
+        {
+          "id": "XY4",
+          "name": "ファントムゲート",
+          "declared": 88,
+          "returned": 0
+        },
+        {
+          "id": "XY5a",
+          "name": "ガイアボルケーノ",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "XY5b",
+          "name": "タイダルストーム",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "XY6",
+          "name": "エメラルドブレイク",
+          "declared": 78,
+          "returned": 0
+        },
+        {
+          "id": "XY7",
+          "name": "バンデットリング",
+          "declared": 81,
+          "returned": 0
+        },
+        {
+          "id": "XY8a",
+          "name": "青い衝撃",
+          "declared": 59,
+          "returned": 0
+        },
+        {
+          "id": "XY8b",
+          "name": "赤い閃光",
+          "declared": 59,
+          "returned": 0
+        },
+        {
+          "id": "XY9",
+          "name": "破天の怒り",
+          "declared": 80,
+          "returned": 0
+        },
+        {
+          "id": "CP3",
+          "name": "ポケキュンコレクション",
+          "declared": 32,
+          "returned": 0
+        },
+        {
+          "id": "XY10",
+          "name": "めざめる超王",
+          "declared": 78,
+          "returned": 0
+        },
+        {
+          "id": "CP4",
+          "name": "プレミアムチャンピオンパック EX×M×BREAK",
+          "declared": 131,
+          "returned": 0
+        },
+        {
+          "id": "XY11b",
+          "name": "冷酷の反逆者",
+          "declared": 54,
+          "returned": 0
+        },
+        {
+          "id": "XY11a",
+          "name": "爆熱の闘士",
+          "declared": 54,
+          "returned": 0
+        },
+        {
+          "id": "CP5",
+          "name": "冷酷の反逆者",
+          "declared": 36,
+          "returned": 0
+        },
+        {
+          "id": "CP6",
+          "name": "ポケットモンスターカードゲーム 拡張パック 20th Anniversary",
+          "declared": 87,
+          "returned": 0
+        },
+        {
+          "id": "SM0",
+          "name": "ピカチュウと新しい仲間たち",
+          "declared": 4,
+          "returned": 0
+        },
+        {
+          "id": "SM1+",
+          "name": "サン＆ムーン",
+          "declared": 51,
+          "returned": 0
+        },
+        {
+          "id": "sm2+",
+          "name": "新たなる試練の向こう",
+          "declared": 49,
+          "returned": 0
+        },
+        {
+          "id": "SM3+",
+          "name": "ひかる伝説",
+          "declared": 72,
+          "returned": 0
+        },
+        {
+          "id": "SM4+",
+          "name": "GXバトルブースト",
+          "declared": 114,
+          "returned": 0
+        },
+        {
+          "id": "SM5+",
+          "name": "ウルトラフォース",
+          "declared": 50,
+          "returned": 0
+        },
+        {
+          "id": "SMP2",
+          "name": "名探偵ピカチュウ",
+          "declared": 24,
+          "returned": 0
+        },
+        {
+          "id": "S1W",
+          "name": "ソード",
+          "declared": 60,
+          "returned": 0
+        },
+        {
+          "id": "S1H",
+          "name": "シールド",
+          "declared": 60,
+          "returned": 0
+        },
+        {
+          "id": "S1a",
+          "name": "VMAXライジング",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "S2",
+          "name": "反逆クラッシュ",
+          "declared": 96,
+          "returned": 0
+        },
+        {
+          "id": "S3",
+          "name": "ムゲンゾーン",
+          "declared": 100,
+          "returned": 0
+        },
+        {
+          "id": "S3a",
+          "name": "伝説の鼓動",
+          "declared": 76,
+          "returned": 0
+        },
+        {
+          "id": "CS2b",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS2.5",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS4",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS1.5",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS3.5",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS3b",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS2a",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS3a",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS4a",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS1a",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS1b",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS4b",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CSA",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS3D",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "CS4Da",
+          "name": "トリプレットビート",
+          "declared": 101,
+          "returned": 0
+        },
+        {
+          "id": "S5a",
+          "name": "双璧のファイター",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "S4a",
+          "name": "シャイニースターV",
+          "declared": 190,
+          "returned": 0
+        },
+        {
+          "id": "S10b",
+          "name": "Pokémon GO",
+          "declared": 71,
+          "returned": 0
+        },
+        {
+          "id": "S10D",
+          "name": "タイムゲイザー",
+          "declared": 67,
+          "returned": 0
+        },
+        {
+          "id": "S8a",
+          "name": "25th アニバーサリーコレクション",
+          "declared": 28,
+          "returned": 0
+        },
+        {
+          "id": "S7R",
+          "name": "蒼空ストリーム",
+          "declared": 67,
+          "returned": 0
+        },
+        {
+          "id": "S5R",
+          "name": "連撃マスター",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "S2a",
+          "name": "爆炎ウォーカー",
+          "declared": 70,
+          "returned": 0
+        },
+        {
+          "id": "S4",
+          "name": "仰天のボルテッカー",
+          "declared": 100,
+          "returned": 0
+        },
+        {
+          "id": "S6a",
+          "name": "イーブイヒーローズ",
+          "declared": 69,
+          "returned": 0
+        }
+      ]
+    },
+    "pokemon": {
+      "searchable_records": 21256,
+      "provider": "TCGdex",
+      "represented_sets": 201,
+      "scope": "All returned English physical-card identities. Provider-declared gaps remain explicit; no inferred cards, finishes or prices.",
+      "full_physical_catalog_verified": false,
+      "set_count_mismatches": [
+        {
+          "id": "wp",
+          "name": "W Promotional",
+          "declared": 7,
+          "returned": 0
+        },
+        {
+          "id": "jumbo",
+          "name": "Jumbo cards",
+          "declared": 160,
+          "returned": 0
+        },
+        {
+          "id": "sp",
+          "name": "Sample",
+          "declared": 10,
+          "returned": 0
+        },
+        {
+          "id": "rc",
+          "name": "Radiant Collection",
+          "declared": 25,
+          "returned": 0
+        },
+        {
+          "id": "tk-sm-l",
+          "name": "SM trainer Kit (Lycanroc)",
+          "declared": 30,
+          "returned": 18
+        },
+        {
+          "id": "mfb",
+          "name": "My First Battle",
+          "declared": 48,
+          "returned": 34
+        }
+      ],
+      "excluded_pocket_cards": 2480,
+      "excluded_pocket_sets": [
+        "A1",
+        "A1a",
+        "A2",
+        "A2a",
+        "A2b",
+        "A3",
+        "A3a",
+        "A3b",
+        "A4",
+        "A4a",
+        "B1",
+        "B1a",
+        "B2",
+        "B2a",
+        "P-A"
+      ],
+      "local_visual_references": 20699,
+      "local_reference_sets": 173,
+      "released_provider_sets": 176,
+      "sets_without_local_visual_references": [
+        {
+          "id": "mcd14",
+          "name": "McDonald's Collection 2014",
+          "provider_count": 12
+        },
+        {
+          "id": "mcd15",
+          "name": "McDonald's Collection 2015",
+          "provider_count": 12
+        },
+        {
+          "id": "mcd17",
+          "name": "McDonald's Collection 2017",
+          "provider_count": 12
+        },
+        {
+          "id": "mcd18",
+          "name": "McDonald's Collection 2018",
+          "provider_count": 12
+        }
+      ]
+    },
+    "yugioh": {
+      "searchable_records": 45205,
+      "provider": "YGOProDeck",
+      "represented_sets": 1032,
+      "scope": "All returned identities and set-code/rarity printings. Editions, alternative art and languages are not exhaustively mapped; no card-wide price or artwork assigned to a printing.",
+      "full_physical_catalog_verified": false,
+      "provider_card_identities": 14645,
+      "identity_only_records": 538
+    },
+    "mtg": {
+      "provider": "Scryfall",
+      "full_physical_catalog_verified": false,
+      "scope": "Live paper printing search with pagination; English by default. Includes variations/extras. Not a local complete catalog.",
+      "local_visual_references": 18618,
+      "local_reference_sets": 121,
+      "released_provider_sets": 990,
+      "sets_without_local_visual_references": [
+        {
+          "id": "tfrc",
+          "name": "Reality Fracture Commander Tokens",
+          "provider_count": 17
+        },
+        {
+          "id": "tfra",
+          "name": "Reality Fracture Tokens",
+          "provider_count": 18
+        },
+        {
+          "id": "tfdc",
+          "name": "Foundations Commander Tokens",
+          "provider_count": 17
+        },
+        {
+          "id": "afra",
+          "name": "Reality Fracture Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "pfra",
+          "name": "Reality Fracture Promos",
+          "provider_count": 90
+        },
+        {
+          "id": "slz",
+          "name": "The Zeta Set",
+          "provider_count": 363
+        },
+        {
+          "id": "ahoc",
+          "name": "The Hobbit Eternal Art Series",
+          "provider_count": 12
+        },
+        {
+          "id": "ahob",
+          "name": "The Hobbit Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "thob",
+          "name": "The Hobbit Tokens",
+          "provider_count": 15
+        },
+        {
+          "id": "amsh",
+          "name": "Marvel Super Heroes Art Series",
+          "provider_count": 66
+        },
+        {
+          "id": "tmsh",
+          "name": "Marvel Super Heroes Tokens",
+          "provider_count": 27
+        },
+        {
+          "id": "tmsc",
+          "name": "Marvel Super Heroes Commander Tokens",
+          "provider_count": 32
+        },
+        {
+          "id": "psos",
+          "name": "Secrets of Strixhaven Promos",
+          "provider_count": 80
+        },
+        {
+          "id": "tsos",
+          "name": "Secrets of Strixhaven Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "asos",
+          "name": "Secrets of Strixhaven Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "tsoc",
+          "name": "Secrets of Strixhaven Commander Tokens",
+          "provider_count": 30
+        },
+        {
+          "id": "atmt",
+          "name": "Teenage Mutant Ninja Turtles Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "ttmc",
+          "name": "Teenage Mutant Ninja Turtles Eternal Tokens",
+          "provider_count": 31
+        },
+        {
+          "id": "ttmt",
+          "name": "Teenage Mutant Ninja Turtles Tokens",
+          "provider_count": 10
+        },
+        {
+          "id": "pecl",
+          "name": "Lorwyn Eclipsed Promos",
+          "provider_count": 80
+        },
+        {
+          "id": "aecl",
+          "name": "Lorwyn Eclipsed Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "tecc",
+          "name": "Lorwyn Eclipsed Commander Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "tecl",
+          "name": "Lorwyn Eclipsed Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "afic",
+          "name": "Final Fantasy Scene Box",
+          "provider_count": 24
+        },
+        {
+          "id": "ptla",
+          "name": "Avatar: The Last Airbender Promos",
+          "provider_count": 80
+        },
+        {
+          "id": "ttle",
+          "name": "Avatar: The Last Airbender Eternal Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "ttla",
+          "name": "Avatar: The Last Airbender Tokens",
+          "provider_count": 22
+        },
+        {
+          "id": "atla",
+          "name": "Avatar: the Last Airbender Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "atle",
+          "name": "Avatar: the Last Airbender Eternal Art Series",
+          "provider_count": 12
+        },
+        {
+          "id": "tspm",
+          "name": "Marvel's Spider-Man Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "pspm",
+          "name": "Marvel's Spider-Man Promos",
+          "provider_count": 68
+        },
+        {
+          "id": "aspm",
+          "name": "Marvel's Spider-Man Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "aeoe",
+          "name": "Edge of Eternities Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "peoe",
+          "name": "Edge of Eternities Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "teoc",
+          "name": "Edge of Eternities Commander Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "pbig",
+          "name": "The Big Score Promos",
+          "provider_count": 30
+        },
+        {
+          "id": "teoe",
+          "name": "Edge of Eternities Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "tfin",
+          "name": "Final Fantasy Tokens",
+          "provider_count": 37
+        },
+        {
+          "id": "tfic",
+          "name": "Final Fantasy Commander Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "pfin",
+          "name": "Final Fantasy Promos",
+          "provider_count": 94
+        },
+        {
+          "id": "afin",
+          "name": "Final Fantasy Art Series",
+          "provider_count": 53
+        },
+        {
+          "id": "wfin",
+          "name": "FIN Asia WPN Promo Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "ttdm",
+          "name": "Tarkir: Dragonstorm Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "ttdc",
+          "name": "Tarkir: Dragonstorm Commander Tokens",
+          "provider_count": 34
+        },
+        {
+          "id": "atdm",
+          "name": "Tarkir: Dragonstorm Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "ptdm",
+          "name": "Tarkir: Dragonstorm Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "adft",
+          "name": "Aetherdrift Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "pdft",
+          "name": "Aetherdrift Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "tdrc",
+          "name": "Aetherdrift Commander Tokens",
+          "provider_count": 17
+        },
+        {
+          "id": "tdft",
+          "name": "Aetherdrift Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "ainr",
+          "name": "Innistrad Remastered Art Series",
+          "provider_count": 25
+        },
+        {
+          "id": "tinr",
+          "name": "Innistrad Remastered Tokens",
+          "provider_count": 27
+        },
+        {
+          "id": "pfdn",
+          "name": "Foundations Promos",
+          "provider_count": 106
+        },
+        {
+          "id": "afdn",
+          "name": "Foundations Art Series",
+          "provider_count": 55
+        },
+        {
+          "id": "tfdn",
+          "name": "Foundations Tokens",
+          "provider_count": 33
+        },
+        {
+          "id": "pltc",
+          "name": "Tales of Middle-earth Deluxe Commander Kit",
+          "provider_count": 4
+        },
+        {
+          "id": "adsk",
+          "name": "Duskmourn: House of Horror Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "pdsk",
+          "name": "Duskmourn: House of Horror Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "tdsk",
+          "name": "Duskmourn: House of Horror Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "tdsc",
+          "name": "Duskmourn Commander Tokens",
+          "provider_count": 23
+        },
+        {
+          "id": "pblb",
+          "name": "Bloomburrow Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "tblb",
+          "name": "Bloomburrow Tokens",
+          "provider_count": 30
+        },
+        {
+          "id": "tblc",
+          "name": "Bloomburrow Commander Tokens",
+          "provider_count": 41
+        },
+        {
+          "id": "ablb",
+          "name": "Bloomburrow Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "macr",
+          "name": "Assassin's Creed Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "aacr",
+          "name": "Assassin's Creed Art Series",
+          "provider_count": 20
+        },
+        {
+          "id": "tacr",
+          "name": "Assassin's Creed Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "pmh3",
+          "name": "Modern Horizons 3 Promos",
+          "provider_count": 92
+        },
+        {
+          "id": "tm3c",
+          "name": "Modern Horizons 3 Commander Tokens",
+          "provider_count": 28
+        },
+        {
+          "id": "tmh3",
+          "name": "Modern Horizons 3 Tokens",
+          "provider_count": 43
+        },
+        {
+          "id": "amh3",
+          "name": "Modern Horizons 3 Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "aotj",
+          "name": "Outlaws of Thunder Junction Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "totj",
+          "name": "Outlaws of Thunder Junction Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "potj",
+          "name": "Outlaws of Thunder Junction Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "totc",
+          "name": "Outlaws of Thunder Junction Commander Tokens",
+          "provider_count": 41
+        },
+        {
+          "id": "totp",
+          "name": "Breaking News Tokens",
+          "provider_count": 5
+        },
+        {
+          "id": "tbig",
+          "name": "The Big Score Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "tpip",
+          "name": "Fallout Tokens",
+          "provider_count": 22
+        },
+        {
+          "id": "punk",
+          "name": "Black Lotus Unknown Planechase",
+          "provider_count": 52
+        },
+        {
+          "id": "fclu",
+          "name": "Ravnica: Clue Edition Front Cards",
+          "provider_count": 10
+        },
+        {
+          "id": "pmkm",
+          "name": "Murders at Karlov Manor Promos",
+          "provider_count": 180
+        },
+        {
+          "id": "amkm",
+          "name": "Murders at Karlov Manor Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "tmkc",
+          "name": "Murders at Karlov Manor Commander Tokens",
+          "provider_count": 31
+        },
+        {
+          "id": "tmkm",
+          "name": "Murders at Karlov Manor Tokens",
+          "provider_count": 22
+        },
+        {
+          "id": "wmkm",
+          "name": "MKM Japanese Promo Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "trvr",
+          "name": "Ravnica Remastered Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "alci",
+          "name": "The Lost Caverns of Ixalan Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "plci",
+          "name": "The Lost Caverns of Ixalan Promos",
+          "provider_count": 136
+        },
+        {
+          "id": "slci",
+          "name": "The Lost Caverns of Ixalan Substitute Cards",
+          "provider_count": 1
+        },
+        {
+          "id": "tlcc",
+          "name": "The Lost Caverns of Ixalan Commander Tokens",
+          "provider_count": 18
+        },
+        {
+          "id": "tlci",
+          "name": "The Lost Caverns of Ixalan Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "trex",
+          "name": "Jurassic World Collection Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "pmat",
+          "name": "March of the Machine: The Aftermath Promos",
+          "provider_count": 8
+        },
+        {
+          "id": "rex",
+          "name": "Jurassic World Collection",
+          "provider_count": 45
+        },
+        {
+          "id": "altc",
+          "name": "Tales of Middle-earth Scene Box",
+          "provider_count": 24
+        },
+        {
+          "id": "twho",
+          "name": "Doctor Who Tokens",
+          "provider_count": 64
+        },
+        {
+          "id": "pwoe",
+          "name": "Wilds of Eldraine Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "wot",
+          "name": "Wilds of Eldraine: Enchanting Tales",
+          "provider_count": 103
+        },
+        {
+          "id": "twoc",
+          "name": "Wilds of Eldraine Commander Tokens",
+          "provider_count": 10
+        },
+        {
+          "id": "wwoe",
+          "name": "WOE Japanese Promo Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "twoe",
+          "name": "Wilds of Eldraine Tokens",
+          "provider_count": 18
+        },
+        {
+          "id": "awoe",
+          "name": "Wilds of Eldraine Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "pmda",
+          "name": "Magic × Duel Masters Promos",
+          "provider_count": 4
+        },
+        {
+          "id": "ptsr",
+          "name": "Time Spiral Remastered Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "p30t",
+          "name": "30th Anniversary Celebration Tokyo",
+          "provider_count": 2
+        },
+        {
+          "id": "acmm",
+          "name": "Commander Masters Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "tcmm",
+          "name": "Commander Masters Tokens",
+          "provider_count": 81
+        },
+        {
+          "id": "ph22",
+          "name": "2022 Heroes of the Realm",
+          "provider_count": 5
+        },
+        {
+          "id": "pf23",
+          "name": "MagicFest 2023",
+          "provider_count": 4
+        },
+        {
+          "id": "pltr",
+          "name": "Tales of Middle-earth Promos",
+          "provider_count": 86
+        },
+        {
+          "id": "altr",
+          "name": "Tales of Middle-earth Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "tltr",
+          "name": "Tales of Middle-earth Tokens",
+          "provider_count": 25
+        },
+        {
+          "id": "mltr",
+          "name": "The Lord of the Rings: Tales of Middle-earth Minigames",
+          "provider_count": 1
+        },
+        {
+          "id": "fltr",
+          "name": "Tales of Middle-earth Front Cards",
+          "provider_count": 10
+        },
+        {
+          "id": "tltc",
+          "name": "Tales of Middle-earth Commander Tokens",
+          "provider_count": 15
+        },
+        {
+          "id": "fmom",
+          "name": "March of the Machine Jumpstart Front Cards",
+          "provider_count": 5
+        },
+        {
+          "id": "tmoc",
+          "name": "March of the Machine Commander Tokens",
+          "provider_count": 46
+        },
+        {
+          "id": "mul",
+          "name": "Multiverse Legends",
+          "provider_count": 260
+        },
+        {
+          "id": "smom",
+          "name": "March of the Machine Substitute Cards",
+          "provider_count": 1
+        },
+        {
+          "id": "tmul",
+          "name": "Multiverse Legends Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "wmom",
+          "name": "MOM Japanese Promo Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "amom",
+          "name": "March of the Machine Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "tmom",
+          "name": "March of the Machine Tokens",
+          "provider_count": 23
+        },
+        {
+          "id": "pmom",
+          "name": "March of the Machine Promos",
+          "provider_count": 134
+        },
+        {
+          "id": "unk",
+          "name": "Unknown Event",
+          "provider_count": 527
+        },
+        {
+          "id": "aone",
+          "name": "Phyrexia: All Will Be One Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "fone",
+          "name": "Phyrexia: All Will Be One Jumpstart Front Cards",
+          "provider_count": 5
+        },
+        {
+          "id": "mone",
+          "name": "Phyrexia: All Will Be One Minigames",
+          "provider_count": 5
+        },
+        {
+          "id": "onc",
+          "name": "Phyrexia: All Will Be One Commander",
+          "provider_count": 174
+        },
+        {
+          "id": "one",
+          "name": "Phyrexia: All Will Be One",
+          "provider_count": 479
+        },
+        {
+          "id": "pl23",
+          "name": "Year of the Rabbit 2023",
+          "provider_count": 6
+        },
+        {
+          "id": "pone",
+          "name": "Phyrexia: All Will Be One Promos",
+          "provider_count": 160
+        },
+        {
+          "id": "tone",
+          "name": "Phyrexia: All Will Be One Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "tonc",
+          "name": "Phyrexia: All Will Be One Commander Tokens",
+          "provider_count": 23
+        },
+        {
+          "id": "wone",
+          "name": "ONE Japanese Promo Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "tdmr",
+          "name": "Dominaria Remastered Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "dmr",
+          "name": "Dominaria Remastered",
+          "provider_count": 457
+        },
+        {
+          "id": "pr23",
+          "name": "Regional Championship Qualifiers 2023",
+          "provider_count": 3
+        },
+        {
+          "id": "p23",
+          "name": "Judge Gift Cards 2023",
+          "provider_count": 10
+        },
+        {
+          "id": "pw23",
+          "name": "Wizards Play Network 2023",
+          "provider_count": 11
+        },
+        {
+          "id": "tscd",
+          "name": "Starter Commander Deck Tokens",
+          "provider_count": 27
+        },
+        {
+          "id": "scd",
+          "name": "Starter Commander Decks",
+          "provider_count": 352
+        },
+        {
+          "id": "fj22",
+          "name": "Jumpstart 2022 Front Cards",
+          "provider_count": 46
+        },
+        {
+          "id": "j22",
+          "name": "Jumpstart 2022",
+          "provider_count": 835
+        },
+        {
+          "id": "30a",
+          "name": "30th Anniversary Edition",
+          "provider_count": 594
+        },
+        {
+          "id": "t30a",
+          "name": "30th Anniversary Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "brc",
+          "name": "The Brothers' War Commander",
+          "provider_count": 209
+        },
+        {
+          "id": "brr",
+          "name": "The Brothers' War Retro Artifacts",
+          "provider_count": 189
+        },
+        {
+          "id": "pbro",
+          "name": "The Brothers' War Promos",
+          "provider_count": 171
+        },
+        {
+          "id": "tbot",
+          "name": "Transformers Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "ptbro",
+          "name": "The Brothers' War Southeast Asia Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "bot",
+          "name": "Transformers",
+          "provider_count": 29
+        },
+        {
+          "id": "fbro",
+          "name": "The Brothers' War Jumpstart Front Cards",
+          "provider_count": 5
+        },
+        {
+          "id": "mbro",
+          "name": "The Brothers' War Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "sbro",
+          "name": "The Brothers' War Substitute Cards",
+          "provider_count": 1
+        },
+        {
+          "id": "tbrc",
+          "name": "The Brothers' War Commander Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "tbro",
+          "name": "The Brothers' War Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "abro",
+          "name": "The Brothers' War Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "bro",
+          "name": "The Brothers' War",
+          "provider_count": 387
+        },
+        {
+          "id": "tgn3",
+          "name": "Game Night: Free-for-All Tokens",
+          "provider_count": 10
+        },
+        {
+          "id": "gn3",
+          "name": "Game Night: Free-for-All",
+          "provider_count": 135
+        },
+        {
+          "id": "ulst",
+          "name": "The List (Unfinity Foil Edition)",
+          "provider_count": 62
+        },
+        {
+          "id": "tunf",
+          "name": "Unfinity Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "sunf",
+          "name": "Unfinity Sticker Sheets",
+          "provider_count": 48
+        },
+        {
+          "id": "unf",
+          "name": "Unfinity",
+          "provider_count": 639
+        },
+        {
+          "id": "40k",
+          "name": "Warhammer 40,000 Commander",
+          "provider_count": 617
+        },
+        {
+          "id": "t40k",
+          "name": "Warhammer 40,000 Tokens",
+          "provider_count": 31
+        },
+        {
+          "id": "prcq",
+          "name": "Regional Championship Qualifiers 2022",
+          "provider_count": 3
+        },
+        {
+          "id": "p30h",
+          "name": "30th Anniversary History Promos",
+          "provider_count": 10
+        },
+        {
+          "id": "pdmu",
+          "name": "Dominaria United Promos",
+          "provider_count": 161
+        },
+        {
+          "id": "ptdmu",
+          "name": "Dominaria United Southeast Asia Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "tdmc",
+          "name": "Dominaria United Commander Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "tdmu",
+          "name": "Dominaria United Tokens",
+          "provider_count": 26
+        },
+        {
+          "id": "wdmu",
+          "name": "DMU Japanese Promo Tokens",
+          "provider_count": 5
+        },
+        {
+          "id": "admu",
+          "name": "Dominaria United Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "fdmu",
+          "name": "Dominaria United Jumpstart Front Cards",
+          "provider_count": 10
+        },
+        {
+          "id": "mdmu",
+          "name": "Dominaria United Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "dmc",
+          "name": "Dominaria United Commander",
+          "provider_count": 240
+        },
+        {
+          "id": "p30m",
+          "name": "30th Anniversary Misc Promos",
+          "provider_count": 5
+        },
+        {
+          "id": "p30a",
+          "name": "30th Anniversary Play Promos",
+          "provider_count": 30
+        },
+        {
+          "id": "psvc",
+          "name": "Summer Vacation Promos 2022",
+          "provider_count": 3
+        },
+        {
+          "id": "ph21",
+          "name": "2021 Heroes of the Realm",
+          "provider_count": 4
+        },
+        {
+          "id": "t2x2",
+          "name": "Double Masters 2022 Tokens",
+          "provider_count": 24
+        },
+        {
+          "id": "2x2",
+          "name": "Double Masters 2022",
+          "provider_count": 579
+        },
+        {
+          "id": "plg22",
+          "name": "Love Your LGS 2022",
+          "provider_count": 2
+        },
+        {
+          "id": "pclb",
+          "name": "Battle for Baldur's Gate Promos",
+          "provider_count": 104
+        },
+        {
+          "id": "mclb",
+          "name": "Commander Legends: Battle for Baldur's Gate Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "tclb",
+          "name": "Battle for Baldur's Gate Tokens",
+          "provider_count": 51
+        },
+        {
+          "id": "clb",
+          "name": "Commander Legends: Battle for Baldur's Gate",
+          "provider_count": 936
+        },
+        {
+          "id": "aclb",
+          "name": "Battle for Baldur's Gate Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "oclb",
+          "name": "Battle for Baldur's Gate Oversized Cards",
+          "provider_count": 1
+        },
+        {
+          "id": "ptsnc",
+          "name": "Streets of New Capenna Southeast Asia Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "pncc",
+          "name": "New Capenna Commander Promos",
+          "provider_count": 75
+        },
+        {
+          "id": "tsnc",
+          "name": "Streets of New Capenna Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "snc",
+          "name": "Streets of New Capenna",
+          "provider_count": 469
+        },
+        {
+          "id": "ncc",
+          "name": "New Capenna Commander",
+          "provider_count": 447
+        },
+        {
+          "id": "tncc",
+          "name": "New Capenna Commander Tokens",
+          "provider_count": 36
+        },
+        {
+          "id": "psnc",
+          "name": "Streets of New Capenna Promos",
+          "provider_count": 161
+        },
+        {
+          "id": "msnc",
+          "name": "Streets of New Capenna Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "asnc",
+          "name": "New Capenna Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "gdy",
+          "name": "Game Day Promos",
+          "provider_count": 9
+        },
+        {
+          "id": "q07",
+          "name": "Challenger Decks 2022",
+          "provider_count": 1
+        },
+        {
+          "id": "pw22",
+          "name": "Wizards Play Network 2022",
+          "provider_count": 6
+        },
+        {
+          "id": "pl22",
+          "name": "Year of the Tiger 2022",
+          "provider_count": 5
+        },
+        {
+          "id": "pneo",
+          "name": "Kamigawa: Neon Dynasty Promos",
+          "provider_count": 148
+        },
+        {
+          "id": "mneo",
+          "name": "Kamigawa: Neon Dynasty Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "sneo",
+          "name": "Kamigawa: Neon Dynasty Substitute Cards",
+          "provider_count": 9
+        },
+        {
+          "id": "tneo",
+          "name": "Kamigawa: Neon Dynasty Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "tnec",
+          "name": "Neon Dynasty Commander Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "neo",
+          "name": "Kamigawa: Neon Dynasty",
+          "provider_count": 515
+        },
+        {
+          "id": "nec",
+          "name": "Neon Dynasty Commander",
+          "provider_count": 179
+        },
+        {
+          "id": "aneo",
+          "name": "Neon Dynasty Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "cc2",
+          "name": "Commander Collection: Black",
+          "provider_count": 9
+        },
+        {
+          "id": "dbl",
+          "name": "Innistrad: Double Feature",
+          "provider_count": 535
+        },
+        {
+          "id": "p22",
+          "name": "Judge Gift Cards 2022",
+          "provider_count": 10
+        },
+        {
+          "id": "pvow",
+          "name": "Innistrad: Crimson Vow Promos",
+          "provider_count": 121
+        },
+        {
+          "id": "ovoc",
+          "name": "Crimson Vow Commander Display Commanders",
+          "provider_count": 2
+        },
+        {
+          "id": "tvoc",
+          "name": "Crimson Vow Commander Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "tvow",
+          "name": "Innistrad: Crimson Vow Tokens",
+          "provider_count": 21
+        },
+        {
+          "id": "mvow",
+          "name": "Innistrad: Crimson Vow Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "svow",
+          "name": "Innistrad: Crimson Vow Substitute Cards",
+          "provider_count": 9
+        },
+        {
+          "id": "vow",
+          "name": "Innistrad: Crimson Vow",
+          "provider_count": 412
+        },
+        {
+          "id": "avow",
+          "name": "Crimson Vow Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "voc",
+          "name": "Crimson Vow Commander",
+          "provider_count": 188
+        },
+        {
+          "id": "q06",
+          "name": "Pioneer Challenger Decks 2021",
+          "provider_count": 10
+        },
+        {
+          "id": "smid",
+          "name": "Innistrad: Midnight Hunt Substitute Cards",
+          "provider_count": 9
+        },
+        {
+          "id": "omic",
+          "name": "Midnight Hunt Commander Display Commanders",
+          "provider_count": 2
+        },
+        {
+          "id": "amid",
+          "name": "Midnight Hunt Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "tmic",
+          "name": "Midnight Hunt Commander Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "mic",
+          "name": "Midnight Hunt Commander",
+          "provider_count": 187
+        },
+        {
+          "id": "tmid",
+          "name": "Innistrad: Midnight Hunt Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "pmid",
+          "name": "Innistrad: Midnight Hunt Promos",
+          "provider_count": 155
+        },
+        {
+          "id": "mmid",
+          "name": "Innistrad: Midnight Hunt Minigames",
+          "provider_count": 3
+        },
+        {
+          "id": "mid",
+          "name": "Innistrad: Midnight Hunt",
+          "provider_count": 392
+        },
+        {
+          "id": "cmb2",
+          "name": "Mystery Booster Playtest Cards 2021",
+          "provider_count": 121
+        },
+        {
+          "id": "ph20",
+          "name": "2020 Heroes of the Realm",
+          "provider_count": 3
+        },
+        {
+          "id": "pafr",
+          "name": "Adventures in the Forgotten Realms Promos",
+          "provider_count": 241
+        },
+        {
+          "id": "oafc",
+          "name": "Forgotten Realms Commander Display Commanders",
+          "provider_count": 4
+        },
+        {
+          "id": "oafr",
+          "name": "Forgotten Realms Oversized Cards",
+          "provider_count": 3
+        },
+        {
+          "id": "afc",
+          "name": "Forgotten Realms Commander",
+          "provider_count": 331
+        },
+        {
+          "id": "aafr",
+          "name": "Adventures in the Forgotten Realms Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "tafc",
+          "name": "Forgotten Realms Commander Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "tafr",
+          "name": "Adventures in the Forgotten Realms Tokens",
+          "provider_count": 22
+        },
+        {
+          "id": "mafr",
+          "name": "Adventures in the Forgotten Realms Minigames",
+          "provider_count": 5
+        },
+        {
+          "id": "afr",
+          "name": "Adventures in the Forgotten Realms",
+          "provider_count": 402
+        },
+        {
+          "id": "plg21",
+          "name": "Love Your LGS 2021",
+          "provider_count": 11
+        },
+        {
+          "id": "pmh2",
+          "name": "Modern Horizons 2 Promos",
+          "provider_count": 86
+        },
+        {
+          "id": "amh2",
+          "name": "Modern Horizons 2 Art Series",
+          "provider_count": 162
+        },
+        {
+          "id": "tmh2",
+          "name": "Modern Horizons 2 Tokens",
+          "provider_count": 21
+        },
+        {
+          "id": "mmh2",
+          "name": "Modern Horizons 2 Minigames",
+          "provider_count": 5
+        },
+        {
+          "id": "h1r",
+          "name": "Modern Horizons 1 Timeshifts",
+          "provider_count": 40
+        },
+        {
+          "id": "mh2",
+          "name": "Modern Horizons 2",
+          "provider_count": 492
+        },
+        {
+          "id": "pw21",
+          "name": "Wizards Play Network 2021",
+          "provider_count": 6
+        },
+        {
+          "id": "pstx",
+          "name": "Strixhaven: School of Mages Promos",
+          "provider_count": 164
+        },
+        {
+          "id": "tstx",
+          "name": "Strixhaven: School of Mages Tokens",
+          "provider_count": 9
+        },
+        {
+          "id": "tc21",
+          "name": "Commander 2021 Tokens",
+          "provider_count": 30
+        },
+        {
+          "id": "sstx",
+          "name": "Strixhaven: School of Mages Substitute Cards",
+          "provider_count": 9
+        },
+        {
+          "id": "mstx",
+          "name": "Strixhaven: School of Mages Minigames",
+          "provider_count": 5
+        },
+        {
+          "id": "stx",
+          "name": "Strixhaven: School of Mages",
+          "provider_count": 383
+        },
+        {
+          "id": "astx",
+          "name": "Strixhaven Art Series",
+          "provider_count": 162
+        },
+        {
+          "id": "c21",
+          "name": "Commander 2021",
+          "provider_count": 409
+        },
+        {
+          "id": "oc21",
+          "name": "Commander 2021 Display Commanders",
+          "provider_count": 5
+        },
+        {
+          "id": "sta",
+          "name": "Strixhaven Mystical Archive",
+          "provider_count": 126
+        },
+        {
+          "id": "ttsr",
+          "name": "Time Spiral Remastered Tokens",
+          "provider_count": 15
+        },
+        {
+          "id": "tsr",
+          "name": "Time Spiral Remastered",
+          "provider_count": 411
+        },
+        {
+          "id": "pkhm",
+          "name": "Kaldheim Promos",
+          "provider_count": 158
+        },
+        {
+          "id": "mkhm",
+          "name": "Kaldheim Minigames",
+          "provider_count": 5
+        },
+        {
+          "id": "skhm",
+          "name": "Kaldheim Substitute Cards",
+          "provider_count": 9
+        },
+        {
+          "id": "khc",
+          "name": "Kaldheim Commander",
+          "provider_count": 119
+        },
+        {
+          "id": "akhm",
+          "name": "Kaldheim Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "tkhc",
+          "name": "Kaldheim Commander Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "tkhm",
+          "name": "Kaldheim Tokens",
+          "provider_count": 23
+        },
+        {
+          "id": "khm",
+          "name": "Kaldheim",
+          "provider_count": 407
+        },
+        {
+          "id": "pl21",
+          "name": "Year of the Ox 2021",
+          "provider_count": 6
+        },
+        {
+          "id": "pj21",
+          "name": "Judge Gift Cards 2021",
+          "provider_count": 10
+        },
+        {
+          "id": "cc1",
+          "name": "Commander Collection: Green",
+          "provider_count": 8
+        },
+        {
+          "id": "pcmr",
+          "name": "Commander Legends Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "tcmr",
+          "name": "Commander Legends Tokens",
+          "provider_count": 23
+        },
+        {
+          "id": "cmr",
+          "name": "Commander Legends",
+          "provider_count": 718
+        },
+        {
+          "id": "plst",
+          "name": "The List",
+          "provider_count": 5740
+        },
+        {
+          "id": "pznr",
+          "name": "Zendikar Rising Promos",
+          "provider_count": 153
+        },
+        {
+          "id": "tznc",
+          "name": "Zendikar Rising Commander Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "tznr",
+          "name": "Zendikar Rising Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "sznr",
+          "name": "Zendikar Rising Substitute Cards",
+          "provider_count": 9
+        },
+        {
+          "id": "zne",
+          "name": "Zendikar Rising Expeditions",
+          "provider_count": 30
+        },
+        {
+          "id": "znc",
+          "name": "Zendikar Rising Commander",
+          "provider_count": 142
+        },
+        {
+          "id": "aznr",
+          "name": "Zendikar Rising Art Series",
+          "provider_count": 81
+        },
+        {
+          "id": "znr",
+          "name": "Zendikar Rising",
+          "provider_count": 392
+        },
+        {
+          "id": "mznr",
+          "name": "Zendikar Rising Minigames",
+          "provider_count": 5
+        },
+        {
+          "id": "2xm",
+          "name": "Double Masters",
+          "provider_count": 384
+        },
+        {
+          "id": "t2xm",
+          "name": "Double Masters Tokens",
+          "provider_count": 31
+        },
+        {
+          "id": "ph19",
+          "name": "2019 Heroes of the Realm",
+          "provider_count": 7
+        },
+        {
+          "id": "jmp",
+          "name": "Jumpstart",
+          "provider_count": 496
+        },
+        {
+          "id": "pm21",
+          "name": "Core Set 2021 Promos",
+          "provider_count": 137
+        },
+        {
+          "id": "tm21",
+          "name": "Core Set 2021 Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "m21",
+          "name": "Core Set 2021",
+          "provider_count": 397
+        },
+        {
+          "id": "ss3",
+          "name": "Signature Spellbook: Chandra",
+          "provider_count": 8
+        },
+        {
+          "id": "fjmp",
+          "name": "Jumpstart Front Cards",
+          "provider_count": 46
+        },
+        {
+          "id": "slu",
+          "name": "Secret Lair: Ultimate Edition",
+          "provider_count": 16
+        },
+        {
+          "id": "plg20",
+          "name": "Love Your LGS 2020",
+          "provider_count": 2
+        },
+        {
+          "id": "piko",
+          "name": "Ikoria: Lair of Behemoths Promos",
+          "provider_count": 137
+        },
+        {
+          "id": "tiko",
+          "name": "Ikoria: Lair of Behemoths Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "iko",
+          "name": "Ikoria: Lair of Behemoths",
+          "provider_count": 389
+        },
+        {
+          "id": "oc20",
+          "name": "Commander 2020 Oversized",
+          "provider_count": 5
+        },
+        {
+          "id": "c20",
+          "name": "Commander 2020",
+          "provider_count": 322
+        },
+        {
+          "id": "tc20",
+          "name": "Commander 2020 Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "tund",
+          "name": "Unsanctioned Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "und",
+          "name": "Unsanctioned",
+          "provider_count": 96
+        },
+        {
+          "id": "pthb",
+          "name": "Theros Beyond Death Promos",
+          "provider_count": 137
+        },
+        {
+          "id": "tthb",
+          "name": "Theros Beyond Death Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "thb",
+          "name": "Theros Beyond Death",
+          "provider_count": 358
+        },
+        {
+          "id": "j20",
+          "name": "Judge Gift Cards 2020",
+          "provider_count": 10
+        },
+        {
+          "id": "pf20",
+          "name": "MagicFest 2020",
+          "provider_count": 6
+        },
+        {
+          "id": "tgn2",
+          "name": "Game Night 2019 Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "gn2",
+          "name": "Game Night 2019",
+          "provider_count": 64
+        },
+        {
+          "id": "cmb1",
+          "name": "Mystery Booster Playtest Cards 2019",
+          "provider_count": 121
+        },
+        {
+          "id": "ptg",
+          "name": "Ponies: The Galloping",
+          "provider_count": 3
+        },
+        {
+          "id": "peld",
+          "name": "Throne of Eldraine Promos",
+          "provider_count": 138
+        },
+        {
+          "id": "teld",
+          "name": "Throne of Eldraine Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "eld",
+          "name": "Throne of Eldraine",
+          "provider_count": 397
+        },
+        {
+          "id": "c19",
+          "name": "Commander 2019",
+          "provider_count": 302
+        },
+        {
+          "id": "oc19",
+          "name": "Commander 2019 Oversized",
+          "provider_count": 4
+        },
+        {
+          "id": "tc19",
+          "name": "Commander 2019 Tokens",
+          "provider_count": 29
+        },
+        {
+          "id": "ph18",
+          "name": "2018 Heroes of the Realm",
+          "provider_count": 5
+        },
+        {
+          "id": "ps19",
+          "name": "San Diego Comic-Con 2019",
+          "provider_count": 5
+        },
+        {
+          "id": "tm20",
+          "name": "Core Set 2020 Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "ppp1",
+          "name": "M20 Promo Packs",
+          "provider_count": 5
+        },
+        {
+          "id": "pm20",
+          "name": "Core Set 2020 Promos",
+          "provider_count": 144
+        },
+        {
+          "id": "m20",
+          "name": "Core Set 2020",
+          "provider_count": 345
+        },
+        {
+          "id": "ss2",
+          "name": "Signature Spellbook: Gideon",
+          "provider_count": 8
+        },
+        {
+          "id": "pmh1",
+          "name": "Modern Horizons Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "mh1",
+          "name": "Modern Horizons",
+          "provider_count": 255
+        },
+        {
+          "id": "amh1",
+          "name": "Modern Horizons Art Series",
+          "provider_count": 54
+        },
+        {
+          "id": "tmh1",
+          "name": "Modern Horizons Tokens",
+          "provider_count": 21
+        },
+        {
+          "id": "pwar",
+          "name": "War of the Spark Promos",
+          "provider_count": 176
+        },
+        {
+          "id": "twar",
+          "name": "War of the Spark Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "war",
+          "name": "War of the Spark",
+          "provider_count": 311
+        },
+        {
+          "id": "j19",
+          "name": "Judge Gift Cards 2019",
+          "provider_count": 8
+        },
+        {
+          "id": "prw2",
+          "name": "RNA Ravnica Weekend",
+          "provider_count": 10
+        },
+        {
+          "id": "gk2",
+          "name": "RNA Guild Kit",
+          "provider_count": 133
+        },
+        {
+          "id": "tgk2",
+          "name": "RNA Guild Kit Tokens",
+          "provider_count": 9
+        },
+        {
+          "id": "prna",
+          "name": "Ravnica Allegiance Promos",
+          "provider_count": 81
+        },
+        {
+          "id": "rna",
+          "name": "Ravnica Allegiance",
+          "provider_count": 273
+        },
+        {
+          "id": "trna",
+          "name": "Ravnica Allegiance Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "pf19",
+          "name": "MagicFest 2019",
+          "provider_count": 7
+        },
+        {
+          "id": "puma",
+          "name": "Ultimate Box Topper",
+          "provider_count": 40
+        },
+        {
+          "id": "uma",
+          "name": "Ultimate Masters",
+          "provider_count": 254
+        },
+        {
+          "id": "tuma",
+          "name": "Ultimate Masters Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "gnt",
+          "name": "Game Night",
+          "provider_count": 68
+        },
+        {
+          "id": "g18",
+          "name": "M19 Gift Pack",
+          "provider_count": 5
+        },
+        {
+          "id": "prwk",
+          "name": "GRN Ravnica Weekend",
+          "provider_count": 10
+        },
+        {
+          "id": "gk1",
+          "name": "GRN Guild Kit",
+          "provider_count": 127
+        },
+        {
+          "id": "tgk1",
+          "name": "GRN Guild Kit Tokens",
+          "provider_count": 10
+        },
+        {
+          "id": "pgrn",
+          "name": "Guilds of Ravnica Promos",
+          "provider_count": 84
+        },
+        {
+          "id": "tgrn",
+          "name": "Guilds of Ravnica Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "grn",
+          "name": "Guilds of Ravnica",
+          "provider_count": 273
+        },
+        {
+          "id": "med",
+          "name": "Mythic Edition",
+          "provider_count": 24
+        },
+        {
+          "id": "tmed",
+          "name": "Mythic Edition Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "oc18",
+          "name": "Commander 2018 Oversized",
+          "provider_count": 4
+        },
+        {
+          "id": "c18",
+          "name": "Commander 2018",
+          "provider_count": 307
+        },
+        {
+          "id": "tc18",
+          "name": "Commander 2018 Tokens",
+          "provider_count": 26
+        },
+        {
+          "id": "ph17",
+          "name": "2017 Heroes of the Realm",
+          "provider_count": 3
+        },
+        {
+          "id": "ps18",
+          "name": "San Diego Comic-Con 2018",
+          "provider_count": 5
+        },
+        {
+          "id": "pm19",
+          "name": "Core Set 2019 Promos",
+          "provider_count": 95
+        },
+        {
+          "id": "m19",
+          "name": "Core Set 2019",
+          "provider_count": 314
+        },
+        {
+          "id": "pss3",
+          "name": "M19 Standard Showdown",
+          "provider_count": 5
+        },
+        {
+          "id": "tm19",
+          "name": "Core Set 2019 Tokens",
+          "provider_count": 18
+        },
+        {
+          "id": "gs1",
+          "name": "Global Series Jiang Yanggu & Mu Yanling",
+          "provider_count": 41
+        },
+        {
+          "id": "ss1",
+          "name": "Signature Spellbook: Jace",
+          "provider_count": 8
+        },
+        {
+          "id": "pbbd",
+          "name": "Battlebond Promos",
+          "provider_count": 22
+        },
+        {
+          "id": "tbbd",
+          "name": "Battlebond Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "bbd",
+          "name": "Battlebond",
+          "provider_count": 256
+        },
+        {
+          "id": "tcm2",
+          "name": "Commander Anthology Volume II Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "cm2",
+          "name": "Commander Anthology Volume II",
+          "provider_count": 312
+        },
+        {
+          "id": "pdom",
+          "name": "Dominaria Promos",
+          "provider_count": 118
+        },
+        {
+          "id": "dom",
+          "name": "Dominaria",
+          "provider_count": 280
+        },
+        {
+          "id": "tdom",
+          "name": "Dominaria Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "tddu",
+          "name": "Duel Decks: Elves vs. Inventors Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "ddu",
+          "name": "Duel Decks: Elves vs. Inventors",
+          "provider_count": 76
+        },
+        {
+          "id": "a25",
+          "name": "Masters 25",
+          "provider_count": 249
+        },
+        {
+          "id": "ta25",
+          "name": "Masters 25 Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "plny",
+          "name": "Lunar New Year 2018",
+          "provider_count": 1
+        },
+        {
+          "id": "pnat",
+          "name": "Nationals Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "prix",
+          "name": "Rivals of Ixalan Promos",
+          "provider_count": 98
+        },
+        {
+          "id": "trix",
+          "name": "Rivals of Ixalan Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "rix",
+          "name": "Rivals of Ixalan",
+          "provider_count": 205
+        },
+        {
+          "id": "j18",
+          "name": "Judge Gift Cards 2018",
+          "provider_count": 8
+        },
+        {
+          "id": "f18",
+          "name": "Friday Night Magic 2018",
+          "provider_count": 3
+        },
+        {
+          "id": "pust",
+          "name": "Unstable Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "tust",
+          "name": "Unstable Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "ust",
+          "name": "Unstable",
+          "provider_count": 268
+        },
+        {
+          "id": "tima",
+          "name": "Iconic Masters Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "pxtc",
+          "name": "XLN Treasure Chest",
+          "provider_count": 10
+        },
+        {
+          "id": "v17",
+          "name": "From the Vault: Transform",
+          "provider_count": 16
+        },
+        {
+          "id": "e02",
+          "name": "Explorers of Ixalan",
+          "provider_count": 48
+        },
+        {
+          "id": "ima",
+          "name": "Iconic Masters",
+          "provider_count": 249
+        },
+        {
+          "id": "ddt",
+          "name": "Duel Decks: Merfolk vs. Goblins",
+          "provider_count": 63
+        },
+        {
+          "id": "tddt",
+          "name": "Duel Decks: Merfolk vs. Goblins Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "g17",
+          "name": "2017 Gift Pack",
+          "provider_count": 5
+        },
+        {
+          "id": "pxln",
+          "name": "Ixalan Promos",
+          "provider_count": 120
+        },
+        {
+          "id": "xln",
+          "name": "Ixalan",
+          "provider_count": 289
+        },
+        {
+          "id": "txln",
+          "name": "Ixalan Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "pss2",
+          "name": "XLN Standard Showdown",
+          "provider_count": 5
+        },
+        {
+          "id": "h17",
+          "name": "HasCon 2017",
+          "provider_count": 4
+        },
+        {
+          "id": "phtr",
+          "name": "2016 Heroes of the Realm",
+          "provider_count": 3
+        },
+        {
+          "id": "te01",
+          "name": "Archenemy: Nicol Bolas Tokens",
+          "provider_count": 5
+        },
+        {
+          "id": "oc17",
+          "name": "Commander 2017 Oversized",
+          "provider_count": 4
+        },
+        {
+          "id": "c17",
+          "name": "Commander 2017",
+          "provider_count": 309
+        },
+        {
+          "id": "tc17",
+          "name": "Commander 2017 Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "ps17",
+          "name": "San Diego Comic-Con 2017",
+          "provider_count": 6
+        },
+        {
+          "id": "phou",
+          "name": "Hour of Devastation Promos",
+          "provider_count": 62
+        },
+        {
+          "id": "hou",
+          "name": "Hour of Devastation",
+          "provider_count": 209
+        },
+        {
+          "id": "thou",
+          "name": "Hour of Devastation Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "oe01",
+          "name": "Archenemy: Nicol Bolas Schemes",
+          "provider_count": 20
+        },
+        {
+          "id": "e01",
+          "name": "Archenemy: Nicol Bolas",
+          "provider_count": 106
+        },
+        {
+          "id": "tcma",
+          "name": "Commander Anthology Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "cma",
+          "name": "Commander Anthology",
+          "provider_count": 320
+        },
+        {
+          "id": "pakh",
+          "name": "Amonkhet Promos",
+          "provider_count": 77
+        },
+        {
+          "id": "takh",
+          "name": "Amonkhet Tokens",
+          "provider_count": 26
+        },
+        {
+          "id": "mp2",
+          "name": "Amonkhet Invocations",
+          "provider_count": 54
+        },
+        {
+          "id": "akh",
+          "name": "Amonkhet",
+          "provider_count": 287
+        },
+        {
+          "id": "w17",
+          "name": "Welcome Deck 2017",
+          "provider_count": 30
+        },
+        {
+          "id": "dds",
+          "name": "Duel Decks: Mind vs. Might",
+          "provider_count": 65
+        },
+        {
+          "id": "tdds",
+          "name": "Duel Decks: Mind vs. Might Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "tmm3",
+          "name": "Modern Masters 2017 Tokens",
+          "provider_count": 21
+        },
+        {
+          "id": "mm3",
+          "name": "Modern Masters 2017",
+          "provider_count": 249
+        },
+        {
+          "id": "paer",
+          "name": "Aether Revolt Promos",
+          "provider_count": 65
+        },
+        {
+          "id": "taer",
+          "name": "Aether Revolt Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "aer",
+          "name": "Aether Revolt",
+          "provider_count": 197
+        },
+        {
+          "id": "l17",
+          "name": "League Tokens 2017",
+          "provider_count": 1
+        },
+        {
+          "id": "f17",
+          "name": "Friday Night Magic 2017",
+          "provider_count": 12
+        },
+        {
+          "id": "j17",
+          "name": "Judge Gift Cards 2017",
+          "provider_count": 9
+        },
+        {
+          "id": "opca",
+          "name": "Planechase Anthology Planes",
+          "provider_count": 86
+        },
+        {
+          "id": "tpca",
+          "name": "Planechase Anthology Tokens",
+          "provider_count": 19
+        },
+        {
+          "id": "pca",
+          "name": "Planechase Anthology",
+          "provider_count": 156
+        },
+        {
+          "id": "oc16",
+          "name": "Commander 2016 Oversized",
+          "provider_count": 5
+        },
+        {
+          "id": "tc16",
+          "name": "Commander 2016 Tokens",
+          "provider_count": 21
+        },
+        {
+          "id": "c16",
+          "name": "Commander 2016",
+          "provider_count": 351
+        },
+        {
+          "id": "ps16",
+          "name": "San Diego Comic-Con 2016",
+          "provider_count": 5
+        },
+        {
+          "id": "pkld",
+          "name": "Kaladesh Promos",
+          "provider_count": 83
+        },
+        {
+          "id": "kld",
+          "name": "Kaladesh",
+          "provider_count": 278
+        },
+        {
+          "id": "tkld",
+          "name": "Kaladesh Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "mps",
+          "name": "Kaladesh Inventions",
+          "provider_count": 54
+        },
+        {
+          "id": "ddr",
+          "name": "Duel Decks: Nissa vs. Ob Nixilis",
+          "provider_count": 76
+        },
+        {
+          "id": "cn2",
+          "name": "Conspiracy: Take the Crown",
+          "provider_count": 222
+        },
+        {
+          "id": "tcn2",
+          "name": "Conspiracy: Take the Crown Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "v16",
+          "name": "From the Vault: Lore",
+          "provider_count": 16
+        },
+        {
+          "id": "pemn",
+          "name": "Eldritch Moon Promos",
+          "provider_count": 77
+        },
+        {
+          "id": "emn",
+          "name": "Eldritch Moon",
+          "provider_count": 208
+        },
+        {
+          "id": "temn",
+          "name": "Eldritch Moon Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "ema",
+          "name": "Eternal Masters",
+          "provider_count": 249
+        },
+        {
+          "id": "tema",
+          "name": "Eternal Masters Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "psoi",
+          "name": "Shadows over Innistrad Promos",
+          "provider_count": 90
+        },
+        {
+          "id": "tsoi",
+          "name": "Shadows over Innistrad Tokens",
+          "provider_count": 20
+        },
+        {
+          "id": "soi",
+          "name": "Shadows over Innistrad",
+          "provider_count": 302
+        },
+        {
+          "id": "w16",
+          "name": "Welcome Deck 2016",
+          "provider_count": 16
+        },
+        {
+          "id": "ddq",
+          "name": "Duel Decks: Blessed vs. Cursed",
+          "provider_count": 80
+        },
+        {
+          "id": "togw",
+          "name": "Oath of the Gatewatch Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "pogw",
+          "name": "Oath of the Gatewatch Promos",
+          "provider_count": 65
+        },
+        {
+          "id": "ogw",
+          "name": "Oath of the Gatewatch",
+          "provider_count": 187
+        },
+        {
+          "id": "l16",
+          "name": "League Tokens 2016",
+          "provider_count": 1
+        },
+        {
+          "id": "f16",
+          "name": "Friday Night Magic 2016",
+          "provider_count": 12
+        },
+        {
+          "id": "j16",
+          "name": "Judge Gift Cards 2016",
+          "provider_count": 8
+        },
+        {
+          "id": "c15",
+          "name": "Commander 2015",
+          "provider_count": 342
+        },
+        {
+          "id": "tc15",
+          "name": "Commander 2015 Tokens",
+          "provider_count": 25
+        },
+        {
+          "id": "oc15",
+          "name": "Commander 2015 Oversized",
+          "provider_count": 5
+        },
+        {
+          "id": "tbfz",
+          "name": "Battle for Zendikar Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "pbfz",
+          "name": "Battle for Zendikar Promos",
+          "provider_count": 90
+        },
+        {
+          "id": "pss1",
+          "name": "BFZ Standard Series",
+          "provider_count": 5
+        },
+        {
+          "id": "exp",
+          "name": "Zendikar Expeditions",
+          "provider_count": 45
+        },
+        {
+          "id": "bfz",
+          "name": "Battle for Zendikar",
+          "provider_count": 299
+        },
+        {
+          "id": "ddp",
+          "name": "Duel Decks: Zendikar vs. Eldrazi",
+          "provider_count": 80
+        },
+        {
+          "id": "v15",
+          "name": "From the Vault: Angels",
+          "provider_count": 15
+        },
+        {
+          "id": "cp3",
+          "name": "Magic Origins Clash Pack",
+          "provider_count": 6
+        },
+        {
+          "id": "pori",
+          "name": "Magic Origins Promos",
+          "provider_count": 54
+        },
+        {
+          "id": "tori",
+          "name": "Magic Origins Tokens",
+          "provider_count": 15
+        },
+        {
+          "id": "ori",
+          "name": "Magic Origins",
+          "provider_count": 288
+        },
+        {
+          "id": "ps15",
+          "name": "San Diego Comic-Con 2015",
+          "provider_count": 5
+        },
+        {
+          "id": "mm2",
+          "name": "Modern Masters 2015",
+          "provider_count": 249
+        },
+        {
+          "id": "tmm2",
+          "name": "Modern Masters 2015 Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "ptkdf",
+          "name": "Tarkir Dragonfury",
+          "provider_count": 4
+        },
+        {
+          "id": "pdtk",
+          "name": "Dragons of Tarkir Promos",
+          "provider_count": 51
+        },
+        {
+          "id": "dtk",
+          "name": "Dragons of Tarkir",
+          "provider_count": 264
+        },
+        {
+          "id": "tdtk",
+          "name": "Dragons of Tarkir Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "ddo",
+          "name": "Duel Decks: Elspeth vs. Kiora",
+          "provider_count": 67
+        },
+        {
+          "id": "pfrf",
+          "name": "Fate Reforged Promos",
+          "provider_count": 43
+        },
+        {
+          "id": "cp2",
+          "name": "Fate Reforged Clash Pack",
+          "provider_count": 6
+        },
+        {
+          "id": "frf",
+          "name": "Fate Reforged",
+          "provider_count": 191
+        },
+        {
+          "id": "tfrf",
+          "name": "Fate Reforged Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "ugin",
+          "name": "Ugin's Fate",
+          "provider_count": 26
+        },
+        {
+          "id": "l15",
+          "name": "League Tokens 2015",
+          "provider_count": 1
+        },
+        {
+          "id": "j15",
+          "name": "Judge Gift Cards 2015",
+          "provider_count": 8
+        },
+        {
+          "id": "f15",
+          "name": "Friday Night Magic 2015",
+          "provider_count": 12
+        },
+        {
+          "id": "tjvc",
+          "name": "Duel Decks Anthology: Jace vs. Chandra Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "tdvd",
+          "name": "Duel Decks Anthology: Divine vs. Demonic Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "tgvl",
+          "name": "Duel Decks Anthology: Garruk vs. Liliana Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "tevg",
+          "name": "Duel Decks Anthology: Elves vs. Goblins Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "jvc",
+          "name": "Duel Decks Anthology: Jace vs. Chandra",
+          "provider_count": 62
+        },
+        {
+          "id": "evg",
+          "name": "Duel Decks Anthology: Elves vs. Goblins",
+          "provider_count": 62
+        },
+        {
+          "id": "dvd",
+          "name": "Duel Decks Anthology: Divine vs. Demonic",
+          "provider_count": 62
+        },
+        {
+          "id": "gvl",
+          "name": "Duel Decks Anthology: Garruk vs. Liliana",
+          "provider_count": 63
+        },
+        {
+          "id": "oc14",
+          "name": "Commander 2014 Oversized",
+          "provider_count": 5
+        },
+        {
+          "id": "tc14",
+          "name": "Commander 2014 Tokens",
+          "provider_count": 36
+        },
+        {
+          "id": "c14",
+          "name": "Commander 2014",
+          "provider_count": 337
+        },
+        {
+          "id": "pktk",
+          "name": "Khans of Tarkir Promos",
+          "provider_count": 56
+        },
+        {
+          "id": "ktk",
+          "name": "Khans of Tarkir",
+          "provider_count": 293
+        },
+        {
+          "id": "tktk",
+          "name": "Khans of Tarkir Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "ddn",
+          "name": "Duel Decks: Speed vs. Cunning",
+          "provider_count": 82
+        },
+        {
+          "id": "v14",
+          "name": "From the Vault: Annihilation",
+          "provider_count": 15
+        },
+        {
+          "id": "cp1",
+          "name": "Magic 2015 Clash Pack",
+          "provider_count": 6
+        },
+        {
+          "id": "tm15",
+          "name": "Magic 2015 Tokens",
+          "provider_count": 14
+        },
+        {
+          "id": "m15",
+          "name": "Magic 2015",
+          "provider_count": 284
+        },
+        {
+          "id": "pm15",
+          "name": "Magic 2015 Promos",
+          "provider_count": 14
+        },
+        {
+          "id": "ppc1",
+          "name": "M15 Prerelease Challenge",
+          "provider_count": 2
+        },
+        {
+          "id": "pdp15",
+          "name": "Duels of the Planeswalkers 2015 Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "ps14",
+          "name": "San Diego Comic-Con 2014",
+          "provider_count": 6
+        },
+        {
+          "id": "pcns",
+          "name": "Conspiracy Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "tcns",
+          "name": "Conspiracy Tokens",
+          "provider_count": 9
+        },
+        {
+          "id": "cns",
+          "name": "Conspiracy",
+          "provider_count": 210
+        },
+        {
+          "id": "md1",
+          "name": "Modern Event Deck 2014",
+          "provider_count": 26
+        },
+        {
+          "id": "tmd1",
+          "name": "Modern Event Deck 2014 Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "tdag",
+          "name": "Defeat a God",
+          "provider_count": 15
+        },
+        {
+          "id": "jou",
+          "name": "Journey into Nyx",
+          "provider_count": 165
+        },
+        {
+          "id": "thp3",
+          "name": "Journey into Nyx Hero's Path",
+          "provider_count": 8
+        },
+        {
+          "id": "tjou",
+          "name": "Journey into Nyx Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "pjou",
+          "name": "Journey into Nyx Promos",
+          "provider_count": 10
+        },
+        {
+          "id": "tddm",
+          "name": "Duel Decks: Jace vs. Vraska Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "ddm",
+          "name": "Duel Decks: Jace vs. Vraska",
+          "provider_count": 88
+        },
+        {
+          "id": "tbth",
+          "name": "Battle the Horde",
+          "provider_count": 15
+        },
+        {
+          "id": "tbng",
+          "name": "Born of the Gods Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "bng",
+          "name": "Born of the Gods",
+          "provider_count": 165
+        },
+        {
+          "id": "thp2",
+          "name": "Born of the Gods Hero's Path",
+          "provider_count": 7
+        },
+        {
+          "id": "pbng",
+          "name": "Born of the Gods Promos",
+          "provider_count": 9
+        },
+        {
+          "id": "l14",
+          "name": "League Tokens 2014",
+          "provider_count": 4
+        },
+        {
+          "id": "j14",
+          "name": "Judge Gift Cards 2014",
+          "provider_count": 14
+        },
+        {
+          "id": "f14",
+          "name": "Friday Night Magic 2014",
+          "provider_count": 12
+        },
+        {
+          "id": "oc13",
+          "name": "Commander 2013 Oversized",
+          "provider_count": 15
+        },
+        {
+          "id": "c13",
+          "name": "Commander 2013",
+          "provider_count": 356
+        },
+        {
+          "id": "tfth",
+          "name": "Face the Hydra",
+          "provider_count": 15
+        },
+        {
+          "id": "ths",
+          "name": "Theros",
+          "provider_count": 249
+        },
+        {
+          "id": "tths",
+          "name": "Theros Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "thp1",
+          "name": "Theros Hero's Path",
+          "provider_count": 7
+        },
+        {
+          "id": "pths",
+          "name": "Theros Promos",
+          "provider_count": 10
+        },
+        {
+          "id": "tddl",
+          "name": "Duel Decks: Heroes vs. Monsters Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "ddl",
+          "name": "Duel Decks: Heroes vs. Monsters",
+          "provider_count": 81
+        },
+        {
+          "id": "v13",
+          "name": "From the Vault: Twenty",
+          "provider_count": 20
+        },
+        {
+          "id": "tm14",
+          "name": "Magic 2014 Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "m14",
+          "name": "Magic 2014",
+          "provider_count": 249
+        },
+        {
+          "id": "pm14",
+          "name": "Magic 2014 Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "psdc",
+          "name": "San Diego Comic-Con 2013",
+          "provider_count": 5
+        },
+        {
+          "id": "mma",
+          "name": "Modern Masters",
+          "provider_count": 229
+        },
+        {
+          "id": "tmma",
+          "name": "Modern Masters Tokens",
+          "provider_count": 16
+        },
+        {
+          "id": "dgm",
+          "name": "Dragon's Maze",
+          "provider_count": 156
+        },
+        {
+          "id": "tdgm",
+          "name": "Dragon's Maze Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "pdgm",
+          "name": "Dragon's Maze Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "wmc",
+          "name": "World Magic Cup Qualifiers",
+          "provider_count": 5
+        },
+        {
+          "id": "tddk",
+          "name": "Duel Decks: Sorin vs. Tibalt Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "ddk",
+          "name": "Duel Decks: Sorin vs. Tibalt",
+          "provider_count": 80
+        },
+        {
+          "id": "gtc",
+          "name": "Gatecrash",
+          "provider_count": 249
+        },
+        {
+          "id": "tgtc",
+          "name": "Gatecrash Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "pgtc",
+          "name": "Gatecrash Promos",
+          "provider_count": 10
+        },
+        {
+          "id": "pdp14",
+          "name": "Duels of the Planeswalkers 2014 Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "l13",
+          "name": "League Tokens 2013",
+          "provider_count": 4
+        },
+        {
+          "id": "f13",
+          "name": "Friday Night Magic 2013",
+          "provider_count": 12
+        },
+        {
+          "id": "j13",
+          "name": "Judge Gift Cards 2013",
+          "provider_count": 9
+        },
+        {
+          "id": "ocm1",
+          "name": "Commander's Arsenal Oversized",
+          "provider_count": 10
+        },
+        {
+          "id": "cm1",
+          "name": "Commander's Arsenal",
+          "provider_count": 18
+        },
+        {
+          "id": "rtr",
+          "name": "Return to Ravnica",
+          "provider_count": 274
+        },
+        {
+          "id": "prtr",
+          "name": "Return to Ravnica Promos",
+          "provider_count": 10
+        },
+        {
+          "id": "trtr",
+          "name": "Return to Ravnica Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "tddj",
+          "name": "Duel Decks: Izzet vs. Golgari Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "ddj",
+          "name": "Duel Decks: Izzet vs. Golgari",
+          "provider_count": 90
+        },
+        {
+          "id": "v12",
+          "name": "From the Vault: Realms",
+          "provider_count": 15
+        },
+        {
+          "id": "m13",
+          "name": "Magic 2013",
+          "provider_count": 249
+        },
+        {
+          "id": "tm13",
+          "name": "Magic 2013 Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "pm13",
+          "name": "Magic 2013 Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "opc2",
+          "name": "Planechase 2012 Planes",
+          "provider_count": 40
+        },
+        {
+          "id": "pc2",
+          "name": "Planechase 2012",
+          "provider_count": 156
+        },
+        {
+          "id": "avr",
+          "name": "Avacyn Restored",
+          "provider_count": 244
+        },
+        {
+          "id": "tavr",
+          "name": "Avacyn Restored Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "phel",
+          "name": "Open the Helvault",
+          "provider_count": 6
+        },
+        {
+          "id": "pavr",
+          "name": "Avacyn Restored Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "tddi",
+          "name": "Duel Decks: Venser vs. Koth Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "ddi",
+          "name": "Duel Decks: Venser vs. Koth",
+          "provider_count": 77
+        },
+        {
+          "id": "tdka",
+          "name": "Dark Ascension Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "dka",
+          "name": "Dark Ascension",
+          "provider_count": 158
+        },
+        {
+          "id": "pdka",
+          "name": "Dark Ascension Promos",
+          "provider_count": 5
+        },
+        {
+          "id": "pw12",
+          "name": "Wizards Play Network 2012",
+          "provider_count": 3
+        },
+        {
+          "id": "pdp13",
+          "name": "Duels of the Planeswalkers 2013 Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "pidw",
+          "name": "IDW Comics Inserts",
+          "provider_count": 17
+        },
+        {
+          "id": "l12",
+          "name": "League Tokens 2012",
+          "provider_count": 2
+        },
+        {
+          "id": "f12",
+          "name": "Friday Night Magic 2012",
+          "provider_count": 13
+        },
+        {
+          "id": "j12",
+          "name": "Judge Gift Cards 2012",
+          "provider_count": 9
+        },
+        {
+          "id": "pd3",
+          "name": "Premium Deck Series: Graveborn",
+          "provider_count": 30
+        },
+        {
+          "id": "tisd",
+          "name": "Innistrad Tokens",
+          "provider_count": 13
+        },
+        {
+          "id": "isd",
+          "name": "Innistrad",
+          "provider_count": 264
+        },
+        {
+          "id": "pisd",
+          "name": "Innistrad Promos",
+          "provider_count": 5
+        },
+        {
+          "id": "ddh",
+          "name": "Duel Decks: Ajani vs. Nicol Bolas",
+          "provider_count": 80
+        },
+        {
+          "id": "tddh",
+          "name": "Duel Decks: Ajani vs. Nicol Bolas Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "v11",
+          "name": "From the Vault: Legends",
+          "provider_count": 15
+        },
+        {
+          "id": "tm12",
+          "name": "Magic 2012 Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "m12",
+          "name": "Magic 2012",
+          "provider_count": 249
+        },
+        {
+          "id": "pm12",
+          "name": "Magic 2012 Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "ocmd",
+          "name": "Commander 2011 Oversized",
+          "provider_count": 15
+        },
+        {
+          "id": "cmd",
+          "name": "Commander 2011",
+          "provider_count": 318
+        },
+        {
+          "id": "pcmd",
+          "name": "Commander 2011 Launch Party",
+          "provider_count": 5
+        },
+        {
+          "id": "nph",
+          "name": "New Phyrexia",
+          "provider_count": 175
+        },
+        {
+          "id": "tnph",
+          "name": "New Phyrexia Tokens",
+          "provider_count": 5
+        },
+        {
+          "id": "pnph",
+          "name": "New Phyrexia Promos",
+          "provider_count": 4
+        },
+        {
+          "id": "ddg",
+          "name": "Duel Decks: Knights vs. Dragons",
+          "provider_count": 81
+        },
+        {
+          "id": "tddg",
+          "name": "Duel Decks: Knights vs. Dragons Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "tmbs",
+          "name": "Mirrodin Besieged Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "mbs",
+          "name": "Mirrodin Besieged",
+          "provider_count": 155
+        },
+        {
+          "id": "pmbs",
+          "name": "Mirrodin Besieged Promos",
+          "provider_count": 4
+        },
+        {
+          "id": "pmps11",
+          "name": "Magic Premiere Shop 2011",
+          "provider_count": 5
+        },
+        {
+          "id": "pw11",
+          "name": "Wizards Play Network 2011",
+          "provider_count": 3
+        },
+        {
+          "id": "pdp12",
+          "name": "Duels of the Planeswalkers 2012 Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "ps11",
+          "name": "Salvat 2011",
+          "provider_count": 224
+        },
+        {
+          "id": "p11",
+          "name": "Magic Player Rewards 2011",
+          "provider_count": 7
+        },
+        {
+          "id": "f11",
+          "name": "Friday Night Magic 2011",
+          "provider_count": 12
+        },
+        {
+          "id": "g11",
+          "name": "Judge Gift Cards 2011",
+          "provider_count": 8
+        },
+        {
+          "id": "olgc",
+          "name": "Legacy Championship",
+          "provider_count": 27
+        },
+        {
+          "id": "pd2",
+          "name": "Premium Deck Series: Fire and Lightning",
+          "provider_count": 34
+        },
+        {
+          "id": "tsom",
+          "name": "Scars of Mirrodin Tokens",
+          "provider_count": 10
+        },
+        {
+          "id": "som",
+          "name": "Scars of Mirrodin",
+          "provider_count": 249
+        },
+        {
+          "id": "psom",
+          "name": "Scars of Mirrodin Promos",
+          "provider_count": 4
+        },
+        {
+          "id": "tddf",
+          "name": "Duel Decks: Elspeth vs. Tezzeret Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "ddf",
+          "name": "Duel Decks: Elspeth vs. Tezzeret",
+          "provider_count": 79
+        },
+        {
+          "id": "v10",
+          "name": "From the Vault: Relics",
+          "provider_count": 15
+        },
+        {
+          "id": "m11",
+          "name": "Magic 2011",
+          "provider_count": 249
+        },
+        {
+          "id": "tm11",
+          "name": "Magic 2011 Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "pm11",
+          "name": "Magic 2011 Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "oarc",
+          "name": "Archenemy Schemes",
+          "provider_count": 45
+        },
+        {
+          "id": "arc",
+          "name": "Archenemy",
+          "provider_count": 150
+        },
+        {
+          "id": "dpa",
+          "name": "Duels of the Planeswalkers",
+          "provider_count": 113
+        },
+        {
+          "id": "proe",
+          "name": "Rise of the Eldrazi Promos",
+          "provider_count": 4
+        },
+        {
+          "id": "troe",
+          "name": "Rise of the Eldrazi Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "roe",
+          "name": "Rise of the Eldrazi",
+          "provider_count": 248
+        },
+        {
+          "id": "tdde",
+          "name": "Duel Decks: Phyrexia vs. the Coalition Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "dde",
+          "name": "Duel Decks: Phyrexia vs. the Coalition",
+          "provider_count": 71
+        },
+        {
+          "id": "pwwk",
+          "name": "Worldwake Promos",
+          "provider_count": 6
+        },
+        {
+          "id": "twwk",
+          "name": "Worldwake Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "wwk",
+          "name": "Worldwake",
+          "provider_count": 145
+        },
+        {
+          "id": "pdp10",
+          "name": "Duels of the Planeswalkers 2010 Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "pmps10",
+          "name": "Magic Premiere Shop 2010",
+          "provider_count": 5
+        },
+        {
+          "id": "f10",
+          "name": "Friday Night Magic 2010",
+          "provider_count": 12
+        },
+        {
+          "id": "g10",
+          "name": "Judge Gift Cards 2010",
+          "provider_count": 8
+        },
+        {
+          "id": "p10",
+          "name": "Magic Player Rewards 2010",
+          "provider_count": 13
+        },
+        {
+          "id": "h09",
+          "name": "Premium Deck Series: Slivers",
+          "provider_count": 41
+        },
+        {
+          "id": "tddd",
+          "name": "Duel Decks: Garruk vs. Liliana Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "ddd",
+          "name": "Duel Decks: Garruk vs. Liliana",
+          "provider_count": 63
+        },
+        {
+          "id": "pzen",
+          "name": "Zendikar Promos",
+          "provider_count": 5
+        },
+        {
+          "id": "tzen",
+          "name": "Zendikar Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "zen",
+          "name": "Zendikar",
+          "provider_count": 269
+        },
+        {
+          "id": "ohop",
+          "name": "Planechase Planes",
+          "provider_count": 40
+        },
+        {
+          "id": "hop",
+          "name": "Planechase",
+          "provider_count": 169
+        },
+        {
+          "id": "phop",
+          "name": "Planechase Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "v09",
+          "name": "From the Vault: Exiled",
+          "provider_count": 15
+        },
+        {
+          "id": "tm10",
+          "name": "Magic 2010 Tokens",
+          "provider_count": 8
+        },
+        {
+          "id": "m10",
+          "name": "Magic 2010",
+          "provider_count": 249
+        },
+        {
+          "id": "pm10",
+          "name": "Magic 2010 Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "parb",
+          "name": "Alara Reborn Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "arb",
+          "name": "Alara Reborn",
+          "provider_count": 145
+        },
+        {
+          "id": "tarb",
+          "name": "Alara Reborn Tokens",
+          "provider_count": 4
+        },
+        {
+          "id": "ddc",
+          "name": "Duel Decks: Divine vs. Demonic",
+          "provider_count": 62
+        },
+        {
+          "id": "tddc",
+          "name": "Duel Decks: Divine vs. Demonic Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "pcon",
+          "name": "Conflux Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "tcon",
+          "name": "Conflux Tokens",
+          "provider_count": 2
+        },
+        {
+          "id": "con",
+          "name": "Conflux",
+          "provider_count": 145
+        },
+        {
+          "id": "pdtp",
+          "name": "Duels of the Planeswalkers 2009 Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "pmps09",
+          "name": "Magic Premiere Shop 2009",
+          "provider_count": 5
+        },
+        {
+          "id": "g09",
+          "name": "Judge Gift Cards 2009",
+          "provider_count": 10
+        },
+        {
+          "id": "f09",
+          "name": "Friday Night Magic 2009",
+          "provider_count": 12
+        },
+        {
+          "id": "p09",
+          "name": "Magic Player Rewards 2009",
+          "provider_count": 13
+        },
+        {
+          "id": "tdd2",
+          "name": "Duel Decks: Jace vs. Chandra Tokens",
+          "provider_count": 1
+        },
+        {
+          "id": "dd2",
+          "name": "Duel Decks: Jace vs. Chandra",
+          "provider_count": 64
+        },
+        {
+          "id": "pala",
+          "name": "Shards of Alara Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "tala",
+          "name": "Shards of Alara Tokens",
+          "provider_count": 10
+        },
+        {
+          "id": "ala",
+          "name": "Shards of Alara",
+          "provider_count": 250
+        },
+        {
+          "id": "drb",
+          "name": "From the Vault: Dragons",
+          "provider_count": 15
+        },
+        {
+          "id": "peve",
+          "name": "Eventide Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "teve",
+          "name": "Eventide Tokens",
+          "provider_count": 7
+        },
+        {
+          "id": "eve",
+          "name": "Eventide",
+          "provider_count": 180
+        },
+        {
+          "id": "pshm",
+          "name": "Shadowmoor Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "tshm",
+          "name": "Shadowmoor Tokens",
+          "provider_count": 12
+        },
+        {
+          "id": "shm",
+          "name": "Shadowmoor",
+          "provider_count": 302
+        },
+        {
+          "id": "p15a",
+          "name": "15th Anniversary Cards",
+          "provider_count": 2
+        },
+        {
+          "id": "pmor",
+          "name": "Morningtide Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "tmor",
+          "name": "Morningtide Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "mor",
+          "name": "Morningtide",
+          "provider_count": 150
+        },
+        {
+          "id": "pmps08",
+          "name": "Magic Premiere Shop 2008",
+          "provider_count": 6
+        },
+        {
+          "id": "g08",
+          "name": "Judge Gift Cards 2008",
+          "provider_count": 5
+        },
+        {
+          "id": "p08",
+          "name": "Magic Player Rewards 2008",
+          "provider_count": 7
+        },
+        {
+          "id": "f08",
+          "name": "Friday Night Magic 2008",
+          "provider_count": 12
+        },
+        {
+          "id": "tdd1",
+          "name": "Duel Decks: Elves vs. Goblins Tokens",
+          "provider_count": 3
+        },
+        {
+          "id": "dd1",
+          "name": "Duel Decks: Elves vs. Goblins",
+          "provider_count": 62
+        },
+        {
+          "id": "plrw",
+          "name": "Lorwyn Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "tlrw",
+          "name": "Lorwyn Tokens",
+          "provider_count": 11
+        },
+        {
+          "id": "lrw",
+          "name": "Lorwyn",
+          "provider_count": 301
+        },
+        {
+          "id": "10e",
+          "name": "Tenth Edition",
+          "provider_count": 510
+        },
+        {
+          "id": "p10e",
+          "name": "Tenth Edition Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "t10e",
+          "name": "Tenth Edition Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "pfut",
+          "name": "Future Sight Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "fut",
+          "name": "Future Sight",
+          "provider_count": 180
+        },
+        {
+          "id": "pgpx",
+          "name": "Grand Prix Promos",
+          "provider_count": 20
+        },
+        {
+          "id": "pplc",
+          "name": "Planar Chaos Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "plc",
+          "name": "Planar Chaos",
+          "provider_count": 165
+        },
+        {
+          "id": "pmps07",
+          "name": "Magic Premiere Shop 2007",
+          "provider_count": 5
+        },
+        {
+          "id": "g07",
+          "name": "Judge Gift Cards 2007",
+          "provider_count": 5
+        },
+        {
+          "id": "p07",
+          "name": "Magic Player Rewards 2007",
+          "provider_count": 7
+        },
+        {
+          "id": "f07",
+          "name": "Friday Night Magic 2007",
+          "provider_count": 12
+        },
+        {
+          "id": "ptsp",
+          "name": "Time Spiral Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "tsb",
+          "name": "Time Spiral Timeshifted",
+          "provider_count": 121
+        },
+        {
+          "id": "tsp",
+          "name": "Time Spiral",
+          "provider_count": 301
+        },
+        {
+          "id": "pcsp",
+          "name": "Coldsnap Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "csp",
+          "name": "Coldsnap",
+          "provider_count": 155
+        },
+        {
+          "id": "cst",
+          "name": "Coldsnap Theme Decks",
+          "provider_count": 62
+        },
+        {
+          "id": "pdis",
+          "name": "Dissension Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "dis",
+          "name": "Dissension",
+          "provider_count": 180
+        },
+        {
+          "id": "pcmp",
+          "name": "Champs and States",
+          "provider_count": 12
+        },
+        {
+          "id": "pgpt",
+          "name": "Guildpact Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "gpt",
+          "name": "Guildpact",
+          "provider_count": 167
+        },
+        {
+          "id": "pmps06",
+          "name": "Magic Premiere Shop 2006",
+          "provider_count": 5
+        },
+        {
+          "id": "pal06",
+          "name": "Arena League 2006",
+          "provider_count": 9
+        },
+        {
+          "id": "pjas",
+          "name": "Junior APAC Series",
+          "provider_count": 6
+        },
+        {
+          "id": "phuk",
+          "name": "Hachette UK",
+          "provider_count": 60
+        },
+        {
+          "id": "g06",
+          "name": "Judge Gift Cards 2006",
+          "provider_count": 4
+        },
+        {
+          "id": "dci",
+          "name": "DCI Promos",
+          "provider_count": 80
+        },
+        {
+          "id": "p06",
+          "name": "Magic Player Rewards 2006",
+          "provider_count": 7
+        },
+        {
+          "id": "f06",
+          "name": "Friday Night Magic 2006",
+          "provider_count": 12
+        },
+        {
+          "id": "p2hg",
+          "name": "Two-Headed Giant Tournament",
+          "provider_count": 1
+        },
+        {
+          "id": "prav",
+          "name": "Ravnica: City of Guilds Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "pmps",
+          "name": "Magic Premiere Shop 2005",
+          "provider_count": 20
+        },
+        {
+          "id": "rav",
+          "name": "Ravnica: City of Guilds",
+          "provider_count": 306
+        },
+        {
+          "id": "psal",
+          "name": "Salvat 2005",
+          "provider_count": 720
+        },
+        {
+          "id": "p9ed",
+          "name": "Ninth Edition Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "9ed",
+          "name": "Ninth Edition",
+          "provider_count": 710
+        },
+        {
+          "id": "psok",
+          "name": "Saviors of Kamigawa Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "sok",
+          "name": "Saviors of Kamigawa",
+          "provider_count": 165
+        },
+        {
+          "id": "pbok",
+          "name": "Betrayers of Kamigawa Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "bok",
+          "name": "Betrayers of Kamigawa",
+          "provider_count": 165
+        },
+        {
+          "id": "pal05",
+          "name": "Arena League 2005",
+          "provider_count": 8
+        },
+        {
+          "id": "pjse",
+          "name": "Junior Series Europe",
+          "provider_count": 8
+        },
+        {
+          "id": "g05",
+          "name": "Judge Gift Cards 2005",
+          "provider_count": 4
+        },
+        {
+          "id": "p05",
+          "name": "Magic Player Rewards 2005",
+          "provider_count": 6
+        },
+        {
+          "id": "f05",
+          "name": "Friday Night Magic 2005",
+          "provider_count": 12
+        },
+        {
+          "id": "punh",
+          "name": "Unhinged Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "unh",
+          "name": "Unhinged",
+          "provider_count": 168
+        },
+        {
+          "id": "pchk",
+          "name": "Champions of Kamigawa Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "chk",
+          "name": "Champions of Kamigawa",
+          "provider_count": 307
+        },
+        {
+          "id": "wc04",
+          "name": "World Championship Decks 2004",
+          "provider_count": 103
+        },
+        {
+          "id": "pmrd",
+          "name": "Mirrodin Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "p5dn",
+          "name": "Fifth Dawn Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "5dn",
+          "name": "Fifth Dawn",
+          "provider_count": 165
+        },
+        {
+          "id": "pdst",
+          "name": "Darksteel Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "dst",
+          "name": "Darksteel",
+          "provider_count": 165
+        },
+        {
+          "id": "pal04",
+          "name": "Arena League 2004",
+          "provider_count": 14
+        },
+        {
+          "id": "f04",
+          "name": "Friday Night Magic 2004",
+          "provider_count": 12
+        },
+        {
+          "id": "p04",
+          "name": "Magic Player Rewards 2004",
+          "provider_count": 6
+        },
+        {
+          "id": "g04",
+          "name": "Judge Gift Cards 2004",
+          "provider_count": 6
+        },
+        {
+          "id": "mrd",
+          "name": "Mirrodin",
+          "provider_count": 306
+        },
+        {
+          "id": "wc03",
+          "name": "World Championship Decks 2003",
+          "provider_count": 142
+        },
+        {
+          "id": "p8ed",
+          "name": "Eighth Edition Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "8ed",
+          "name": "Eighth Edition",
+          "provider_count": 711
+        },
+        {
+          "id": "pscg",
+          "name": "Scourge Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "scg",
+          "name": "Scourge",
+          "provider_count": 143
+        },
+        {
+          "id": "plgn",
+          "name": "Legions Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "lgn",
+          "name": "Legions",
+          "provider_count": 145
+        },
+        {
+          "id": "pjjt",
+          "name": "Japan Junior Tournament",
+          "provider_count": 12
+        },
+        {
+          "id": "pal03",
+          "name": "Arena League 2003",
+          "provider_count": 8
+        },
+        {
+          "id": "f03",
+          "name": "Friday Night Magic 2003",
+          "provider_count": 13
+        },
+        {
+          "id": "p03",
+          "name": "Magic Player Rewards 2003",
+          "provider_count": 7
+        },
+        {
+          "id": "g03",
+          "name": "Judge Gift Cards 2003",
+          "provider_count": 3
+        },
+        {
+          "id": "ovnt",
+          "name": "Vintage Championship",
+          "provider_count": 35
+        },
+        {
+          "id": "wc02",
+          "name": "World Championship Decks 2002",
+          "provider_count": 153
+        },
+        {
+          "id": "ons",
+          "name": "Onslaught",
+          "provider_count": 351
+        },
+        {
+          "id": "pons",
+          "name": "Onslaught Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "jp1",
+          "name": "Hobby Japan Promos",
+          "provider_count": 5
+        },
+        {
+          "id": "pjud",
+          "name": "Judgment Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "jud",
+          "name": "Judgment",
+          "provider_count": 143
+        },
+        {
+          "id": "ptor",
+          "name": "Torment Promos",
+          "provider_count": 3
+        },
+        {
+          "id": "tor",
+          "name": "Torment",
+          "provider_count": 143
+        },
+        {
+          "id": "pal02",
+          "name": "Arena League 2002",
+          "provider_count": 5
+        },
+        {
+          "id": "g02",
+          "name": "Judge Gift Cards 2002",
+          "provider_count": 2
+        },
+        {
+          "id": "pr2",
+          "name": "Magic Player Rewards 2002",
+          "provider_count": 6
+        },
+        {
+          "id": "f02",
+          "name": "Friday Night Magic 2002",
+          "provider_count": 12
+        },
+        {
+          "id": "dkm",
+          "name": "Deckmasters",
+          "provider_count": 58
+        },
+        {
+          "id": "pody",
+          "name": "Odyssey Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "ody",
+          "name": "Odyssey",
+          "provider_count": 353
+        },
+        {
+          "id": "wc01",
+          "name": "World Championship Decks 2001",
+          "provider_count": 138
+        },
+        {
+          "id": "papc",
+          "name": "Apocalypse Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "apc",
+          "name": "Apocalypse",
+          "provider_count": 143
+        },
+        {
+          "id": "7ed",
+          "name": "Seventh Edition",
+          "provider_count": 708
+        },
+        {
+          "id": "ppls",
+          "name": "Planeshift Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "pls",
+          "name": "Planeshift",
+          "provider_count": 146
+        },
+        {
+          "id": "pal01",
+          "name": "Arena League 2001",
+          "provider_count": 12
+        },
+        {
+          "id": "g01",
+          "name": "Judge Gift Cards 2001",
+          "provider_count": 2
+        },
+        {
+          "id": "mpr",
+          "name": "Magic Player Rewards 2001",
+          "provider_count": 8
+        },
+        {
+          "id": "f01",
+          "name": "Friday Night Magic 2001",
+          "provider_count": 7
+        },
+        {
+          "id": "pinv",
+          "name": "Invasion Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "inv",
+          "name": "Invasion",
+          "provider_count": 354
+        },
+        {
+          "id": "btd",
+          "name": "Beatdown Box Set",
+          "provider_count": 90
+        },
+        {
+          "id": "wc00",
+          "name": "World Championship Decks 2000",
+          "provider_count": 117
+        },
+        {
+          "id": "ppcy",
+          "name": "Prophecy Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "pcy",
+          "name": "Prophecy",
+          "provider_count": 144
+        },
+        {
+          "id": "s00",
+          "name": "Starter 2000",
+          "provider_count": 20
+        },
+        {
+          "id": "pnem",
+          "name": "Nemesis Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "nem",
+          "name": "Nemesis",
+          "provider_count": 143
+        },
+        {
+          "id": "pelp",
+          "name": "European Land Program",
+          "provider_count": 15
+        },
+        {
+          "id": "pal00",
+          "name": "Arena League 2000",
+          "provider_count": 11
+        },
+        {
+          "id": "fnm",
+          "name": "Friday Night Magic 2000",
+          "provider_count": 11
+        },
+        {
+          "id": "g00",
+          "name": "Judge Gift Cards 2000",
+          "provider_count": 2
+        },
+        {
+          "id": "psus",
+          "name": "Junior Super Series",
+          "provider_count": 18
+        },
+        {
+          "id": "brb",
+          "name": "Battle Royale Box Set",
+          "provider_count": 136
+        },
+        {
+          "id": "pmmq",
+          "name": "Mercadian Masques Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "mmq",
+          "name": "Mercadian Masques",
+          "provider_count": 350
+        },
+        {
+          "id": "pwos",
+          "name": "Wizards of the Coast Online Store",
+          "provider_count": 1
+        },
+        {
+          "id": "pwor",
+          "name": "World Championship Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "wc99",
+          "name": "World Championship Decks 1999",
+          "provider_count": 111
+        },
+        {
+          "id": "pgru",
+          "name": "Guru",
+          "provider_count": 5
+        },
+        {
+          "id": "s99",
+          "name": "Starter 1999",
+          "provider_count": 173
+        },
+        {
+          "id": "puds",
+          "name": "Urza's Destiny Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "uds",
+          "name": "Urza's Destiny",
+          "provider_count": 143
+        },
+        {
+          "id": "pptk",
+          "name": "Portal Three Kingdoms Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "ptk",
+          "name": "Portal Three Kingdoms",
+          "provider_count": 180
+        },
+        {
+          "id": "6ed",
+          "name": "Classic Sixth Edition",
+          "provider_count": 351
+        },
+        {
+          "id": "pulg",
+          "name": "Urza's Legacy Promos",
+          "provider_count": 2
+        },
+        {
+          "id": "ulg",
+          "name": "Urza's Legacy",
+          "provider_count": 143
+        },
+        {
+          "id": "pal99",
+          "name": "Arena League 1999",
+          "provider_count": 10
+        },
+        {
+          "id": "g99",
+          "name": "Judge Gift Cards 1999",
+          "provider_count": 1
+        },
+        {
+          "id": "ath",
+          "name": "Anthologies",
+          "provider_count": 85
+        },
+        {
+          "id": "pusg",
+          "name": "Urza's Saga Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "usg",
+          "name": "Urza's Saga",
+          "provider_count": 357
+        },
+        {
+          "id": "palp",
+          "name": "Asia Pacific Land Program",
+          "provider_count": 15
+        },
+        {
+          "id": "wc98",
+          "name": "World Championship Decks 1998",
+          "provider_count": 117
+        },
+        {
+          "id": "tugl",
+          "name": "Unglued Tokens",
+          "provider_count": 6
+        },
+        {
+          "id": "ugl",
+          "name": "Unglued",
+          "provider_count": 88
+        },
+        {
+          "id": "p02",
+          "name": "Portal Second Age",
+          "provider_count": 165
+        },
+        {
+          "id": "pexo",
+          "name": "Exodus Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "exo",
+          "name": "Exodus",
+          "provider_count": 143
+        },
+        {
+          "id": "psth",
+          "name": "Stronghold Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "sth",
+          "name": "Stronghold",
+          "provider_count": 143
+        },
+        {
+          "id": "jgp",
+          "name": "Judge Gift Cards 1998",
+          "provider_count": 3
+        },
+        {
+          "id": "ptmp",
+          "name": "Tempest Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "tmp",
+          "name": "Tempest",
+          "provider_count": 350
+        },
+        {
+          "id": "wc97",
+          "name": "World Championship Decks 1997",
+          "provider_count": 131
+        },
+        {
+          "id": "wth",
+          "name": "Weatherlight",
+          "provider_count": 167
+        },
+        {
+          "id": "olep",
+          "name": "Oversized League Prizes",
+          "provider_count": 83
+        },
+        {
+          "id": "pvan",
+          "name": "Vanguard Series",
+          "provider_count": 32
+        },
+        {
+          "id": "por",
+          "name": "Portal",
+          "provider_count": 257
+        },
+        {
+          "id": "pmic",
+          "name": "MicroProse Promos",
+          "provider_count": 1
+        },
+        {
+          "id": "5ed",
+          "name": "Fifth Edition",
+          "provider_count": 460
+        },
+        {
+          "id": "vis",
+          "name": "Visions",
+          "provider_count": 167
+        },
+        {
+          "id": "itp",
+          "name": "Introductory Two-Player Set",
+          "provider_count": 67
+        },
+        {
+          "id": "mgb",
+          "name": "Multiverse Gift Box",
+          "provider_count": 10
+        },
+        {
+          "id": "mir",
+          "name": "Mirage",
+          "provider_count": 353
+        },
+        {
+          "id": "pred",
+          "name": "Redemption Program",
+          "provider_count": 1
+        },
+        {
+          "id": "parl",
+          "name": "Arena League 1996",
+          "provider_count": 7
+        },
+        {
+          "id": "plgm",
+          "name": "DCI Legend Membership",
+          "provider_count": 2
+        },
+        {
+          "id": "rqs",
+          "name": "Rivals Quick Start Set",
+          "provider_count": 65
+        },
+        {
+          "id": "all",
+          "name": "Alliances",
+          "provider_count": 199
+        },
+        {
+          "id": "ptc",
+          "name": "Pro Tour Collector Set",
+          "provider_count": 308
+        },
+        {
+          "id": "o90p",
+          "name": "Oversized 90's Promos",
+          "provider_count": 10
+        },
+        {
+          "id": "hml",
+          "name": "Homelands",
+          "provider_count": 140
+        },
+        {
+          "id": "rin",
+          "name": "Rinascimento",
+          "provider_count": 69
+        },
+        {
+          "id": "ren",
+          "name": "Renaissance",
+          "provider_count": 122
+        },
+        {
+          "id": "chr",
+          "name": "Chronicles",
+          "provider_count": 125
+        },
+        {
+          "id": "bchr",
+          "name": "Chronicles Foreign Black Border",
+          "provider_count": 125
+        },
+        {
+          "id": "ice",
+          "name": "Ice Age",
+          "provider_count": 383
+        },
+        {
+          "id": "4bb",
+          "name": "Fourth Edition Foreign Black Border",
+          "provider_count": 378
+        },
+        {
+          "id": "4ed",
+          "name": "Fourth Edition",
+          "provider_count": 380
+        },
+        {
+          "id": "fem",
+          "name": "Fallen Empires",
+          "provider_count": 187
+        },
+        {
+          "id": "phpr",
+          "name": "HarperPrism Book Promos",
+          "provider_count": 5
+        },
+        {
+          "id": "drk",
+          "name": "The Dark",
+          "provider_count": 122
+        },
+        {
+          "id": "pdrc",
+          "name": "Dragon Con",
+          "provider_count": 1
+        },
+        {
+          "id": "sum",
+          "name": "Summer Magic / Edgar",
+          "provider_count": 306
+        },
+        {
+          "id": "leg",
+          "name": "Legends",
+          "provider_count": 310
+        },
+        {
+          "id": "3ed",
+          "name": "Revised Edition",
+          "provider_count": 306
+        },
+        {
+          "id": "fbb",
+          "name": "Foreign Black Border",
+          "provider_count": 307
+        },
+        {
+          "id": "atq",
+          "name": "Antiquities",
+          "provider_count": 102
+        },
+        {
+          "id": "arn",
+          "name": "Arabian Nights",
+          "provider_count": 92
+        },
+        {
+          "id": "cei",
+          "name": "Intl. Collectors' Edition",
+          "provider_count": 302
+        },
+        {
+          "id": "ced",
+          "name": "Collectors' Edition",
+          "provider_count": 302
+        },
+        {
+          "id": "2ed",
+          "name": "Unlimited Edition",
+          "provider_count": 302
+        },
+        {
+          "id": "leb",
+          "name": "Limited Edition Beta",
+          "provider_count": 302
+        },
+        {
+          "id": "lea",
+          "name": "Limited Edition Alpha",
+          "provider_count": 295
+        }
+      ],
+      "live_paper_printing_count": 110037
+    },
+    "sports": {
+      "full_physical_catalog_verified": false,
+      "scope": "PriceCharting/SportsCardsPro and research searches; no enumerated manufacturer/year/set/parallel checklist. Search results cannot prove complete catalog coverage."
+    },
+    "other": {
+      "full_physical_catalog_verified": false,
+      "scope": "Manual-entry workflow; no live full catalog."
+    }
+  },
+  "scan_limits": "Ximilar recognition coverage is separate from searchable metadata and local image hashes. No provider-wide recognition benchmark was run.",
+  "refresh": "Reviewable snapshot builder; updater is not a confirmed daily production job. Refresh and deploy together after verification."
+}
