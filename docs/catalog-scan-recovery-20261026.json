@@ -1,0 +1,112 @@
+{
+  "as_of": "2026-10-26",
+  "phase": "Catalog-to-scanner recovery",
+  "checks_passed": 1868,
+  "failures": 0,
+  "suites": [
+    {
+      "suite": "catalog-scan-recovery",
+      "passed": 172,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "catalog-completeness",
+      "passed": 79,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "bulk-lookup-browser",
+      "passed": 100,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "scan-text-recovery-browser",
+      "passed": 62,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "scan-finish-browser",
+      "passed": 223,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "bulk-workflow-browser",
+      "passed": 188,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "asset-fingerprints",
+      "passed": 281,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "test-registry",
+      "passed": 12,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "catalog-outage",
+      "passed": 21,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "catalog-read-sharing",
+      "passed": 217,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "client-printing-evidence",
+      "passed": 28,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "catalog-printing-evidence",
+      "passed": 23,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "launch-audit-regressions",
+      "passed": 426,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "scanner-catalog-deadlines",
+      "passed": 16,
+      "failed": 0,
+      "complete": true
+    },
+    {
+      "suite": "search-workflow",
+      "passed": 20,
+      "failed": 0,
+      "complete": true
+    }
+  ],
+  "assets": {
+    "js/core.2073e512.js": "2073e512615cd4976bd89461117a277f0ffcb71042ee06c13721e0952555c2b4",
+    "js/ui.7fd6beed.js": "7fd6beed7be8896c7da9b07f0eded0f051c6526eede4b88a96a5d35a390586e9",
+    "js/bulk-lookup.43427a2c.js": "43427a2cb9725f87e6a95e19ef17ff7a623779f5d2b98410fcce3d32043af35c",
+    "js/scan-text-recovery.5fe817e1.js": "5fe817e130b2c44117b4c0476be9f5cee121ccf23dec6cdeef814cc6c0b6e2a3",
+    "js/search-catalog.71b9b903.js": "71b9b9039cc4f2953873d33bb86aac3889bb289c2a70f7ef8c8ad6b7771690bd"
+  },
+  "verification_scope": "Targeted tests of the shipped browser and real snapshots with blocked external services; not a full repository run or live recognition benchmark.",
+  "catalog_snapshot_unchanged": true,
+  "catalog_manifest": "/data/catalog/manifest.083369bdc979.json",
+  "screenshots_reviewed": [
+    390,
+    1280
+  ]
+}

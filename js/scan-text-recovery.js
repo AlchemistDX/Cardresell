@@ -152,13 +152,13 @@
     cancelBatch();
     if(window._bulkProcessing || window._bulkSaved || window._bulkDraftBusy)return Promise.resolve(0);
     const results=window._bulkResults || [],owner=window._fbAuth?.currentUser;
-    const known=[...new Set(results.filter(r=>r?.success&&!r.providerNeedsReview).map(r=>gameKey(r.cardType)).filter(Boolean))];
+    const known=[...new Set(results.filter(r=>r?.success&&!r.providerNeedsReview).map(r=>r.isJapanese?'pokemonjp':gameKey(r.cardType)).filter(Boolean))];
     const selected=gameKey(window.activeGame);
     const choices=results.filter(eligible).map(row=>{
       const hint=gameKey(row.scanGameHint);
       return {row,game:hint==='pokemon'&&selected==='pokemonjp'?selected:hint || (known.length===1?known[0]:selected) || 'mtg'};
     })
-      .filter(({row,game})=>['mtg','pokemon'].includes(game) && !suggestion(row) &&
+      .filter(({row,game})=>['mtg','pokemon','pokemonjp','yugioh','lorcana','onepiece'].includes(game) && !suggestion(row) &&
         !(attempted.get(row)?.file===row.file && attempted.get(row)?.owner===owner && attempted.get(row)?.game===game));
     if(!choices.length)return Promise.resolve(0);
     const job=batch={results,queue:window._bulkQueue,owner,controller:new AbortController()};
