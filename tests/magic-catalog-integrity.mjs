@@ -25,6 +25,17 @@ function client(data,failFirst=false){
 }
 let passed=0,failed=0;
 async function check(name,fn){try{await fn();passed++;console.log('PASS '+name)}catch(e){failed++;console.error('FAIL '+name+': '+e.message)}}
+await check('deployed shard URLs resolve as immutable JSON instead of homepage HTML',async()=>{
+ const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+ const manifest=JSON.parse(readFileSync(new URL('../data/catalog/current.json',import.meta.url),'utf8'));
+ for(const url of [manifest.games.mtg.url,...manifest.games.mtg.parts.map(p=>p.url)]){
+  const route=config.routes.find(r=>!r.continue&&new RegExp('^'+r.src+'$').test(url));
+  assert.ok(route,'missing route '+url);
+  assert.equal(url.replace(new RegExp('^'+route.src+'$'),route.dest),url,'wrong destination '+url);
+  assert.match(route.headers?.['Content-Type']||'',/^application\/json/);
+  assert.match(route.headers?.['Cache-Control']||'',/immutable/);
+ }
+});
 await check('valid sharded catalog retains exact UUID and no prices',async()=>{const c=client(fixture());const result=await c.api.byId('mtg',uuid(2));assert.equal(result.rows[0][0],uuid(2));assert.equal(c.api.normalized(result.data,result.rows[0]).priceVariants.length,0)});
 const corruptions=[
  ['wrong set count',d=>d.manifest.games.mtg.sets=2],
