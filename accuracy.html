@@ -104,8 +104,8 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 </div>
 
 <div class="stat-grid">
-  <div class="stat"><div class="stat-num">20,506</div><div class="stat-lab">Pokémon cards indexed</div></div>
-  <div class="stat"><div class="stat-num">171</div><div class="stat-lab">Sets covered</div></div>
+  <div class="stat"><div class="stat-num">20,699</div><div class="stat-lab">Pokémon reference images</div></div>
+  <div class="stat"><div class="stat-num">173</div><div class="stat-lab">Reference-image sets</div></div>
   <div class="stat"><div class="stat-num">18</div><div class="stat-lab">Selling options · 15 ranked + 3 bulk</div></div>
   <div class="stat"><div class="stat-num">Weekly</div><div class="stat-lab">Auto-index refresh</div></div>
 </div>
@@ -239,9 +239,20 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 
 <h2 id="coverage">Card database coverage</h2>
 <p>Catalogue coverage varies by game, set, language, and printing. A missing result does not mean a card does not exist. Confirm the set, number, variant, language, and condition before using a price. Available market prices are not a guarantee of recent sold transactions; eBay sold results may be unavailable inside the app. Use the marketplace search links to review comparable sales yourself, or enter a price you have verified.</p>
+<p><strong>Catalog audit: October 26, 2026.</strong> Search now includes saved provider catalogs, with all returned matches accessible through “Load more printings.” These are identity records, not live prices or a guarantee that every physical printing is covered.</p>
+<table><thead><tr><th>Game</th><th>Search coverage checked</th><th>Limits</th></tr></thead><tbody>
+<tr><td>Pokémon EN</td><td><span data-catalog-count="pokemon">21,256</span> TCGdex physical-card records, plus existing provider and reference searches</td><td>Digital Pocket cards excluded. Six provider sets have missing records or count discrepancies.</td></tr>
+<tr><td>Pokémon JP</td><td><span data-catalog-count="pokemonjp">30,408</span> records from all 461 TCGCSV Japanese groups</td><td>Three groups return no products. A separate 12,781-record Japanese-name catalog supports native-language searches; it overlaps product identities and is not counted as additional physical printings. Japanese identities never inherit English reference prices.</td></tr>
+<tr><td>Magic</td><td>Scryfall paper-printing search, including variations and additional card types, with pagination</td><td>110,037 results in the checked query; English by default. The 18,618 local image references cover only part of that catalog.</td></tr>
+<tr><td>Yu-Gi-Oh!</td><td><span data-catalog-count="yugioh">45,205</span> YGOProDeck identity/printing records</td><td>538 identities have no set-code printing. Editions, artwork and language variants are not fully mapped. Card-wide prices are not exact-printing prices.</td></tr>
+<tr><td>Lorcana</td><td><span data-catalog-count="lorcana">3,622</span> records from all 21 TCGCSV groups</td><td>Alternate treatments retain separate product identities. Missing prices remain unpriced.</td></tr>
+<tr><td>One Piece</td><td><span data-catalog-count="onepiece">7,332</span> records from all 87 TCGCSV groups</td><td>Includes unnumbered DON!! cards. One group is empty; some products are announced before release.</td></tr>
+<tr><td>Sports / Other</td><td>Sports guide/search coverage; manual entry for Other</td><td>No complete manufacturer, year, set and parallel checklist is verified.</td></tr>
+</tbody></table>
+<p>Snapshot catalogs are refreshed through a reviewed import and release. Catalog coverage, available reference images and Ximilar recognition accuracy are separate measurements; these counts do not establish a scanner success rate. A missing image does not remove an otherwise known identity.</p>
 <p>Known upstream gaps:</p>
 <ul>
-  <li>4 older McDonald's Pokémon promo sets have broken image URLs at the upstream image CDN. Prices work; images 404.</li>
+  <li>Four older McDonald's Pokémon promo sets lack local reference images. Text identities remain searchable; live prices may be unavailable.</li>
   <li>Alpha Black Lotus and a handful of reserved-list MTG cards have no TCGplayer market row — another reference may be available, or the card remains unpriced.</li>
   <li>One Piece Luffy Leader mapping in the tcgcsv resolver is being tuned; one specific printing may resolve slowly.</li>
 </ul>

@@ -237,7 +237,7 @@ for (const width of [390,1280]) {
  await page.locator('#searchModalGrid [data-idx="1"]').waitFor();
  check(width+' catalog receives focus',await page.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Close search results');
  await page.keyboard.press('Shift+Tab');
- check(width+' reverse Tab wraps to final card',await page.evaluate(()=>document.activeElement.dataset.idx),'1');
+ check(width+' reverse Tab reaches the catalog browsing action',await page.evaluate(()=>document.activeElement.textContent),'Browse catalog printings');
  await page.keyboard.press('Tab');
  check(width+' forward Tab wraps inside dialog',await page.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Close search results');
  await page.locator('#chipSet').click();

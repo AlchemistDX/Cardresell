@@ -42,6 +42,7 @@ function setup() {
     document:{getElementById:id=>elements.get(id),createElement:()=>new Element()},
     touchListingContext(){},esc:s=>String(s??''),attachDropHandlers(){},injectPokemonImages(){},
     searchWithTPL:q=>new Promise((resolve,reject)=>queue.push({q,resolve,reject})),
+    _renderCatalogActions(){},_addCatalogButton(){},
     _renderCatalogFromDrop(q,items){renders.push({q,items:[...items]});elements.get('searchModalGrid').replaceChildren({textContent:q});},
   });
   vm.runInContext(dispatcher+'\n'+modal+'\n'+inputCode,ctx);
