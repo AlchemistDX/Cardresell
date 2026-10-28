@@ -1613,7 +1613,7 @@ try {
   check('reported prices are disclosed as asking prices, not completed sales',
         render.includes('Asking prices, not completed sales'));
   check('estimated asking alternatives cannot be mistaken for observed prices',
-        render.includes('Estimated asks: low −15%, high +15%') && render.includes('Price scenarios, not observed sales or a promised range'));
+        !render.includes('Estimated asks: low −15%, high +15%') && render.includes('individual sales, sample count and shipping are not provided'));
   check('source disclosure is visible for both evidence states',
         /if\(note\)\{\s*note\.style\.display=''/.test(render));
   check('position bar requires reported endpoints',
@@ -1679,7 +1679,7 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
   const t = index.slice(index.indexOf('function _qpTiers'),
                         index.indexOf('// ── Grade ladder'));
   check('asking choices prefer supported endpoints before a single reference',
-        /return askingTiers \|\| _qpReferenceChoices\(basis\)/.test(t));
+        /const choices=askingTiers \|\| _qpReferenceChoices\(basis\)/.test(t));
   check('reference tick uses the real evidence choice',
         /t\.id === 'reference' \|\| t\.id === 'ask-reference'/.test(index));
   // Withdrawn render, detection deliberately retained.
@@ -1774,10 +1774,10 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
         /selected condition/.test(info) && /current reported TCGplayer listings/.test(info));
   check('qpInfo explains that market value already drives fees',
         /market value already drives the fee comparison/.test(info));
-  check('qpInfo distinguishes asking scenarios from price observations',
-        /15% below and above/.test(info) && /not observed prices, an accuracy range/.test(info));
+  check('qpInfo distinguishes aggregate averages from individual sales',
+        /eBay sold averages/.test(info) && /not a low\/high range or a list of verified individual sales/.test(info));
   check('qpInfo does not promise a fast sale',
-        !/undercuts the cheapest|Top of Book/.test(info) && /not observed prices, an accuracy range or a sale-speed prediction/.test(info));
+        !/undercuts the cheapest|Top of Book/.test(info) && /not a recommended target or a promised sale/.test(info));
   check('caption never calls one reference recent completed sales',
         !/Comp is recent completed sales/.test(index));
   check('caption carries the single-reference disclosure',
