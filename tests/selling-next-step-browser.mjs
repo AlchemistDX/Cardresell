@@ -42,7 +42,9 @@ try {
       calc();
     });
     const advice=page.locator('#sellingAdvice'),priority=advice.getByRole('combobox',{name:'Selling priority'}),result=advice.locator('[data-advice-output]');
-    check(!await page.locator('#sellingFeeComparison').evaluate(e=>e.open),'single-card fee comparison starts collapsed');
+    check(await page.locator('#sellingFeeComparison .winner').isVisible(),'single-card fee comparison and best payout are visible immediately');
+    check(!await advice.isVisible(),'optional selling questions start collapsed');
+    await page.locator('#sellingHelp > summary').click();
     const titles=[];
     for(const goal of ['balanced','money','quick','easy']) {
       await priority.selectOption(goal);
@@ -62,11 +64,10 @@ try {
     await connection.getByText('Connected to fixture-seller.',{exact:true}).waitFor();
     check((await connection.textContent()).includes('read-only'),'connection action uses authoritative existing status and limits');
     await connection.getByRole('button',{name:'Close',exact:true}).click();
-    await page.locator('#sellingFeeComparison > summary').click();
     await page.evaluate(()=>calc());
-    check(await page.locator('#sellingFeeComparison').evaluate(e=>e.open),'fee details stay open while recalculating the same selection');
+    check(await page.locator('#sellingFeeComparison .winner').isVisible(),'fee comparison stays visible while recalculating');
     await page.locator('#printingSelect').selectOption('reverseHolofoil');
-    check(!await page.locator('#sellingFeeComparison').evaluate(e=>e.open),'a different printing starts with the concise recommendation');
+    check(await page.locator('#sellingFeeComparison .winner').isVisible(),'a different printing still shows the fee comparison');
     await page.locator('#condPills [data-cond="mp"]').click();
     await page.locator('#priceOverride').fill('17.25');await page.locator('#priceOverride').dispatchEvent('input');
     await advice.getByRole('button',{name:'Review eBay draft',exact:true}).click();
@@ -108,7 +109,10 @@ try {
       CardResellSellingPlan.openCollection(inventoryFixture);
     });
     const plan=page.locator('#sellingPlan'),batch=plan.locator('[data-batch-advice]');
-    check(!await page.locator('#sellingPlanComparison').evaluate(e=>e.open),'batch fee tables start collapsed');
+    check(await page.locator('#sellingPlanComparison').isVisible(),'batch fee comparison starts visible');
+    check(!await batch.isVisible(),'batch selling questions start collapsed');
+    const showBatchHelp=async()=>{if(!await page.locator('#sellingPlanHelp').evaluate(e=>e.open))await page.locator('#sellingPlanHelp > summary').click();};
+    await showBatchHelp();
     check((await batch.textContent()).includes('1 card needs a value check'),'unpriced copies remain visible and reviewable');
     check((await batch.textContent()).includes('3 eBay drafts'),'quantity drives the easiest workflow recommendation');
     await plan.getByText('Review cards and adjust prices',{exact:true}).click();
@@ -117,6 +121,7 @@ try {
     await plan.getByRole('checkbox',{name:'Include Unpriced card',exact:true}).uncheck();
     await plan.getByRole('spinbutton',{name:'Price per copy: Mew',exact:true}).nth(1).fill('99');
     check((await batch.textContent()).includes('1 eBay draft'),'deselection updates the recommendation immediately');
+    await showBatchHelp();
     await batch.getByRole('button',{name:'Review 1 card for eBay drafts',exact:true}).click();
     await page.locator('.draft-batch').waitFor();
     check(await page.locator('[data-batch-row]').count()===1&&await page.locator('[data-batch-row]').getAttribute('data-batch-row')==='copy-b','only the selected physical copy reaches batch review');
@@ -125,11 +130,13 @@ try {
     await page.getByRole('button',{name:'Close batch preparation'}).click();
     // Stale inventory and account changes fail visibly instead of dropping rows.
     await page.evaluate(()=>{CardResellSellingPlan.openCollection(inventoryFixture.slice(0,2));inventoryFixture[0].card='Changed card';});
+    await showBatchHelp();
     await batch.getByRole('button',{name:'Review 2 cards for eBay drafts',exact:true}).click();
     await batch.locator('[data-workflow-status]').getByText(/selected card changed/).waitFor();
     check(await page.locator('.draft-batch').count()===0,'changed inventory is not handed to an old review');
     await plan.getByRole('button',{name:'Close',exact:true}).click();
     await page.evaluate(()=>{CardResellSellingPlan.openCollection(inventoryFixture.slice(0,2));googleUser={sub:'different-user'};});
+    await showBatchHelp();
     await batch.getByRole('button',{name:'Review 2 cards for eBay drafts',exact:true}).click();
     await batch.locator('[data-workflow-status]').getByText(/account changed/).waitFor();
     check(await page.locator('.draft-batch').count()===0,'account change cannot carry old copies into a new account');
@@ -141,15 +148,18 @@ try {
     });
     const batchTitles=[];
     for(const goal of ['balanced','money','quick','easy']){
+      await showBatchHelp();
       await batch.getByRole('combobox',{name:'Selling priority'}).selectOption(goal);
       batchTitles.push(await batch.locator('[aria-live] h3').first().textContent());
     }
     check(new Set(batchTitles).size===4,'batch priority changes the prominent recommendation');
+    await showBatchHelp();
     await batch.getByRole('combobox',{name:'Selling priority'}).selectOption('money');
     const before=await batch.textContent();
     await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
     await plan.getByRole('spinbutton',{name:'Target price for the whole lot ($)',exact:true}).fill('300');
     check(await batch.textContent()!==before&&(await batch.textContent()).includes('one lot on'),'money recommendation recomputes when assumptions change');
+    await showBatchHelp();
     await batch.getByRole('combobox',{name:'Selling priority'}).selectOption('easy');
     check((await batch.textContent()).includes('eBay drafts'),'easiest remains the eBay workflow when another modeled venue wins');
     check(await plan.evaluate(e=>e.scrollWidth<=e.clientWidth+1),'planner has no horizontal overflow');
@@ -168,7 +178,6 @@ try {
     const costStatus=plan.locator('#sellingPlanCostStatus'),costResults=plan.locator('#sellingPlanResults');
     await plan.getByText('Adjust lot price, shipping and purchase cost',{exact:true}).click();
     await plan.getByText('Review cards and adjust prices',{exact:true}).click();
-    await plan.locator('#sellingPlanComparison > summary').click();
     const purchaseCost=plan.getByRole('spinbutton',{name:'Purchase cost of these cards ($)',exact:true});
     check(await purchaseCost.inputValue()==='','one unknown cost leaves the full selection cost unknown');
     check((await costStatus.innerText()).includes('unknown for 1 selected card')&&(await costStatus.innerText()).includes('$20.00'),'known subtotal and missing copy count are visible outside optional comparisons');
@@ -201,6 +210,7 @@ try {
     await purchaseCost.fill('-1');
     check(await purchaseCost.getAttribute('aria-invalid')==='true'&&await costResults.locator('table').count()===0,'negative costs retract figures and identify the invalid field');
     await plan.getByRole('button',{name:'Use saved purchase costs',exact:true}).click();
+    await showBatchHelp();
     await batch.getByRole('combobox',{name:'Selling priority'}).selectOption('money');
     for(const label of ['Singles: postage + packing per card ($)','Singles: shipping paid by buyer per card ($)','Lot: your postage + packing ($)','Lot: shipping paid by buyer ($)']){
       const shipping=plan.getByRole('spinbutton',{name:label,exact:true});
@@ -258,6 +268,7 @@ try {
     });
     await plan.getByText('Review cards and adjust prices',{exact:true}).click();
     await plan.getByRole('checkbox',{name:'Include Scan B',exact:true}).uncheck();
+    await showBatchHelp();
     await batch.getByRole('button',{name:'Review 2 cards for eBay drafts',exact:true}).click();
     await plan.waitFor({state:'detached'});
     check(await page.evaluate(()=>JSON.stringify(_bulkDraftSel)==='["scan-a"]'&&_bulkResults[0].qty===2),'scan handoff preserves exact row selection and all physical copies');
