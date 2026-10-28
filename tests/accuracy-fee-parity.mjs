@@ -454,7 +454,10 @@ T.check(`model: parsed ${crossVenues.size} venues from CROSS_BORDER (floor 10)`,
   crossVenues.size >= 10,
   `parsed ${crossVenues.size} -- parser is broken or CROSS_BORDER moved`);
 
-const crossTable = accuracy.slice(accuracy.indexOf('<th>Venue</th><th>Operator</th>'));
+const crossStart = accuracy.indexOf('<th>Venue</th><th>Operator</th>');
+const crossEnd = accuracy.indexOf('</table>', crossStart);
+T.check('cross-border parser is bounded to its own table', crossStart >= 0 && crossEnd > crossStart);
+const crossTable = accuracy.slice(crossStart, crossEnd);
 const crossPageNames = [];
 for (const row of crossTable.matchAll(/<tr><td>([^<]+)<\/td><td>/g)) {
   /* ONE ROW CAN CARRY SEVERAL VENUES. The buylist row groups four behind a

@@ -22,6 +22,8 @@ import { readAppSource } from './_appsource.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { normalizeSetName } from '../api/_tcgcsv.js';
+import { parse } from 'acorn';
+import { referencedHashedAssets } from './_assetRefs.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HTML = readAppSource();
@@ -196,8 +198,24 @@ ok('the qualified spelling is never discarded',
 
   // Every fallback site must be routed through the helper -- a single missed
   // site silently keeps the old behaviour for that path.
-  const shimCalls = (HTML.match(/_bulkTcgPriceShim\(/g) || []).length;
-  ok(`all fallback sites use the shim (found ${shimCalls})`, shimCalls >= 6);
+  // Cache/recovery refactors can remove duplicate branches. Inspect the live
+  // pricing function instead of requiring an obsolete number of call sites.
+  const ui = referencedHashedAssets().find(a => a.base === 'ui' && a.ext === 'js');
+  const ast = parse(readFileSync(ui.path, 'utf8'), {ecmaVersion:'latest'});
+  const pricing = ast.body.find(n => n.type === 'FunctionDeclaration' && n.id.name === '_bulkFetchPrice');
+  let shimCalls = 0, directEndpoints = 0;
+  function inspect(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'CallExpression' && node.callee?.name === '_bulkTcgPriceShim') shimCalls++;
+    if (node.type === 'Literal' && typeof node.value === 'string' && node.value.includes('/api/tcg-price')) directEndpoints++;
+    if (node.type === 'TemplateElement' && node.value.raw.includes('/api/tcg-price')) directEndpoints++;
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(inspect);
+      else if (value && typeof value === 'object') inspect(value);
+    }
+  }
+  inspect(pricing);
+  ok('every bulk price-API fallback goes through the shared shim', !!pricing && shimCalls > 0 && directEndpoints === 0);
   ok('no bulk fallback still hardcodes the raw scanner name',
      !/fetch\(`\/api\/tcg-price\?name=\$\{encodeURIComponent\(cleanName\)\}/.test(HTML));
 }

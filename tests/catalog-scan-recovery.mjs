@@ -57,7 +57,7 @@ try {
     document.getElementById('bulkScanOverlay').style.display='flex';_bulkShowSection('processing');_bulkUpdateRow(row.rowId,row);
    };
   });
-  for(const [game,query,title] of [['pokemon','Pikachu','Pikachu'],['pokemonjp','Pikachu','Pikachu'],['pokemonjp','ピカチュウ','ピカチュウ'],['yugioh','Dark Magician','Dark Magician'],['lorcana','Mickey','Mickey Mouse - Brave Little Tailor'],['onepiece','Luffy','Monkey.D.Luffy']]) {
+  for(const [game,query,title] of [['mtg','Sol Ring','Sol Ring'],['mtg','Insectile Aberration','Insectile Aberration'],['pokemon','Pikachu','Pikachu'],['pokemonjp','Pikachu','Pikachu'],['pokemonjp','ピカチュウ','ピカチュウ'],['yugioh','Dark Magician','Dark Magician'],['lorcana','Mickey','Mickey Mouse - Brave Little Tailor'],['onepiece','Luffy','Monkey.D.Luffy']]) {
    await page.evaluate(async({game,title})=>{
     await resetCatalogRow(game);window.reads=0;window.terminated=0;
     window.Tesseract={createWorker:async()=>({setParameters:async()=>{},terminate:async()=>{terminated++},recognize:async()=>{reads++;return {data:{text:title}}}})};

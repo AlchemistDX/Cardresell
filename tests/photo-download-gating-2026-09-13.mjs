@@ -1,3 +1,4 @@
+import { isolateFixtureAuth } from './_fixtureAuth.mjs';
 /**
  * The draft-list Download control, exercised end to end with the REAL button.
  *
@@ -160,7 +161,8 @@ const APP_ORIGIN = `http://127.0.0.1:${server.address().port}`;
 const { chromium } = (await import(PW)).default;
 const browser = await chromium.launch({ executablePath: process.env.CR_CHROMIUM || undefined, args: ['--no-sandbox'] });
 const ctx = await browser.newContext();
-const page = await ctx.newPage();
+await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
 
 page.on('console', (m) => { if (m.type() === 'error') console.log('  console.error: ' + m.text()); });
 

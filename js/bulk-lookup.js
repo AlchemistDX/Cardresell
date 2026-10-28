@@ -205,7 +205,7 @@
           cards=matches.slice((target-1)*24,target*24);hasMore=target*24<matches.length;
           source=found.data.provider+' catalog · '+found.data.asOf+' · prices not included';
         };
-        if(!mtg && (snapshot.game!=='pokemon' || snapshot.useCatalog)) await local();
+        if(snapshot.useCatalog || (!mtg && snapshot.game!=='pokemon')) await local();
         else {
         const url = new URL(mtg ? 'https://api.scryfall.com/cards/search' : 'https://api.pokemontcg.io/v2/cards');
         url.searchParams.set('q', (mtg ? `name:${quote(snapshot.name)} game:paper lang:en` : `name:${quote(snapshot.name)}`) +
@@ -221,9 +221,9 @@
         cards = body.data.map(c=>candidate(c,snapshot.game)).filter(Boolean);
         hasMore = mtg ? body.has_more === true : target * 24 < Number(body.totalCount);
         source=mtg?'Scryfall':'Pokémon TCG API';
-        if(!mtg && !cards.length && target===1) await local();
+        if(!cards.length && target===1 && window.CardResellCatalog) await local();
         } catch(error) {
-          if(mtg || version!==s.generation || !current(s))throw error;
+          if(version!==s.generation || !current(s) || !window.CardResellCatalog)throw error;
           // Switching sources starts at page one; live and saved offsets are
           // different and must not hide the first saved matches.
           target=1; await local();

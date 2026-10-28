@@ -1,3 +1,4 @@
+import { isolateFixtureAuth } from './_fixtureAuth.mjs';
 /**
  * tests/draft-review-screen.mjs — the D3 review screen, in a real browser.
  *
@@ -79,6 +80,7 @@ const F = await generateReadFixtures();
 
 async function boot(plan) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await isolateFixtureAuth(ctx);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
   const hits = [];
@@ -1338,7 +1340,8 @@ try {
 
     await reset();
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
 
     // Every request is served by the real handler. `sentBodies` records what
@@ -1771,7 +1774,8 @@ try {
     void plan;
 
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     let gets = 0;
     await page.route('**/api/drafts*', async (route) => {
@@ -1844,7 +1848,8 @@ try {
 
   await T.section('a refused rebuild says something the seller can act on', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     await page.route('**/api/drafts*', async (route) => {
       if (route.request().method() === 'PATCH') {
@@ -1890,7 +1895,8 @@ try {
 
   await T.section('loading another draft leaves nothing of the first behind', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     let n = 0;
     await page.route('**/api/drafts*', async (route) => {
@@ -1931,7 +1937,8 @@ try {
    */
   await T.section('the continuation control hands the seller to eBay and nothing else', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     // Nothing leaves the machine: the popup's navigation is aborted, so the
     // assertion reads the URL the click requested rather than eBay's response.
@@ -2312,7 +2319,8 @@ try {
    */
   await T.section('a packet that cannot be listed does not say Ready to list', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     await page.route('**/api/drafts*', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(F.packetBlocked.body) });
@@ -2416,7 +2424,8 @@ try {
    */
   await T.section('a refresh cannot carry another card\u2019s price basis', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     let patched = null;
     let gets = 0;
@@ -2475,7 +2484,8 @@ try {
    */
   await T.section('a refresh whose response was lost is recovered, not reported', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     let gets = 0;
     let patches = 0;
@@ -2546,7 +2556,8 @@ try {
   await T.section('startup restore preserves a fresh selection and its bound basis', async () => {
     const CARD_A = { id: 'cra1', name: 'Card A', game: 'pokemon', set: 'Base Set', number: '4/102' };
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => typeof window._crBindBasis === 'function', { timeout: 15000 });
@@ -2610,7 +2621,8 @@ try {
 
   await T.section('a real conflict with another device is still reported', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     page.on('pageerror', (e) => { console.log('  [pageerror] ' + e.message); });
     await page.route('**/api/drafts*', async (route) => {
       if (route.request().method() === 'PATCH') {
@@ -2671,7 +2683,8 @@ try {
     // One page, four situations, because the leak was ORDER-dependent: it
     // needed a read for B to survive into a create for A.
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
+    await isolateFixtureAuth(ctx);
+  const page = await ctx.newPage();
     // 2026-10-10: the first-visitor Charizard demo polls for up to nine seconds
     // and, when this case seeded its card before the demo began, clicked
     // Charizard during case 4 (the intermittent 415/2). This section is about

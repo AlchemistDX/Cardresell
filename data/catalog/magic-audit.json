@@ -1,0 +1,16 @@
+{
+  "game": "mtg",
+  "cards": 107402,
+  "sets": 967,
+  "sourceDate": "2026-10-26T21:05:59.438+00:00",
+  "sourceUrl": "https://data.scryfall.io/default-cards/default-cards-20261026210559.jsonl.gz",
+  "sha256": "4c5befc3114350d923e8a5482bb56ef56e10009a9fd6944e0d5de0611be1cdb6",
+  "excluded": {
+    "nonEnglishOrNonPaper": 11929
+  },
+  "invalid": 0,
+  "catalog": "mtg.e30d9736f646.json",
+  "manifest": "manifest.4f12e29f2833.json",
+  "shards": 13,
+  "unpriced": true
+}

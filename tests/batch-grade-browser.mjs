@@ -102,11 +102,11 @@ try{
  check('403 does not consume credits',await balance(),creditBefore);
  await page.locator('#bulkGradeBottomBar button').filter({hasText:'Done'}).click();
  await page.locator('#searchInput').fill('Mew');
- await page.getByText('Live catalog unavailable.',{exact:false}).waitFor();
+ await page.getByText('Prices are checked after selection.',{exact:false}).waitFor();
  check('catalog outage keeps selectable local printings',await page.locator('#dropList .drop-item').count()>0,true);
  await page.locator('#dropList .drop-item').first().click();
  check('fallback selection has no invented market price',await page.evaluate(()=>selectedCard.priceVariants.length),0);
- check('fallback selection retains local source',await page.evaluate(()=>selectedCard.source.includes('Local catalog')),true);
+ check('fallback selection retains identity-only source',await page.evaluate(()=>selectedCard._localCatalogFallback===true&&selectedCard.source.includes('catalog — price not checked')),true);
  await page.evaluate(async()=>{
    const oldFetch=window.fetch;let finish;
    window.fetch=()=>new Promise(r=>{finish=r});
