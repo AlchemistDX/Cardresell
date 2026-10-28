@@ -6,7 +6,7 @@ The seller workflow remains the release priority: find or identify the exact car
 
 | Work | Status and evidence |
 | --- | --- |
-| Show fee comparison without opening a dropdown | Shipped in PR #141; preserved and covered again in the pricing browser journey. Selling questions remain optional. |
+| Show fee comparison without opening a dropdown | The comparison dialog shipped in PR #141. October 28 acceptance also moved the bulk comparison entry point out of More actions into the main controls. Selling questions remain optional. |
 | Replace fixed percentage low/high | This release uses current, condition-matched reported TCGplayer endpoints. A usable low or high survives when the other endpoint is missing. Zero, invalid, stale and conflicting endpoints do not create a range. |
 | Keep the market value usable | Market remains available even when outside the listing range. Missing or zero TCGplayer market can fall back to a positive, explicitly sourced eBay aggregate already in the feed. The market value automatically drives fee comparison; selecting another value updates fees and the draft asking price. |
 | Show available sold evidence accurately | A condition/grade-matched eBay 1-, 7- or 30-day average from TCG Price Lookup can be offered separately. It is an aggregate, not individual sold comparisons, a confidence interval, or a promised sale price. Duplicate amounts do not create duplicate buttons. |
@@ -46,11 +46,11 @@ The final complete regression run passed: **170 suites executed successfully out
 ## Remaining evidence before expanding advertising
 
 1. **Current real-phone acceptance:** complete the owner's planned live run with original card photos on the intended phone/browser. Cover exact printing/finish, a wrong or ambiguous match, condition changes, fees, save/reload and draft/export. Record failures rather than treating screenshots or synthetic inputs as an accuracy benchmark.
-2. **Original-photo benchmark:** the [October 28 run of 14 original cards](original-photo-benchmark-20261028.md) is now recorded. It exposed accepted wrong/incomplete printing and slab results plus two provider-response failures. Safeguards and controlled regression checks do not close the required fresh production retest. No defensible exact-printing accuracy percentage is claimed.
+2. **Original-photo benchmark:** the [October 28 run of 14 original cards](original-photo-benchmark-20261028.md) and fresh production retests are complete. Final outcomes are 5 automatic identities, 3 confirmed provider choices, 1 free manual catalogue recovery, 4 protected review cases and 1 unsupported game. Greninja identified correctly; Mimikyu needed the new catalogue recovery. Exact variant/grade review remains, and this small batch is not a general recognition-accuracy score.
 3. **Real Seller Hub import:** import a generated draft CSV in the intended seller account and check the accepted fields/validation results. A correct download and upload link do not prove eBay acceptance or publication.
 4. **Unit economics:** reconcile current provider plans, allowances, actual billed usage and retry costs with Quick/Deep and paid-credit revenue. Confirm TPL history entitlement before committing to historical-range work.
 5. **Small seller pilot:** after the above acceptance results, review 5–10 invited sellers completing useful tasks before broad paid traffic. Earlier owner purchases are not outside-customer conversion evidence. No invitations or ad spending were sent by this work.
 
-The working readiness estimate remains about **85%**, as a planning judgment rather than a measured score. This release closes concrete product issues; automated passes alone cannot close the real-photo, seller-account or billing evidence above. Automatic individual eBay sold comps and direct publishing are not promises for the first launch.
+Software checks and the original-photo benchmark are complete. Broader advertising still depends on the phone/export, seller-account, variant and billing evidence above plus a small seller pilot. Automatic individual eBay sold comps and direct publishing are not promises for the first launch.
 
 Rollback baseline: production commit `4cb05b27284ae20c2fecbe40cf19b615cd4db867`, deployment `dpl_gqy6kin6ECXTwo7WXNnQGRFreL1u`. Release integration continues on `codex/profit-readiness`; `main` remains unchanged.

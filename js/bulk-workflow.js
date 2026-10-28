@@ -1,5 +1,5 @@
 /* Scan → review → save → drafts. Navigation retains the current browser batch;
-   only an explicit new-batch decision discards it. No provider or storage calls. */
+   only an explicit new-batch decision discards it. No provider or storage writes. */
 (() => {
  'use strict';
  const style=document.createElement('style');
@@ -113,5 +113,21 @@
   body.append(title,detail,status,action);
   const outcome=document.createElement('div');outcome.innerHTML=_bulkDraftOutcomeHtml(r);body.append(outcome);row.append(body);return true;
  }
+ // Scan transport already refreshes the authoritative account balance after
+ // every response. That read can finish after the last worker paints "Done".
+ // Repaint the same batch when it settles; never add a scan, debit or request.
+ const loadCredits=window.loadSettingsScanCredits;
+ if(typeof loadCredits==='function')window.loadSettingsScanCredits=async function(...args){
+  const owner=account(),facade=window.googleUser,auth=window._fbAuth?.currentUser,queue=window._bulkQueue;
+  const result=await loadCredits.apply(this,args);
+  if(!owner||!current()||account()!==owner||window.googleUser!==facade||window._fbAuth?.currentUser!==auth||window._bulkQueue!==queue||!rows().length)return result;
+  const label=document.getElementById('bulkProgressCredits');
+  const value=document.getElementById('idScanCount')?.textContent?.trim();
+  // The account reader rejects superseded/invalid responses. Reuse its validated
+  // total (already includes free + paid); a pending read is not a zero balance.
+  if(label&&/^\d+$/.test(value)&&Number.isSafeInteger(Number(value)))label.textContent=value+' credit'+(Number(value)===1?'':'s')+' remaining';
+  else if(label&&value==='Unavailable')label.textContent='Credit balance unavailable';
+  return result;
+ };
  window.CardResellBulkWorkflow={bind,clear,current,canWrite,sync,showDrafts,pause,close,navigate,resumeExisting,startNew,afterSave,renderSaved};
 })();

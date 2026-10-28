@@ -277,9 +277,8 @@ try {
     await runScan(page, 2);
     await page.setViewportSize({width:390,height:730});
     ok('listing drafts are a primary action', await page.locator('#bulkCreateDraftsBtn').isVisible());
-    ok('comparison starts under More actions', !await page.locator('#bulkCompareSellingBtn').isVisible());
-    await page.locator('#bulkMoreActions > summary').click();
-    ok('More actions reveals selling comparison', await page.locator('#bulkCompareSellingBtn').isVisible());
+    ok('comparison is a visible primary action', await page.locator('#bulkCompareSellingBtn').isVisible());
+    ok('comparison does not require More actions', await page.locator('#bulkCompareSellingBtn').evaluate(el=>!el.closest('details')));
     await page.screenshot({path: `${SHOTS}/bulk-compact-mobile.png`});
     const rows = await rowsOf(page);
 

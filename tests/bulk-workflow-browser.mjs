@@ -56,6 +56,7 @@ try {
   await page.locator('#bulkReviewNextBtn').click();
   check(width+' retry-only action focuses the row without opening search',await page.evaluate(()=>!document.getElementById('bulkLookupDialog')&&document.activeElement.closest('#bulk-row-0')!==null));
   await page.evaluate(()=>seedWorkflow());
+  check(width+' compare fees is visible without opening More actions',await page.locator('#bulkCompareSellingBtn').isVisible());
   if(process.env.CR_SHOT_DIR){await page.screenshot({path:process.env.CR_SHOT_DIR+'/workflow-ready-'+width+'.png'});}
   check(width+' save explains which copies it includes',await page.locator('#bulkAddAllBtn').textContent(),'Save 3 identified cards');
   await page.locator('#bulkAddAllBtn').scrollIntoViewIfNeeded();
@@ -64,6 +65,7 @@ try {
   check(width+' partial save writes three physical copies',await page.evaluate(()=>loadPortData().length),3);
   check(width+' partial save allocates pack cost across all four physical cards',await page.evaluate(()=>loadPortData().map(r=>r.buyPrice)),[5,5,5]);
   check(width+' partial save keeps unresolved card usable',await page.evaluate(()=>!_bulkSaved&&_bulkResults[2].definiteMiss));
+  check(width+' compare fees stays visible after the action bar is rebuilt',await page.locator('#bulkCompareSellingBtn').isVisible());
   check(width+' saved cards cannot be accidentally redrafted from scan selection',await page.evaluate(()=>_bulkDraftSelectable().length),0);
   check(width+' save disabled until another card is identified',await page.locator('#bulkAddAllBtn').isDisabled());
   await page.evaluate(()=>bulkAddAllToCollection());
@@ -143,6 +145,60 @@ try {
   check(width+' account change cannot save another seller’s scan rows',await page.evaluate(()=>loadPortData().length),0);
   await page.evaluate(()=>openBulkScan());
   check(width+' new account sees an empty batch',await page.evaluate(()=>_bulkResults.length===0&&_bulkQueue.length===0));
+  if(width===1280){
+   // Real account reader and shipped batch UI: the last scan's balance read can
+   // settle after Done. An earlier read must not undo its refunded total.
+   let creditReads=0;
+   const requests=[];
+   await page.route('**/api/scan-credits?*',async route=>{
+    creditReads++;
+    await new Promise(resolve=>requests.push(async(status,data)=>{await route.fulfill({status,json:data});resolve();}));
+   });
+   const waitRead=async count=>{const deadline=Date.now()+5000;while(requests.length<count&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(requests.length,count,'expected account balance request');};
+   const balance=n=>({credits:50,idCredits:n,idPaidCredits:Math.max(0,n-3),idFreeCredits:Math.min(3,n)});
+   await page.evaluate(()=>{
+    window.googleUser={uid:'credit-owner',sub:'credit-owner',email:'credits@example.test'};
+    window._userEmail='credits@example.test';
+    window._fbCurrentUser=window._fbAuth.currentUser={uid:'credit-owner',getIdToken:async()=>'x'.repeat(40)};
+    seedWorkflow(true);
+    window._olderCredits=loadSettingsScanCredits();
+   });
+   await waitRead(1);
+   await page.evaluate(()=>{
+    window._latestCredits=loadSettingsScanCredits();
+    document.getElementById('bulkProgressCredits').textContent='19 credits remaining';
+   });
+   await waitRead(2);
+   await requests[1](200,balance(20));
+   await page.evaluate(()=>_latestCredits);
+   check('late refund read repaints the completed batch',await page.locator('#bulkProgressCredits').textContent(),'20 credits remaining');
+   check('free and paid credits are counted once',await page.evaluate(()=>_idScanCredits+_freeIdLeft),20);
+   await requests[0](200,balance(18));await page.evaluate(()=>_olderCredits);
+   check('out-of-order older read cannot undo refunds',await page.locator('#bulkProgressCredits').textContent(),'20 credits remaining');
+   check('repainting adds no extra account request',creditReads,2);
+   await page.evaluate(()=>{window._latestCredits=loadSettingsScanCredits();});await waitRead(3);
+   await requests[2](200,balance(1));await page.evaluate(()=>_latestCredits);
+   check('one credit uses the singular label',await page.locator('#bulkProgressCredits').textContent(),'1 credit remaining');
+   await page.evaluate(()=>{window._latestCredits=loadSettingsScanCredits();});await waitRead(4);
+   await requests[3](200,balance(0));await page.evaluate(()=>_latestCredits);
+   check('confirmed zero is displayed accurately',await page.locator('#bulkProgressCredits').textContent(),'0 credits remaining');
+   await page.evaluate(()=>{window._latestCredits=loadSettingsScanCredits();});await waitRead(5);
+   await requests[4](503,{error:'temporarily_unavailable'});await page.evaluate(()=>_latestCredits);
+   check('failed balance read is not presented as a numeric balance',await page.locator('#bulkProgressCredits').textContent(),'Credit balance unavailable');
+   await page.evaluate(()=>{window._latestCredits=loadSettingsScanCredits();});await waitRead(6);
+   await page.evaluate(()=>{window._bulkQueue=[..._bulkQueue];document.getElementById('bulkProgressCredits').textContent='New batch';});
+   await requests[5](200,balance(20));await page.evaluate(()=>_latestCredits);
+   check('late response cannot repaint a different batch',await page.locator('#bulkProgressCredits').textContent(),'New batch');
+   await page.evaluate(()=>{window._latestCredits=loadSettingsScanCredits();});await waitRead(7);
+   await page.evaluate(()=>{
+    window.googleUser={uid:'another-credit-owner'};
+    window._fbCurrentUser=window._fbAuth.currentUser={uid:'another-credit-owner',getIdToken:async()=>'x'.repeat(40)};
+    document.getElementById('bulkProgressCredits').textContent='Another account';
+   });
+   await requests[6](200,balance(999));await page.evaluate(()=>_latestCredits);
+   check('late response cannot repaint another account',await page.locator('#bulkProgressCredits').textContent(),'Another account');
+   check('credit checks do not create new scan requests',writes.filter(p=>p==='/api/scan'||p==='/api/scan-debit-id'),[]);
+  }
   check(width+' no provider or marketplace write requests',writes.filter(p=>/^\/api\/(scan(?:-debit-id)?|drafts|ebay-listing-operations)$/.test(p)),[]);
   check(width+' no browser exceptions',errors,[]);
   await page.close();
