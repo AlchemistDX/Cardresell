@@ -7,6 +7,9 @@
   const cents=value=>Math.round(value*100)/100;
   function assess({row={},key='',condition='nm',graded=false,sourceUpdatedAt=null,multiplier=1,now=Date.now()}={}) {
     row=row&&typeof row==='object'?row:{};
+    // A changed catalogue record is not a refreshed price. TPL rows carry
+    // the specific TCGplayer quote date separately from other price sources.
+    if(!graded&&Object.hasOwn(row,'askUpdatedAt'))sourceUpdatedAt=row.askUpdatedAt;
     const rawStamp=typeof sourceUpdatedAt==='string'&&/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(sourceUpdatedAt)?Date.parse(sourceUpdatedAt):NaN;
     const calendar=typeof sourceUpdatedAt==='string'?sourceUpdatedAt.slice(0,10):'';
     const validCalendar=/^\d{4}-\d{2}-\d{2}$/.test(calendar)&&Number.isFinite(Date.parse(calendar))&&new Date(calendar).toISOString().slice(0,10)===calendar;
@@ -23,24 +26,34 @@
     const comparable=exactCondition&&row.lowBasis==='tcgplayer'&&row.highBasis==='tcgplayer'&&!row.highClamped;
     const range=comparable&&low!==null&&high!==null&&cents(low)>0&&cents(low)<cents(high)?{low:cents(low),high:cents(high),kind:'ask',source:'TCGplayer'}:null;
     const usableRange=range&&dated&&!stale?range:null;
+    const conflict=low!==null&&high!==null&&cents(low)>=cents(high);
+    const canUse=exactCondition&&dated&&!stale&&!conflict;
+    const askingLow=canUse&&row.lowBasis==='tcgplayer'&&low!==null&&cents(low)>0?cents(low):null;
+    const askingHigh=canUse&&row.highBasis==='tcgplayer'&&!row.highClamped&&high!==null&&cents(high)>0?cents(high):null;
     let note=graded?'One reference for this grade is not a measured sale-price range.':
       !exactCondition?'No condition-specific range is available for this selection. Condition adjustments are estimates.':
-      !range?'The provider did not supply a usable asking range for this condition.':
+      conflict?'The provider endpoints do not form a usable asking range.':
+      low===null&&high===null?'No listed low/high was reported for this condition.':
       stale?'This asking range is over 7 days old. Refresh price research before using it.':
       !dated?'The provider did not supply a usable update date. This range is for reference only.':
+      askingLow!==null&&askingHigh===null?'Only a listed low is available for this condition; no high is reported.':
+      askingHigh!==null&&askingLow===null?'Only a listed high is available for this condition; no low is reported.':
+      !range?'The provider did not supply a usable asking range for this condition.':
       'Asking prices for the selected condition, not completed sales. Shipping and sale timing are not established.';
-    return {reference,range,usableRange,salesAverage,sourceDate,ageDays,stale,note};
+    return {reference,range,usableRange,askingLow,askingHigh,salesAverage,sourceDate,ageDays,stale,note};
   }
   function tiers(evidence) {
-    const range=evidence?.usableRange;if(!range)return null;
-    const choices=[{id:'ask-low',amt:cents(range.low),label:'Listed low',hint:'Reported TCGplayer low for this condition; not a fast-sale guarantee',observedAsk:true}];
-    // Round before comparing so a near-endpoint reference cannot hide the
-    // actual listed high when duplicate display amounts are removed.
+    if(!evidence)return null;
+    const low=evidence.askingLow,high=evidence.askingHigh;
+    if(low==null&&high==null)return null;
+    const choices=[];
+    if(low!=null)choices.push({id:'ask-low',amt:low,label:'Listed low',hint:'Reported TCGplayer low for this condition; not a fast-sale guarantee',observedAsk:true});
+    // Market is a separate instrument and may sit outside current asks.
+    // Avoid duplicate amounts without replacing either reported endpoint.
     const reference=positive(evidence.reference)===null?null:cents(evidence.reference);
-    if(reference>range.low&&reference<range.high)choices.push({id:'ask-reference',amt:cents(reference),label:'Market',hint:'Selected provider value; not the midpoint of the listing range',observedAsk:true});
-    choices.push({id:'ask-high',amt:cents(range.high),label:'Listed high',hint:'Reported TCGplayer high for this condition; not an expected sale',observedAsk:true});
-    const unique=choices.filter((row,i)=>choices.findIndex(other=>other.amt===row.amt)===i);
-    return unique.length>=2?unique:null;
+    if(reference>0&&reference!==low&&reference!==high)choices.push({id:'ask-reference',amt:reference,label:'Market',hint:'Selected provider value; not the midpoint of the listing range'});
+    if(high!=null)choices.push({id:'ask-high',amt:high,label:'Listed high',hint:'Reported TCGplayer high for this condition; not an expected sale',observedAsk:true});
+    return choices;
   }
   window.CardResellPriceEvidence={assess,tiers};
 })();

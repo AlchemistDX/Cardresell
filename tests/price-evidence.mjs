@@ -18,20 +18,27 @@ if(!process.env.PRICE_MATCH_ONLY){
  for(const [label,change] of [
   ['unknown source date',{sourceUpdatedAt:null}],['invalid calendar date',{sourceUpdatedAt:'2026-02-30T12:00:00Z'}],['missing row',{row:null}],['future source date',{sourceUpdatedAt:'2026-10-26'}],['stale source date',{sourceUpdatedAt:'2026-10-10'}],
   ['wrong condition',{condition:'lp'}],['condition-scaled estimate',{multiplier:.85}],['graded selection',{graded:true,key:'psa_10'}],
-  ['mixed endpoint sources',{row:{...row,highBasis:'ebay-sold'}}],['calculated high',{row:{...row,highBasis:'derived'}}],
-  ['clamped high',{row:{...row,highClamped:true}}],['reversed endpoints',{row:{...row,low:140}}],
-  ['same endpoints',{row:{...row,low:130}}],['indistinguishable cents',{row:{...row,low:100.001,high:100.002}}],['sub-cent low',{row:{...row,low:.001,high:.05}}],['missing endpoint',{row:{...row,low:null}}],['infinite endpoint',{row:{...row,high:Infinity}}]
+  ['reversed endpoints',{row:{...row,low:140}}],
+  ['same endpoints',{row:{...row,low:130}}],['indistinguishable cents',{row:{...row,low:100.001,high:100.002}}]
  ])check(label+' cannot supply observed asking choices',E.tiers(E.assess({...input,...change}))===null);
+ for(const [label,change,amounts] of [
+  ['unproven high',{highBasis:'ebay-sold'},[90,100]],['derived high',{highBasis:'derived'},[90,100]],
+  ['clamped high',{highClamped:true},[90,100]],['missing high',{high:null},[90,100]],
+  ['infinite high',{high:Infinity},[90,100]],['missing low',{low:null},[100,130]],
+  ['sub-cent low',{low:.001,high:.05},[100,.05]]
+ ]) {const result=E.assess({...input,row:{...row,...change}});check(label+' preserves only usable endpoints',!result.usableRange&&JSON.stringify(E.tiers(result).map(t=>t.amt))===JSON.stringify(amounts));}
+ check('a fresh catalogue cannot refresh an old quote',!E.assess({...input,row:{...row,askUpdatedAt:'2026-10-10'}}).usableRange);
+ check('a missing quote date is not rescued by another source date',!E.assess({...input,row:{...row,askUpdatedAt:null}}).usableRange);
  const average=E.assess({...input,row:{market:100,ebaySalesAverage:{value:100,days:7}}});
  check('a seven-day average is one average, never a range',average.salesAverage.days===7&&!average.range);
  check('an average for another condition is withheld',!E.assess({...input,condition:'lp',row:{ebaySalesAverage:{value:100,days:7}}}).salesAverage);
- check('a reference outside the asking range is not an invented midpoint',E.tiers(E.assess({...input,row:{...row,market:200}})).length===2);
+ check('a reference outside the asking range is not an invented midpoint',E.tiers(E.assess({...input,row:{...row,market:200}})).map(t=>t.amt).join(',')==='90,200,130');
  check('a rounded reference cannot replace the actual listed high',JSON.stringify(E.tiers(E.assess({...input,row:{...row,market:100.119,low:100.11,high:100.12}})).map(t=>[t.id,t.amt]))==='[["ask-low",100.11],["ask-high",100.12]]');
  check('old observed endpoints retain their date and limitation',E.assess({...input,sourceUpdatedAt:'2026-10-10'}).stale&&/over 7 days/.test(E.assess({...input,sourceUpdatedAt:'2026-10-10'}).note));
 }
 const names=['_crTplAskEndpoints','_crTplSoldAverage','_crFinishLabel','tplCardToNormalized','fetchTPLGradedByNameNumber'];
 const ast=parse(core,{ecmaVersion:'latest',sourceType:'script'}),source=ast.body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)).map(n=>core.slice(n.start,n.end)).join('\n');
-const card=(id,name='Mew',number='76/214',set='Unbroken Bonds')=>({id,name,number,set_name:set,updated_at:'2026-10-24T12:00:00Z',prices:{graded:{psa:{10:{ebay:{avg_7d:100,avg_30d:160,avg_1d:80}}}}}});
+const card=(id,name='Mew',number='76/214',set='Unbroken Bonds')=>({id,name,number,set_name:set,last_price_update:'2026-10-24T12:00:00Z',prices:{graded:{psa:{10:{ebay:{avg_7d:100,avg_30d:160,avg_1d:80}}}}}});
 function fixture(cards){const c={console,tplApiKey:'fixture',selectedCard:{name:'Mew',number:'76/214',setName:'Unbroken Bonds',game:'pokemon'},fetch:async()=>({ok:true,json:async()=>({data:cards})})};c.window=c;vm.createContext(c);vm.runInContext(source,c);return c;}
 {
  const c=fixture([card('wrong','Other card'),card('right')]);const rows=await c.fetchTPLGradedByNameNumber('Mew','76/214','pokemon');
@@ -79,5 +86,19 @@ for(const [label,cards,number] of [
  const c=fixture([]);let release,key='reverse';c._crSellingSelection=()=>({finish:'Reverse Holofoil',requestKey:key});c.fetch=()=>new Promise(r=>release=r);
  const pending=c.fetchTPLGradedByNameNumber('Mew','76/214','pokemon');key='holo';release({ok:true,json:async()=>({data:[{...card('a'),variant:'Reverse Holo'}]})});
  check('finish change during lookup cannot bind the old variant ID',await pending===null&&!c.selectedCard.tplId);
+}
+{
+ const c=fixture([]);
+ const grade=c.tplCardToNormalized({id:'grade-fallback',prices:{graded:{psa:{10:{market:70,ebay:{avg_7d:0}}}}}},'pokemon').priceVariants[0];
+ check('a direct graded value cannot borrow an empty eBay average source',grade.market===70&&grade.marketBasis===null&&!grade.ebaySalesAverage);
+ for(const [label,tcg,ebay,value,days] of [
+  ['zero TCGplayer market',0,{avg_7d:42},42,7],['only 30-day average',null,{avg_7d:0,avg_1d:0,avg_30d:25},25,30],
+  ['nonfinite TCGplayer market',Infinity,{avg_7d:42},42,7]
+ ]){
+  const normalized=c.tplCardToNormalized({id:'fallback',updated_at:'2026-10-25',last_price_update:'2026-10-24',prices:{raw:{near_mint:{tcgplayer:{market:tcg,low:0,high:0},ebay}}}},'pokemon');
+  const row=normalized.priceVariants.find(v=>v.key==='near_mint');
+  check(label+' retains the actual sold average',row?.market===value&&row.marketBasis==='ebay-sold'&&row.ebaySalesAverage.days===days);
+  check(label+' does not fabricate endpoints or a quote date',row?.low===null&&row?.high===null&&row?.askUpdatedAt===null);
+ }
 }
 t.done();

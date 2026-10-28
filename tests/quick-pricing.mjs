@@ -242,7 +242,7 @@ console.log('\n[Quick Pricing — honest labelling]');
         !/beta/i.test(zone));
 
   check('the info panel states we do not estimate timelines',
-        /not observed prices, an accuracy range or a sale-speed prediction/i.test(markup),
+        /not a recommended target or a promised sale/i.test(markup),
         'the caveat is the thing that makes the tier names honest');
 }
 
@@ -256,16 +256,16 @@ console.log('\n[Quick Pricing — tier derivation]');
   const tierSource=logic.slice(0,logic.indexOf('// ── Grade ladder'));
   const tiersFor=new Function('window','getCondMultiplier','_crSelectedPriceEvidence',refSource+tierSource+';return _qpTiers;');
   const fallback=tiersFor({},()=>1,()=>null);
-  check('a $100 value offers labeled $85 / $100 / $115 asking scenarios',
-        JSON.stringify(fallback({market:100,low:85,high:115}).map(t=>t.amt))==='[85,100,115]');
+  check('a $100 value stays one reference without invented endpoints',
+        JSON.stringify(fallback({market:100,low:85,high:115}).map(t=>t.amt))==='[100]');
   check('unproven generic endpoints cannot become observed prices',
-        fallback({market:100,low:10,high:1000}).every(t=>t.estimatedAsk&&!t.observedAsk));
+        fallback({market:100,low:10,high:1000}).every(t=>!t.estimatedAsk&&!t.observedAsk));
   check('condition-adjusted scenarios use the adjusted market only',
-        JSON.stringify(tiersFor({},()=>.65,()=>null)({market:100}).map(t=>t.amt))==='[55.25,65,74.75]');
+        JSON.stringify(tiersFor({},()=>.65,()=>null)({market:100}).map(t=>t.amt))==='[65]');
   check('one-cent scenarios retain the market choice without duplicate amounts',
         JSON.stringify(fallback({market:.01}).map(t=>[t.id,t.amt]))==='[["reference",0.01]]');
-  check('each estimated alternative is marked as a scenario',
-        fallback({market:100}).every(t=>t.estimatedAsk===true&&!t.observedAsk));
+  check('a reference never claims an observed ask or invented spread',
+        fallback({market:100}).every(t=>!t.estimatedAsk&&!t.observedAsk));
   check('missing, nonfinite and nonpositive references create no choice',
         [null,{}, {market:0},{market:-1},{market:Infinity},{market:NaN},{market:Number.MAX_VALUE},{market:.001}].every(b=>fallback(b).length===0));
   const render = index.slice(index.indexOf('function renderQuickPricing()'),index.indexOf('function qpApply('));
@@ -274,7 +274,7 @@ console.log('\n[Quick Pricing — tier derivation]');
   check('observed prices retain their cents above $100',
         /minimumFractionDigits: 2, maximumFractionDigits: 2/.test(render));
   check('the position bar ends at the reported high without an invented extension',
-        /hi = Math.max\(\.\.\.amts\);/.test(render) && !/Math.max\(\.\.\.amts\) \* 1.08/.test(render));
+        /hi = evidence\?\.usableRange\?\.high \?\? Math.max\(\.\.\.amts\);/.test(render) && !/Math.max\(\.\.\.amts\) \* 1.08/.test(render));
 
   check('the marker position is clamped to the bar',
         /Math\.max\(0, Math\.min\(100,/.test(render),
@@ -352,7 +352,7 @@ console.log('\n[Quick Pricing — wiring]');
         /graded:\s*true/.test(qpBasis));
 
   check('graded asking scenarios disclose the lack of an observed sale range',
-        /basis.graded && ladderHost/.test(index) && /Price scenarios, not observed sales or a promised range/.test(index));
+        /basis.graded && ladderHost/.test(index) && /No reported low\/high range/.test(index));
   check('the grade ladder is independent of a fabricated tier count',
         /if\(basis.graded && ladderHost\)/.test(index) && !/_qpDerivedBand/.test(index));
   check('the position bar is shown only for supported reported endpoints',
@@ -669,12 +669,12 @@ console.log('\n[Quick Pricing — wiring]');
         !research.includes('_crRangeHtml(tcg.low') && !research.includes('>Market price<'),
         'condition-specific endpoints belong to the selected-row evidence panel');
 
-  check('estimated asking scenarios have an explicit disclosure',
-        /Estimated asks: low −15%, high \+15%/.test(core));
-  check('asking scenarios are not claimed to be observed sales',
-        /Price scenarios, not observed sales or a promised range/.test(core));
-  check('estimated asking choices are explicitly marked',
-        /estimatedAsk:true/.test(core));
+  check('no fixed percentage asking spread is generated',
+        !/Estimated asks: low −15%, high \+15%/.test(core));
+  check('missing reported ranges remain explicit',
+        /No reported low\/high range/.test(core));
+  check('no synthetic asking choices remain',
+        !/estimatedAsk:true/.test(core));
   check('reported asking prices remain distinct from completed sales',
         /Asking prices, not completed sales/.test(core));
 
@@ -1167,7 +1167,7 @@ console.log('\n[Quick Pricing — wiring]');
   }
 
   check('the remaining reference is not labelled as an observed range',
-        /label:basis.graded\?'Grade value'/.test(core) && /estimatedAsk:true/.test(core));
+        /label:basis.graded\?'Grade value'/.test(core) && !/estimatedAsk:true/.test(core));
   check('there are no calculated outer asking choices',
         !/Lower ask and Higher ask are calculated|_QP_DERIVED_SPREAD/.test(core));
 
@@ -1365,7 +1365,7 @@ console.log('\n[Quick Pricing — wiring]');
         && /mid:\s*fb\.mid\s*\?\?\s*fb\.market/.test(tcgPrice),
         'this equality is what makes the Top-of-Book gate a no-op under tagging');
   check('a midpoint cannot create an extra suggested asking price',
-        !/label:'Top of Book'/.test(core) && /return askingTiers \|\| _qpReferenceChoices\(basis\)/.test(core));
+        !/label:'Top of Book'/.test(core) && /const choices=askingTiers \|\| _qpReferenceChoices\(basis\)/.test(core));
 
   // (b) the wire. Both client copy sites must carry it beside its siblings.
   check('the client reads midBasis off the wire',

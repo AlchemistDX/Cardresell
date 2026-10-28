@@ -14,7 +14,7 @@ const server=createServer((req,res)=>{
   res.end(readFileSync(path));
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const origin='http://127.0.0.1:'+server.address().port;
+const origin=process.env.CR_LIVE_STATIC==='1'?'https://www.cardresell.org':'http://127.0.0.1:'+server.address().port;
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
 let passed=0;const failures=[];
 const check=(ok,message)=>{if(ok)passed++;else failures.push(message);};
@@ -40,10 +40,10 @@ try {
       window._googleIdToken='local-fixture-token';
       window.googleUser={uid:'local-evidence-fixture',getIdToken:async()=> 'local-fixture-token'};
       window._venuesEnabled=new Set(['ebay','tcgplayer']);
-      const card=tplCardToNormalized({id:'range-fixture',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',updated_at:new Date().toISOString(),prices:{raw:{
-        near_mint:{tcgplayer:{market:100,low:90,high:130}},
-        lightly_played:{tcgplayer:{market:60,low:55,high:75}},
-        moderately_played:{tcgplayer:{market:40}}
+      const card=tplCardToNormalized({id:'range-fixture',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',updated_at:new Date().toISOString(),last_price_update:new Date().toISOString(),prices:{raw:{
+        near_mint:{tcgplayer:{last_price_update:new Date().toISOString(),market:100,low:90,high:130}},
+        lightly_played:{tcgplayer:{last_price_update:new Date().toISOString(),market:60,low:55,high:75}},
+        moderately_played:{tcgplayer:{last_price_update:new Date().toISOString(),market:40},ebay:{avg_7d:42}}
       },graded:{psa:{10:{ebay:{avg_7d:300,avg_30d:500,avg_1d:200}}}}}},'pokemon');
       activeGame='pokemon';setSelectedCard(card);loadCardUI(card);calc();
     });
@@ -82,14 +82,14 @@ try {
     check(await page.evaluate(()=>getEffectivePrice())===40,'unavailable observed strategy retracts prior condition ask at '+width);
     check(await page.evaluate(()=>!window._qpChosenTier),'unavailable strategy clears selected state at '+width);
     check((await page.locator('#priceRange').innerText()).includes('no measured range'),'single reference has no invented measured range at '+width);
-    check(JSON.stringify(await amounts())==='[34,40,46]','missing endpoints still offer clearly estimated asking-price scenarios at '+width);
-    check((await page.locator('#qpGradedNote').innerText()).includes('Price scenarios, not observed sales'),'estimated asks are distinguished from observed prices at '+width);
+    check(JSON.stringify(await amounts())==='[40,42]','missing endpoints offer market and the separately reported sold average at '+width);
+    check((await page.locator('#qpGradedNote').innerText()).includes('individual sales, sample count and shipping are not provided'),'aggregate limitations stay visible at '+width);
     check(!await page.locator('#qpBarWrap').isVisible(),'no invented position bar for one reference at '+width);
-    check((await page.locator('#qpTiers').innerText()).includes('Est. low')&&(await page.locator('#qpTiers').innerText()).includes('Est. high'),'estimated endpoints are labeled on both buttons at '+width);
-    await page.locator('#qpTiers button').filter({hasText:'Est. high'}).click();
-    check(await page.evaluate(()=>getEffectivePrice())===46,'estimated high updates the fee calculation at '+width);
+    check(!/Est\. low|Est\. high/.test(await page.locator('#qpTiers').innerText()),'no percentage-generated endpoints at '+width);
+    await page.locator('#qpTiers button').filter({hasText:'eBay 7-day avg'}).click();
+    check(await page.evaluate(()=>getEffectivePrice())===42,'reported sold average updates the fee calculation at '+width);
     await page.locator('#crSellBtn').click();await page.waitForFunction(()=>!document.getElementById('crSellBtn').disabled);
-    check(posts.at(-1)?.price===46&&posts.at(-1)?.priceSource==='seller','chosen estimate reaches the draft as the seller asking price at '+width);
+    check(posts.at(-1)?.price===42&&posts.at(-1)?.priceSource==='seller','chosen average reaches the draft as the seller asking price at '+width);
     await snapshot('reference-only');
     await page.locator('#priceOverride').fill('17.25');await page.locator('#priceOverride').dispatchEvent('input');
     await page.locator('#condPills [data-cond="nm"]').click();
@@ -100,23 +100,23 @@ try {
     check(posts.at(-1)?.price===17.25,'hand-entered price reaches draft unchanged at '+width);
 
     for(const stamp of [null,new Date(Date.now()-9*86400000).toISOString()]){
-      await page.evaluate(stamp=>{selectedCard.sourceUpdatedAt=stamp;Object.values(currentPrices).forEach(row=>{row.sourceUpdatedAt=stamp;});updatePriceFromPrinting();calc();},stamp);
+      await page.evaluate(stamp=>{selectedCard.sourceUpdatedAt=stamp;Object.values(currentPrices).forEach(row=>{row.sourceUpdatedAt=stamp;row.askUpdatedAt=stamp;});updatePriceFromPrinting();calc();},stamp);
       check(await page.evaluate(()=>!_qpTiers(_qpBasis()).some(t=>t.observedAsk)),'undated/old range cannot drive asking choices at '+width+' '+stamp);
       check((await page.locator('[data-price-evidence]').textContent()).includes(stamp?'over 7 days old':'update date'),'unusable freshness is explained at '+width+' '+stamp);
     }
-    await page.evaluate(()=>{selectedCard.sourceUpdatedAt=new Date().toISOString();Object.values(currentPrices).forEach(row=>{row.sourceUpdatedAt=selectedCard.sourceUpdatedAt;});});
+    await page.evaluate(()=>{selectedCard.sourceUpdatedAt=new Date().toISOString();Object.values(currentPrices).forEach(row=>{row.sourceUpdatedAt=selectedCard.sourceUpdatedAt;row.askUpdatedAt=selectedCard.sourceUpdatedAt;});});
     await page.locator('#gradedPills [data-val="psa"]').click();
     await page.waitForFunction(()=>isGradedVariant());
     check(await page.evaluate(()=>currentPrices[printSelect.value].low===null&&currentPrices[printSelect.value].high===null),'graded averages never populate range endpoints at '+width);
     const graded=await page.locator('[data-comparison-selection]').textContent();
     check(graded.includes('eBay 7-day sold average: $300')&&graded.includes('No measured price range'),'graded average and lack of range are both visible at '+width);
     check(graded.includes('Sale count, individual sale dates and shipping are not provided'),'average limitations remain visible at '+width);
-    check(JSON.stringify(await amounts())==='[255,300,345]','graded scenarios use only the selected grade value at '+width);
+    check(JSON.stringify(await amounts())==='[300]','the graded average stays one selected-grade value at '+width);
     check(!await page.locator('#qpBarWrap').isVisible(),'graded reference has no raw or invented range bar at '+width);
     check(!/Sell Now|Patient/.test(await page.locator('#qpTiers').innerText()),'reference does not promise sale timing at '+width);
     await snapshot('grade-reference');
     await page.evaluate(()=>{
-      const card=tplCardToNormalized({id:'high-value',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',updated_at:new Date().toISOString(),prices:{raw:{near_mint:{tcgplayer:{market:11000.17,low:10000.11,high:12000.12}}}}},'pokemon');
+      const card=tplCardToNormalized({id:'high-value',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',updated_at:new Date().toISOString(),last_price_update:new Date().toISOString(),prices:{raw:{near_mint:{tcgplayer:{last_price_update:new Date().toISOString(),market:11000.17,low:10000.11,high:12000.12}}}}},'pokemon');
       setSelectedCard(card);loadCardUI(card);calc();
     });
     check((await page.locator('#qpTiers').innerText()).includes('$12,000.12'),'large prices preserve currency precision at '+width);
@@ -124,7 +124,7 @@ try {
     // Values over $100 retain cents, and one-cent ranges cannot select two
     // buttons or allow a rounded reference to replace an actual endpoint.
     await page.evaluate(()=>{
-      const card=tplCardToNormalized({id:'cents-fixture',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',updated_at:new Date().toISOString(),prices:{raw:{near_mint:{tcgplayer:{market:100.119,low:100.11,high:100.12}}}}},'pokemon');
+      const card=tplCardToNormalized({id:'cents-fixture',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',updated_at:new Date().toISOString(),last_price_update:new Date().toISOString(),prices:{raw:{near_mint:{tcgplayer:{last_price_update:new Date().toISOString(),market:100.119,low:100.11,high:100.12}}}}},'pokemon');
       setSelectedCard(card);loadCardUI(card);calc();
     });
     check(JSON.stringify(await amounts())==='[100.11,100.12]','cent rounding retains exactly the reported endpoints at '+width);
@@ -138,6 +138,14 @@ try {
     await snapshot('cents-range');
     check(await page.locator('#qpTiers button').evaluateAll(buttons=>buttons.every(b=>b.scrollWidth<=b.clientWidth+1&&b.getBoundingClientRect().height>=44)),'price choices fit with usable tap targets at '+width);
     check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'no page overflow at '+width);
+    for(const [low,high,market,expected] of [[80,0,100,[80,100]],[0,120,100,[100,120]],[90,130,200,[90,200,130]],[140,130,100,[100]]]){
+      await page.evaluate(({low,high,market})=>{
+        const card=tplCardToNormalized({id:'partial',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',prices:{raw:{near_mint:{tcgplayer:{market,low,high,last_price_update:new Date().toISOString()}}}}},'pokemon');
+        setSelectedCard(card);loadCardUI(card);calc();
+      },{low,high,market});
+      check(JSON.stringify(await amounts())===JSON.stringify(expected),'partial/conflicting range preserves independent market '+[low,high,market]+' at '+width);
+      check(await page.locator('#qpBarWrap').isVisible()===(low>0&&high>low),'bar requires both valid endpoints at '+width);
+    }
     check(errors.length===0,'no uncaught browser errors at '+width+': '+errors.join('; '));
     await page.close();
   }
