@@ -3,6 +3,7 @@ import { catalogText, matchesCatalogPrinting, uniqueCatalogMatch, ygoPrinting } 
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { scanIdentityReview } from './_scanIdentityReview.js';
+import { readPrintedEvidence, resolvePrintedEvidence, resolveSlabEvidence } from './_scanPrintedEvidence.js';
 import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
 import { limitingFactorContradicts } from './_limitingFactor.js';
 // PSA's published label for each whole grade. The label must follow the FINAL
@@ -1231,7 +1232,21 @@ export default async function handler(req, res) {
       // Retry as sports card (cheap: still 10 credits, same as TCG)
       const ximSport = await identifyWithXimilar(imageBase64, mimeType || 'image/jpeg', ximilarToken, 'sport');
       if (ximSport.ok) xim = ximSport;
-      else if (ximSport.reason) xim = ximSport; // keep the most recent reason for logging
+      else if (ximSport.reason) xim = {...ximSport,gameHint:xim.gameHint || ximSport.gameHint}; // keep the most recent reason for logging
+    }
+    // A single bounded OCR pass can resolve visual ambiguity using the actual
+    // printed name/number/set against our complete catalogue snapshot. It is
+    // part of the same paid operation: no second customer debit or auto retry.
+    // Provider outages and photos with no card do not trigger more paid calls.
+    const evidenceGame = xim.cardInfo?.card_type || xim.gameHint;
+    const evidenceNeeded = xim.needsPicker || (xim.ok && scanIdentityReview(xim.cardInfo)) ||
+      (!xim.ok && ['no_match','low_confidence'].includes(xim.reason));
+    if (Date.now() - t0 < 20000 && evidenceNeeded && (['pokemon','lorcana','yugioh','onepiece'].includes(evidenceGame) || xim.cardInfo?._ximilar_graded)) {
+      try {
+        const evidence = await readPrintedEvidence(imageBase64, ximilarToken);
+        const resolved = xim.cardInfo?._ximilar_graded ? resolveSlabEvidence(xim,evidence) : await resolvePrintedEvidence(xim, evidence);
+        if (resolved) xim = {ok:true,cardInfo:resolved};
+      } catch { /* Preserve the original review/miss and its refund semantics. */ }
     }
     const tMs = Date.now() - t0;
     console.log('[scan] ximilar took', tMs, 'ms ok=', xim.ok, 'reason=', xim.reason, 'dist=', xim.cardInfo?._ximilar_dist);
@@ -1370,7 +1385,7 @@ export default async function handler(req, res) {
       // + shared retry logic evens this out.
       {
         const allInfos = [cardInfo, ...(Array.isArray(xim.candidates) ? xim.candidates : [])];
-        await Promise.all(allInfos.map(info => groundCardInfoByGame(info).catch(() => {})));
+        await Promise.all(allInfos.filter(info => !info._printed_evidence && !info._slab_verified).map(info => groundCardInfoByGame(info).catch(() => {})));
       }
 
       // Belt-and-suspenders: if the top still has no image_url but a candidate
@@ -1474,6 +1489,7 @@ export default async function handler(req, res) {
         source: 'ximilar',
         ygo_grounded_by: cardInfo._ygo_grounded_by || null,
         foil_hint: foilHintFrom(cardInfo._ximilar_foil),
+        ...(cardInfo._slab_verified ? {slab:{grader:cardInfo.grader,grade:cardInfo.grade,cert:cardInfo.cert}} : {}),
       });
     }
   }

@@ -5,9 +5,9 @@ export function scanIdentityReview(info) {
   const name = String(info.card_name || '').trim();
   const game = String(info.card_type || '');
   const result = (kind, message) => ({ kind, name, game, message });
-  if (info._ximilar_graded === true) return result('slab',
+  if (info._ximilar_graded === true && info._slab_verified !== true) return result('slab',
     'Graded slab detected. Check the card printing, grading company and label grade in Card Lookup before using a value. No ID credit was used.');
-  if (game === 'onepiece' && (/^p(?:-|$)/i.test(String(info.set_code || '')) ||
+  if (game === 'onepiece' && info._printed_promo !== true && (/^p(?:-|$)/i.test(String(info.set_code || '')) ||
       /^p-/i.test(String(info.card_number || '')) || /^p-/i.test(String(info._grounded_id || '')) ||
       /^p-/i.test(String(info._ximilar_card_id || '')))) return result('promo',
     'Promo card detected. Review the artwork and event or anniversary stamp to choose the exact printing. No ID credit was used.');

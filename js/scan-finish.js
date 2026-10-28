@@ -26,13 +26,13 @@ function _scanPriceVariantsFromFeed(feed) {
   return variants;
 }
 function _scanFinishFields(row) {
-  if (!row || (!row.finishOptions && !row.finishReviewRequired)) return {};
+  if (!row || row.grader || (!row.finishOptions && !row.finishReviewRequired)) return {};
   return {finishReviewRequired:false,finishConfirmed:row.finishConfirmed===true,finishEstimated:row.finishEstimated===true,
     finish:row.finish || '',finishKey:row.finishKey || '',finishBasis:row.finishBasis || '',
     finishOptions:(row.finishOptions||[]).map(o=>({...o})),finishPriceDate:row.finishPriceDate||null};
 }
 function _scanApplyFinishReview(row, info) {
-  if (row.cardType === 'sports') return;
+  if (row.cardType === 'sports' || row.grader) return;
   row.finishReviewRequired = false;
   row.finishConfirmed = false;
   row.finishEstimated = true;
@@ -79,7 +79,7 @@ function _scanChooseFinish(row, key, custom) {
   return true;
 }
 function _scanFinishButton(row, action) {
-  if (!row || (!row.finishOptions && !row.finishReviewRequired)) return '';
+  if (!row || row.grader || (!row.finishOptions && !row.finishReviewRequired)) return '';
   const bulk = /^reviewBulkFinish\('([^']+)'\)$/.exec(action);
   if (bulk) return `<button type="button" class="scan-finish-chip" aria-label="Finish / printing: ${_esc(row.finish || 'Automatic')}" aria-haspopup="dialog" onclick="event.stopPropagation();${action}">${_esc(row.finish || 'Finish / printing')} ▾</button>`;
   return `<button type="button" onclick="event.stopPropagation();${action}" class="scan-finish-review">${_esc(row.finish || 'Finish / printing')} ▾</button>`;
@@ -229,14 +229,14 @@ function _scanPriceBasisHtml(row) {
     : seller ? 'You entered this amount. It is not a verified sale or buyer offer.'
     : row.priceSource === 'comp' ? 'This is a catalogue reference, not a verified sale of your card or a buyer offer.'
     : 'The source of this saved amount is not recorded. Check it before relying on it.';
-  const finish = row.cardType === 'sports' ? 'Check the exact parallel or variation against your card.'
+  const finish = row.grader ? 'Slab label: '+row.grader+' '+row.grade+'; certification '+row.cert+'. This reads the label; it does not authenticate the holder.' : row.cardType === 'sports' ? 'Check the exact parallel or variation against your card.'
     : row.finishConfirmed && row.finish ? 'Finish / printing: '+row.finish+' — chosen by you, not independently verified.'
     : row.finishBasis === 'sole_available' && row.finish ? 'Finish / printing: '+row.finish+' — selected automatically because it is the only finish returned by the catalogue. You can change it in Finish / printing; no new scan is needed.'
     : row.finishBasis === 'reverse_unconfirmed' ? 'Only a reverse-holo price is available. Choose that finish if it matches your card, or enter your own price. No new scan is needed.'
     : baseEstimate ? 'Foil is not confirmed. The '+row.finish+' catalogue price is used as a base estimate. Choose Finish / printing to price a holo or reverse holo; no new scan is needed.'
     : row.finish ? 'Finish / printing: '+row.finish+' — automatic guess; optional correction is available.'
     : 'Finish / printing has not been confirmed. You can choose it if needed.';
-  const condition = row.conditionChosen === true && row.condition
+  const condition = row.grader ? 'Pricing must match this grade; raw-card prices are not substituted.' : row.conditionChosen === true && row.condition
     ? 'Condition: '+row.condition+' — chosen by you. This does not certify condition-specific pricing.'
     : 'Condition has not been chosen. Identification does not grade the card.';
   return '<details class="scan-price-basis"><summary>'+label+'</summary><div>'
