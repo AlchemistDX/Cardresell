@@ -27,5 +27,11 @@ r = await rec({ provider: 'openai', operation: 'chat_completion', mode: 'grade',
 check('openai record never carries match fields', r.match_distance === null && r.match_gap === null);
 check('openai cached tokens still recorded', r.cached_prompt_tokens === 3584 && r.prompt_tokens === 5000);
 check('record has no image or identity fields', !/base64|email|uid|card_name/.test(JSON.stringify(r)));
+r = await rec(x, { responseIssue: 'scores_unordered', scoreCount: 5, alternativeCount: 2 });
+check('safe response shape diagnostics', r.response_issue === 'scores_unordered' && r.score_count === 5 && r.alternative_count === 2);
+r = await rec(x, { responseIssue: 'private raw provider payload', scoreCount: 'private', alternativeCount: -1 });
+check('rejects arbitrary diagnostic text and invalid counts', r.response_issue === null && r.score_count === null && r.alternative_count === null && !JSON.stringify(r).includes('private'));
+r = await rec({ provider: 'openai', operation: 'chat_completion', mode: 'grade' }, { responseIssue: 'scores_unordered', scoreCount: 5, alternativeCount: 2 });
+check('response diagnostics stay identification-only', r.response_issue === null && r.score_count === null && r.alternative_count === null);
 console.log(`provider-match-distance: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);
