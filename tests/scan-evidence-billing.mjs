@@ -1,6 +1,7 @@
 import {completionGuard} from './_complete.mjs';
 const {finish}=completionGuard('scan-evidence-billing');
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {billingHarness,exact} from './_scanBillingHarness.mjs';
 let checks=0;
 for (const mode of ['matched','timeout','conflict']) {
@@ -9,6 +10,7 @@ for (const mode of ['matched','timeout','conflict']) {
   const stub=exact();stub.ximilar={cardInfo:{card_type:'yugioh',card_name:'Blitzclique - Breakaway',card_number:'64049762',set_name:'UNKNOWN',_ximilar:true},candidates:[]};
   const previous=globalThis.fetch;let ocrCalls=0;
   globalThis.fetch=async (url,init)=>{
+   if(String(url)==='https://www.cardresell.org/data/catalog/yugioh.88b8cbb13943.json') return new Response(await readFile(new URL('../data/catalog/yugioh.88b8cbb13943.json',import.meta.url),'utf8'),{headers:{'Content-Type':'application/json'}});
    if(String(url).includes('/card_ocr_id')) {
     ocrCalls++;
     if(mode==='timeout')throw new DOMException('fixture timeout','TimeoutError');
