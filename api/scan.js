@@ -1241,7 +1241,7 @@ export default async function handler(req, res) {
     const evidenceGame = xim.cardInfo?.card_type || xim.gameHint;
     const evidenceNeeded = xim.needsPicker || (xim.ok && scanIdentityReview(xim.cardInfo)) ||
       (!xim.ok && ['no_match','low_confidence'].includes(xim.reason));
-    if (evidenceNeeded && (['pokemon','lorcana','yugioh','onepiece'].includes(evidenceGame) || xim.cardInfo?._ximilar_graded)) {
+    if (Date.now() - t0 < 20000 && evidenceNeeded && (['pokemon','lorcana','yugioh','onepiece'].includes(evidenceGame) || xim.cardInfo?._ximilar_graded)) {
       try {
         const evidence = await readPrintedEvidence(imageBase64, ximilarToken);
         const resolved = xim.cardInfo?._ximilar_graded ? resolveSlabEvidence(xim,evidence) : await resolvePrintedEvidence(xim, evidence);

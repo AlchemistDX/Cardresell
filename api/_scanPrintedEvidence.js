@@ -136,7 +136,7 @@ export function resolveSlabEvidence(visual, evidence) {
     if (c.year && !token(text, c.year)) return false;
     return true;
   });
-  const unique = new Map(matches.map(c => [[c.card_type,normalized(c.card_name),normalized(c.set_name),c.card_number,c.variant || ''].join('|'),c]));
+  const unique = new Map(matches.map(c => [[c.card_type,normalized(c.card_name),normalized(c.set_name),c.card_number,c.variant || '',c.rarity || '',c._ximilar_card_id || '',c._ximilar_full_name || ''].join('|'),c]));
   if (unique.size !== 1) return null;
   const card = unique.values().next().value;
   return {...card,_slab_verified:true,grader:company.name === 'BECKETT' ? 'BGS' : company.name,grade,cert};

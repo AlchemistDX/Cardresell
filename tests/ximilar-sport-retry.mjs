@@ -19,8 +19,8 @@ async function run(tcg, sport, source=block, deep=false) {
   const calls = [];
   const modes = [];
   const identifyWithXimilar = async (_b, _m, _t, kind, mode='identify') => { calls.push(kind); modes.push(mode); return kind === 'tcg' ? tcg : sport; };
-  const fn = new AsyncFunction('identifyWithXimilar', 'imageBase64', 'mimeType', 'ximilarToken', 'isDeepGrade', 'scanIdentityReview', source + '\nreturn xim;');
-  const xim = await fn(identifyWithXimilar, 'AAAA', 'image/jpeg', 't', deep, scanIdentityReview);
+  const fn = new AsyncFunction('identifyWithXimilar', 'imageBase64', 'mimeType', 'ximilarToken', 'isDeepGrade', 'scanIdentityReview', 't0', source + '\nreturn xim;');
+  const xim = await fn(identifyWithXimilar, 'AAAA', 'image/jpeg', 't', deep, scanIdentityReview, Date.now());
   return { xim, calls, modes };
 }
 let r = await run({ ok: false, reason: 'no_card_detected' }, { ok: true, cardInfo: {} });
