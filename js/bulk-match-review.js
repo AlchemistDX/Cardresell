@@ -124,14 +124,14 @@
         const b = button('',list,()=>{if(!current(s))return close();s.selected=i;draw(view)});
         b.style.textAlign = 'left';
         node('strong',label(c.card_name),b,{style:'display:block;overflow-wrap:anywhere'});
-        node('span',[label(c.set_name) || label(c.set_code), c.card_number ? '#'+c.card_number : '', c.is_japanese ? 'Japanese' : '', label(c.year), label(c.sport)].filter(Boolean).join(' · '),b,{style:'display:block;color:#cbd5e1;overflow-wrap:anywhere'});
+        node('span',[label(c.set_name) || label(c.set_code), c.card_number ? '#'+c.card_number : '', c.is_japanese ? 'Japanese' : '', label(c.year), label(c.sport), label(c.variant), label(c.full_name)].filter(Boolean).join(' · '),b,{style:'display:block;color:#cbd5e1;overflow-wrap:anywhere'});
       }
       button('None of these match · choose new photo',area,()=>retake(s));
       return;
     }
     const summary = node('section','',area,{style:'padding:12px;border:1px solid #8065b7;border-radius:10px;overflow-wrap:anywhere'});
     node('strong',label(picked.card_name),summary);
-    node('div',[label(picked.set_name)||label(picked.set_code),picked.card_number?'#'+picked.card_number:''].filter(Boolean).join(' · '),summary);
+    node('div',[label(picked.set_name)||label(picked.set_code),picked.card_number?'#'+picked.card_number:'',label(picked.variant),label(picked.full_name)].filter(Boolean).join(' · '),summary);
     node('p',s.attempt ? 'Retry checks this same selection. An accepted confirmation is charged only once.' : 'Confirm this printing for up to 1 ID credit. You can set condition and finish afterward.',area);
     const actions = node('div','',area,{style:'display:flex;flex-wrap:wrap;gap:10px'});
     const accept = button(s.busy ? 'Confirming…' : s.attempt ? 'Retry same confirmation' : 'Confirm this match',actions,()=>confirm(s));

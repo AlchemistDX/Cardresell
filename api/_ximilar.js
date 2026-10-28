@@ -130,7 +130,11 @@ async function identify(imageBase64, apiToken, kind, observe) {
   const sideTag  = tags['Side']?.[0]?.name || 'front';
   const subCat   = tags['Subcategory']?.[0]?.name || ''; // Pokemon | Magic The Gathering | Yu-Gi-Oh | ...
   const alphabet = tags['Alphabet']?.[0]?.name || 'latin'; // latin | japanese | korean | ...
-  const gradedTag = tags['Graded']?.[0]?.name === 'yes';
+  // Graded Slab is a record-level classification. Label detection is also
+  // returned without the optional paid slab-ID/grade features.
+  const gradedTag = rec['Graded Slab']?.[0]?.name === 'yes' ||
+    rec._objects.some(o => /^slab\s*label$/i.test(String(o?.name || ''))) ||
+    tags['Graded']?.[0]?.name === 'yes';
 
   // Prefer the matched catalog entry's game to a visual object tag. Missing
   // or unsupported games must not inherit Pokemon pricing and catalog IDs.
@@ -143,7 +147,7 @@ async function identify(imageBase64, apiToken, kind, observe) {
     card_name:   m.name || '',
     card_number: m.card_number || '',
     set_name:    m.set || m.set_name || '',
-    set_code:    m.set_code || '',
+    set_code:    typeFor(m) === 'yugioh' ? m.set_code_full || m.set_code || '' : m.set_code || '',
     hp:          '', // Ximilar doesn't return HP directly
     card_type:   typeFor(m),
     is_japanese: isJapanese,
@@ -163,6 +167,8 @@ async function identify(imageBase64, apiToken, kind, observe) {
     // For downstream image loading — we have TCGPlayer / cardmarket links.
     // Keep the raw best_match around for the client if it wants them.
     _ximilar_full_name: m.full_name || '',
+    _ximilar_card_id: m.card_id || '',
+    variant: m.variation || m.variant || m.parallel || '',
     image_quality: 'unknown',
     confidence:    distance < DIST_HIGH_CONF ? 'high' : 'medium',
   });

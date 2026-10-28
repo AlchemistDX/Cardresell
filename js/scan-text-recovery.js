@@ -138,7 +138,7 @@
     return s && s.file===row.file && s.owner===window._fbAuth?.currentUser?s.value:null;
   }
   function eligible(row) {
-    return row && !row.success && row.definiteMiss && !row.providerNeedsReview && row.file &&
+    return row && !row.success && row.definiteMiss && !row.providerNeedsReview && !row.identityReview && !row.unsupportedGame && row.file &&
       !row._rescanning && !row._photoChecking && !row._replacementPhoto && !window.CardResellBulkLookup?.isEditing?.(row);
   }
   function batchCurrent(job) {

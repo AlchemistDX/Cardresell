@@ -10,13 +10,13 @@ const match = (changes = {}) => card({ _tags: {}, _identification: {
   best_match: { name: 'Lightning Bolt', subcategory: 'Magic The Gathering', set: 'Magic 2010', set_code: 'M10', card_number: '146', ...changes },
   alternatives: [], distances: [0.1],
 } });
-async function run(objects, { kind = 'tcg', status = 200 } = {}) {
+async function run(objects, { kind = 'tcg', status = 200, record = {} } = {}) {
   let calls = 0;
   globalThis.fetch = async (url, init) => {
     calls++;
     assert.equal(url, `https://api.ximilar.com/collectibles/v2/${kind}_id`);
     assert.deepEqual(JSON.parse(init.body), { records: [{ _base64: 'unchanged-fixture' }], ...(kind === 'tcg' ? { rotate: true } : {}) });
-    return Response.json({ records: [{ _status: { code: status }, _objects: objects }] });
+    return Response.json({ records: [{ _status: { code: status }, _objects: objects, ...record }] });
   };
   const result = await identifyWithXimilar('unchanged-fixture', 'image/jpeg', 'test-token', kind);
   assert.equal(calls, 1, 'no hidden retry or analyze_all charge');
@@ -59,6 +59,22 @@ try {
     const label = card({ name: 'Slab Label', _identification: { best_match: { name: 'LABEL ONLY' }, distances: [0] } });
     assert.equal((await run([label, match()])).cardInfo.card_name, 'Lightning Bolt');
     assert.equal((await run([label])).reason, 'no_card_detected');
+    assert.equal((await run([label, match()])).cardInfo._ximilar_graded, true);
+  });
+  await test('documented record slab classification survives without a label object', async () => {
+    const r = await run([card()], {record: {'Graded Slab': [{name:'yes',prob:0.99}]}});
+    assert.equal(r.cardInfo._ximilar_graded, true);
+    assert.equal((await run([card()])).cardInfo._ximilar_graded, false);
+  });
+  await test('Yu-Gi-Oh retains the full printed set code', async () => {
+    const r = await run([match({subcategory:'Yu-Gi-Oh!',set_code:'CORI',set_code_full:'CORI-EN051'})]);
+    assert.equal(r.cardInfo.set_code, 'CORI-EN051');
+  });
+  await test('variant and full catalogue name survive for review', async () => {
+    const r = await run([match({subcategory:'Basketball',name:'LeBron James',full_name:'2019 Mosaic LeBron James Silver #8',variation:'Silver',card_id:'catalog-8'})], {kind:'sport'});
+    assert.equal(r.cardInfo.variant,'Silver');
+    assert.equal(r.cardInfo._ximilar_full_name,'2019 Mosaic LeBron James Silver #8');
+    assert.equal(r.cardInfo._ximilar_card_id,'catalog-8');
   });
   await test('multiple identified cards require a single-card crop', async () => {
     const r = await run([match(), card()]); assert.equal(r.ok, false); assert.equal(r.reason, 'multiple_cards');

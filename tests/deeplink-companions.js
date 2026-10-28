@@ -345,7 +345,14 @@ check('Bulk row captures cardType from data.card_type',             INDEX.includ
 check('Bulk row captures isJapanese from data.is_japanese',         INDEX.includes("result.isJapanese = data.is_japanese === true"));
 check('_bulkFetchPrice accepts cardType + isJapanese params',       /function _bulkFetchPrice\(cardName,\s*setName,\s*cardNumber,\s*cardType,\s*isJapanese(?:,|\))/.test(INDEX));
 check('_bulkFetchPriceMTG routes to Scryfall',                      INDEX.includes("api.scryfall.com/cards/search"));
-check('_bulkFetchPriceYGO routes to YGOProDeck',                    INDEX.includes("db.ygoprodeck.com/api/v7/cardinfo.php"));
+// A name-wide YGOProDeck amount priced the wrong printing in the original
+// photo benchmark. Exercise the shipped lookup instead of requiring that old
+// endpoint/comment to remain in the source.
+let ygoQuote={market:0.25,setName:'Chaos Origins',cardNumber:'CORI-EN051'},ygoRequests=[];
+const ygoPrice=vm.runInNewContext(declaration(uiBundle,'_bulkFetchPriceViaTcgCsv')+'\n'+declaration(uiBundle,'_bulkFetchPriceYGO')+';_bulkFetchPriceYGO',{
+  URLSearchParams,AbortSignal,fetch:async url=>{ygoRequests.push(new URL(url,'https://fixture.test'));return {ok:true,json:async()=>ygoQuote}}});
+const exactYgo=await ygoPrice('Blitzclique - Breakaway','CORI-EN051','Chaos Origins');
+check('YGO lookup keeps the printed set and collector code',exactYgo.marketPrice===0.25&&ygoRequests.length===1&&ygoRequests[0].searchParams.get('number')==='CORI-EN051'&&ygoRequests[0].searchParams.get('set')==='Chaos Origins');
 check('_bulkFetchPriceLorcana routes to lorcana-api',               INDEX.includes("api.lorcana-api.com/cards/fetch"));
 check('_bulkFetchPrice dispatches by cardType',                     INDEX.includes("if (type === 'mtg') return _bulkFetchPriceMTG"));
 let jpCalls=0, englishCalls=0;
@@ -367,7 +374,13 @@ check('bulkOpenCardInLookup no longer force-sets pokemon',          !INDEX.inclu
 check('bulkOpenCardInLookup routes non-Pokemon to searchInput',     INDEX.includes("Non-Pokemon: prefill search, trigger the tab"));
 check('bulkOpenCardInLookup auto-clicks best-match dropdown row',   INDEX.includes("auto-click the row that best matches"));
 check('MTG bulk price falls back to name-only + strips zero-pad',   INDEX.includes("un-zero-padded") && INDEX.includes("stripDiacritics"));
-check('YGO bulk price falls back to first two words',               INDEX.includes("first two words if the exact name misses"));
+let rejectedYgo=true;
+for(const quote of [{market:0.25,setName:'Wrong set',cardNumber:'CORI-EN051'},{market:0.25,setName:'Chaos Origins',cardNumber:'101305051'},{market:0.25}]){
+  ygoQuote=quote;const before=ygoRequests.length;
+  const value=await ygoPrice('Blitzclique - Breakaway','CORI-EN051','Chaos Origins');
+  rejectedYgo=rejectedYgo&&value.marketPrice===null&&ygoRequests.length===before+1;
+}
+check('YGO refuses wrong or unverified printing prices without a fuzzy retry',rejectedYgo);
 check('ebayListBtn cleared from display:none when card loads',      INDEX.includes("resetCardPanel() sets this to display:none"));
 
 console.log('\n[Printing/Variant dropdown split 2026-08-15]');

@@ -46,7 +46,7 @@ The final complete regression run passed: **170 suites executed successfully out
 ## Remaining evidence before expanding advertising
 
 1. **Current real-phone acceptance:** complete the owner's planned live run with original card photos on the intended phone/browser. Cover exact printing/finish, a wrong or ambiguous match, condition changes, fees, save/reload and draft/export. Record failures rather than treating screenshots or synthetic inputs as an accuracy benchmark.
-2. **Original-photo benchmark:** label a representative physical-card set and measure exact-card/printing accuracy, abstentions and retries. No defensible percentage is available yet.
+2. **Original-photo benchmark:** the [October 28 run of 14 original cards](original-photo-benchmark-20261028.md) is now recorded. It exposed accepted wrong/incomplete printing and slab results plus two provider-response failures. Safeguards and controlled regression checks do not close the required fresh production retest. No defensible exact-printing accuracy percentage is claimed.
 3. **Real Seller Hub import:** import a generated draft CSV in the intended seller account and check the accepted fields/validation results. A correct download and upload link do not prove eBay acceptance or publication.
 4. **Unit economics:** reconcile current provider plans, allowances, actual billed usage and retry costs with Quick/Deep and paid-credit revenue. Confirm TPL history entitlement before committing to historical-range work.
 5. **Small seller pilot:** after the above acceptance results, review 5–10 invited sellers completing useful tasks before broad paid traffic. Earlier owner purchases are not outside-customer conversion evidence. No invitations or ad spending were sent by this work.

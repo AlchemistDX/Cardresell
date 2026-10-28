@@ -27,6 +27,7 @@ try {
    }
    const balance=async()=>billing==='membership'?(await consume('snapshot',{owner:UID,receipt:'0'.repeat(64),scan:'read-only',mode:'identify'})).monthly:30-Number(h.store.get(freeKey()));
    const stub=ambiguous();
+   stub.ximilar.candidates=stub.ximilar.candidates.map((c,i)=>({...c,variant:'Variant '+i,_ximilar_full_name:'Catalogue printing '+i}));
    if(mode==='magic') {
     stub.ximilar.cardInfo.card_type='mtg';stub.ximilar.cardInfo.card_name='Fixture Wizard';
     stub.ximilar.candidates=stub.ximilar.candidates.map(c=>({...c,card_type:'mtg',card_name:'Fixture Wizard'}));
@@ -36,6 +37,9 @@ try {
    }
    const offered=(await h.scan(stub)).payload, initial=await balance();
    const ctx=await browser.newContext({viewport:mode==='magic'?{width:844,height:390}:{width:390,height:844},serviceWorkers:'block'});
+   // This is a returning signed-in seller flow. Do not race the unrelated
+   // first-visit Charizard example against the pending-price assertions.
+   await ctx.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));
    let calls=[],writes=[],hold,priceHold,scanHold,drop=mode.startsWith('lost-'),malformed=mode==='malformed',priceRequests=0,scanCalls=0,priceUrls=[];
    await ctx.route('**/*',async route=>{
     const req=route.request(),u=new URL(req.url());
@@ -107,6 +111,7 @@ try {
     }
     await page.getByRole('button',{name:'Review matches',exact:true}).click();
     t.check(prefix+': all nine choices accessible',await page.locator('.bulk-match-choices button').count()===9);
+    t.check(prefix+': catalogue variant distinguishes similar names',/Variant 6.*Catalogue printing 6/.test(await page.locator('.bulk-match-choices button').nth(6).innerText()));
     t.check(prefix+': mobile dialog fits and targets are at least 44px',await page.locator('#bulkMatchDialog').evaluate(e=>e.scrollWidth<=e.clientWidth&&e.getBoundingClientRect().width<=innerWidth&&[...e.querySelectorAll('button')].every(b=>b.getBoundingClientRect().height>=44)));
     if(mode==='retake') {
      const photo=Buffer.from(await page.evaluate(async()=>Array.from(new Uint8Array(await reviewRow.file.arrayBuffer()))));
