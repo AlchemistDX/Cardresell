@@ -3036,12 +3036,34 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     <h1 class="workspace-title">All drafts</h1>
     <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
       <div id="draftsCount" style="font-size:.72rem;color:var(--text-muted);font-weight:600"></div>
+      <button type="button" id="draftExportHelpBtn" class="draft-more-btn" data-draft-help-open aria-controls="draftExportHelp" aria-expanded="false">How to use drafts</button>
       <button type="button" id="ebayOperationsBtn" class="draft-more-btn" onclick="CardResellEbayListingOperations.open()">eBay listing operations</button>
       <!-- A draft always starts from a card, so "new draft" routes to the card
            list rather than opening a blank form there is no way to complete. -->
       <button type="button" onclick="switchCollectionSection('cards')" style="padding:.45rem .75rem;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:9px;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap" title="Choose a card from your collection to start a draft">＋ Choose a card</button>
     </div>
   </div>
+  <section id="draftExportHelp" class="draft-export-help" hidden aria-labelledby="draftExportHelpTitle">
+    <div class="draft-export-help-heading">
+      <h2 id="draftExportHelpTitle" tabindex="-1">From CardResell drafts to eBay</h2>
+      <button type="button" class="draft-act" data-draft-help-close>Hide guide</button>
+    </div>
+    <p>Your CSV creates drafts for you to finish in eBay. eBay Connect is optional for this workflow.</p>
+    <ol>
+      <li><strong>Download your file.</strong> Review your saved card details, price, quantity and photos. Use Download on one draft, or select several and choose Download selected drafts. Keep the downloaded .csv file.</li>
+      <li><strong>Upload in Seller Hub.</strong> Sign in to eBay and open Reports → Upload. Choose Upload template (or Start upload), then select your .csv file. If asked, choose Listings / Create drafts.</li>
+      <li><strong>Check the upload results.</strong> Look in Recent uploads for errors or the downloadable results report. Choose Complete listings for the accepted draft upload. Check the results before uploading again to avoid duplicate drafts.</li>
+      <li><strong>Finish and publish in eBay.</strong> Review photos, condition, item specifics, price and quantity. Complete shipping, returns and payment details, review eBay’s fees, then publish when ready.</li>
+    </ol>
+    <div class="draft-export-help-actions">
+      <a class="draft-act draft-act-primary" href="https://www.ebay.com/sh/reports/uploads" target="_blank" rel="noopener noreferrer">Open eBay upload</a>
+      <a class="draft-act" href="https://www.ebay.com/sh/lst/drafts" target="_blank" rel="noopener noreferrer">Open eBay drafts</a>
+      <a href="https://pages.ebay.com/sh/reports/help/create-listings-bulk/#upload-draft-templates" target="_blank" rel="noopener noreferrer">eBay’s upload guide</a>
+    </div>
+    <p>Downloading starts a file download; it does not upload or publish anything. Seller Hub Reports access is required. If photos are missing, add them in eBay before publishing; exported photo links last up to 30 days.</p>
+    <label class="draft-export-help-preference"><input type="checkbox" data-draft-help-hide-auto> Don’t show this automatically again</label>
+    <p role="status">You can always reopen this guide with How to use drafts.</p>
+  </section>
   <div id="draftsWrap"></div>
 </div>
 
@@ -3969,7 +3991,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/inventory-edits.827690a8.js"></script>
 <script defer src="/js/price-evidence.e640c6b8.js"></script>
 <script defer src="/js/search-catalog.5cb938c1.js"></script>
-<script defer src="/js/core.e2ad59f6.js"></script>
+<script defer src="/js/core.b7d4279e.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
@@ -4140,7 +4162,12 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 <script defer src="/js/sale-conflicts.6c578b03.js"></script>
 <script defer src="/js/collection-export.84ab2157.js"></script>
 <script defer src="/js/collection-import.84b668a4.js"></script>
-<script defer src="/js/ebay-connect.f38348b6.js"></script>
+<script defer src="/js/ebay-connect.fee03d44.js"></script>
+<style>
+.draft-export-help{margin:0 0 1rem;padding:1rem;border:1px solid var(--border);border-radius:12px;background:var(--surface-1,var(--bg));font-size:.87rem;line-height:1.55;overflow-wrap:anywhere}
+.draft-export-help[hidden]{display:none!important}.draft-export-help h2{margin:0;font-size:1.05rem}.draft-export-help-heading,.draft-export-help-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.65rem}.draft-export-help-actions{justify-content:flex-start}.draft-export-help ol{padding-left:1.3rem}.draft-export-help li{padding-left:.2rem;margin:.65rem 0}.draft-export-help .draft-act{min-height:44px;display:inline-flex;align-items:center;box-sizing:border-box}.draft-export-help-preference{display:flex;gap:.55rem;align-items:center;min-height:44px;cursor:pointer}.draft-export-help-preference input{width:20px;height:20px;flex-shrink:0}.draft-export-help [role=status]{font-size:.8rem;color:var(--text-muted);margin:.35rem 0 0}.draft-export-help a:not(.draft-act-primary){color:var(--text)}
+</style>
+<script defer src="/js/draft-export-help.48275198.js"></script>
 <script defer src="/js/ebay-listing-review.bcfdaf00.js"></script>
 <script defer src="/js/ebay-listing-operations.510ece7c.js"></script>
 <script defer src="/js/draft-batch.4ba6fd45.js"></script>

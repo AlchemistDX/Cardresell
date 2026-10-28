@@ -441,7 +441,7 @@ try {
 
     const panel = await page.locator(`${cardSel(id)} .draft-dl`).innerText();
     ok('the panel says where to upload it', /Seller Hub/i.test(panel));
-    ok('the panel says it makes a draft, not a live listing', /draft listing, not a live one/i.test(panel));
+    ok('the panel distinguishes draft preparation from upload and publication', /create drafts for review/i.test(panel) && /nothing has been uploaded or published/i.test(panel));
     ok('the panel says photos are attached on eBay', /photo/i.test(panel) && /Drafts folder/i.test(panel));
     ok('the panel says condition is picked on eBay', /condition/i.test(panel));
     ok('the panel says account settings are not in the file', /shipping|returns|location/i.test(panel));
@@ -592,7 +592,7 @@ try {
     ok('unselected price excluded', !text.includes(',33.33,'));
     ok('never an Add action', !lines.some(l => l.startsWith('Add,')));
     ok('bulk filename', dl.suggestedFilename().startsWith('ebay-selected-drafts-2-'));
-    ok('upload handoff shown', await page.getByRole('link', {name:'Open eBay upload'}).isVisible());
+    ok('upload handoff shown', await page.locator('.draft-bulk').getByRole('link', {name:'Open eBay upload',exact:true}).isVisible());
     const box = await page.locator('.draft-bulk').boundingBox();
     ok('toolbar fits mobile', box.x >= 0 && box.x + box.width <= 376);
     await page.screenshot({path: `${SHOTS}/draft-bulk-375.png`, fullPage:false});
