@@ -40,6 +40,8 @@ try{for(const width of [320,390,1280]){
  await page.addInitScript(()=>localStorage.setItem('cs_landing_seen','1'));await page.goto(origin+'/index.html');await page.waitForFunction(()=>!!window.CardResellAdvice);
  await page.evaluate(()=>{selectedCard={name:'Pikachu',game:'pokemon'};activeGame='pokemon';window.getEffectivePrice=()=>1;window._isPro=false;window._venuesEnabled=new Set(['ebay','tcgplayer']);calc();});
  const advice=page.locator('#sellingAdvice'),result=advice.locator('[data-advice-output]');
+ ok(await page.locator('#sellingFeeComparison').isVisible()&&!await advice.isVisible(),'comparison is primary and advice is optional');
+ await page.locator('#sellingHelp > summary').click();
  ok(await result.getAttribute('data-route')==='hold-for-lot','guidance renders on real free-tier card before fee tables');
  await advice.getByText('Refine this recommendation',{exact:true}).click();await advice.getByRole('checkbox',{name:'I have related cards I can bundle with this one'}).check();
  ok(await result.getAttribute('data-route')==='lot','bundle preference changes recommendation immediately');
@@ -55,7 +57,9 @@ try{for(const width of [320,390,1280]){
  ok(await advice.evaluate(e=>e.scrollWidth<=e.clientWidth+1),'recommendation fits viewport');
  for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await advice.scrollIntoViewIfNeeded();if(process.env.CR_SHOT_DIR)await page.screenshot({path:process.env.CR_SHOT_DIR+`/selling-advice-${width}-${theme}.png`});}
  await page.evaluate(()=>CardResellSellingPlan.openCollection([{card:'One-dollar copies',game:'pokemon',currentValue:1},{card:'Valuable single',game:'pokemon',currentValue:20},{card:'Needs a price',game:'pokemon',currentValue:null}]));
- const batch=page.locator('[data-batch-advice]');ok(await batch.isVisible(),'guidance visible even while missing values block fee rankings');
+ const batch=page.locator('[data-batch-advice]');ok(!await batch.isVisible(),'batch guidance is optional');
+ await page.locator('#sellingPlanHelp > summary').click();
+ ok(await batch.isVisible(),'guidance remains available when requested');
  ok((await batch.textContent()).includes('1 raw card under $5 each')&&(await batch.textContent()).includes('1 card needs a value check'),'known cheap and unpriced cards separated');
  ok(!await page.locator('#sellingPlan #bulkOffers').isVisible(),'quote forms are optional and collapsed after recommendation');
  await page.locator('#sellingPlan').getByText('Review cards and adjust prices',{exact:true}).click();await page.getByRole('checkbox',{name:'Include One-dollar copies',exact:true}).uncheck();

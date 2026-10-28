@@ -37,7 +37,7 @@
     // Round before comparing so a near-endpoint reference cannot hide the
     // actual listed high when duplicate display amounts are removed.
     const reference=positive(evidence.reference)===null?null:cents(evidence.reference);
-    if(reference>range.low&&reference<range.high)choices.push({id:'ask-reference',amt:cents(reference),label:'Reference',hint:'Selected provider reference; not the midpoint of the range',observedAsk:true});
+    if(reference>range.low&&reference<range.high)choices.push({id:'ask-reference',amt:cents(reference),label:'Market',hint:'Selected provider value; not the midpoint of the listing range',observedAsk:true});
     choices.push({id:'ask-high',amt:cents(range.high),label:'Listed high',hint:'Reported TCGplayer high for this condition; not an expected sale',observedAsk:true});
     const unique=choices.filter((row,i)=>choices.findIndex(other=>other.amt===row.amt)===i);
     return unique.length>=2?unique:null;

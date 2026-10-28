@@ -1612,8 +1612,8 @@ try {
   const render=index.slice(start,index.indexOf('\nfunction ',start+10));
   check('reported prices are disclosed as asking prices, not completed sales',
         render.includes('Asking prices, not completed sales'));
-  check('missing high and low prices are disclosed',
-        render.includes('High and low prices are unavailable'));
+  check('estimated asking alternatives cannot be mistaken for observed prices',
+        render.includes('Estimated asks: low −15%, high +15%') && render.includes('Price scenarios, not observed sales or a promised range'));
   check('source disclosure is visible for both evidence states',
         /if\(note\)\{\s*note\.style\.display=''/.test(render));
   check('position bar requires reported endpoints',
@@ -1769,15 +1769,15 @@ check('9.5 variant label names BGS/CGC', /Grade 9\.5 — BGS\/CGC \(PriceChartin
   const info = index.slice(index.indexOf('<div id="qpInfo"'),
                            index.indexOf('</div>', index.indexOf('<div id="qpInfo"')));
   check('qpInfo separates reported asking endpoints from completed sales',
-        /Listed low \/ Listed high/.test(info) && /active listings, not completed sales/.test(info));
+        /Listed low \/ high/.test(info) && /asking prices, not completed sales/.test(info));
   check('qpInfo requires selected-condition and recent endpoint evidence',
-        /selected condition/.test(info) && /within 7 days/.test(info));
-  check('qpInfo defines reference without inventing a midpoint',
-        /<strong>Reference<\/strong>/.test(info) && /not necessarily the midpoint/.test(info));
-  check('qpInfo refuses percentage alternatives and explains missing endpoints',
-        /Missing endpoints stay unavailable/.test(info) && /No percentage range is calculated/.test(info));
-  check('qpInfo does not promise a fast sale or describe a synthetic tier',
-        !/undercuts the cheapest|Top of Book|15%|calculated suggestions/.test(info));
+        /selected condition/.test(info) && /current reported TCGplayer listings/.test(info));
+  check('qpInfo explains that market value already drives fees',
+        /market value already drives the fee comparison/.test(info));
+  check('qpInfo distinguishes asking scenarios from price observations',
+        /15% below and above/.test(info) && /not observed prices, an accuracy range/.test(info));
+  check('qpInfo does not promise a fast sale',
+        !/undercuts the cheapest|Top of Book/.test(info) && /not observed prices, an accuracy range or a sale-speed prediction/.test(info));
   check('caption never calls one reference recent completed sales',
         !/Comp is recent completed sales/.test(index));
   check('caption carries the single-reference disclosure',
