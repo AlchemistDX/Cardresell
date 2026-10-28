@@ -18,6 +18,7 @@ for(const bucket of ['free','paid']){
     const result=await h.scan(stub);
     assert.equal(result.statusCode,200);assert.equal(result.payload.identified,false);
     assert.equal(result.payload.card_name,'');assert.equal(result.payload.card_type,'');
+    assert.equal(result.payload.retry_allowed,true);assert.equal(result.payload.credits_charged,0);
     assert.equal(result.payload.grounded_id,null);assert.equal(result.payload.detected_game,reason==='no_card_detected'?'':'mtg');
     assert.equal(h.net(),0,'unidentified scan refunded exactly');
     assert.equal(stub.ximilarCalls,reason==='no_match'?2:1,'no extra paid vision attempts');checks++;
@@ -38,6 +39,13 @@ for(const billing of ['free','paid','membership']){
     }
     const balance=async()=>billing==='membership'?(await consume('snapshot',{owner:UID,receipt:'0'.repeat(64),scan:'read-only',mode:'identify'})).monthly:h.net();
     const initial=await balance();
+    for(const reason of ['invalid_response','timeout']){
+      const stub=exact();stub.ximilar={tcg:{miss:reason}};
+      const {statusCode,payload}=await h.scan(stub);
+      assert.equal(statusCode,503);assert.equal(payload.code,'IDENTIFY_PROVIDER_UNAVAILABLE');
+      assert.equal(payload.retry_allowed,true);assert.equal(payload.credits_charged,0);
+      assert.equal(await balance(),initial,'fresh-attempt permission follows the completed refund');checks++;
+    }
     for(const [kind,info] of [
       ['slab',{card_type:'pokemon',card_name:'Charizard',card_number:'14',set_code:'sm9',_ximilar_graded:true}],
       ['slab',{card_type:'sports',card_name:'LeBron James',card_number:'8',set_name:'Mosaic',_ximilar_graded:true}],
@@ -53,12 +61,35 @@ for(const billing of ['free','paid','membership']){
       assert.equal(payload.identity_review.kind,kind);assert.equal(payload.identity_review.name,info.card_name);
       assert.equal(payload.card_name,'');assert.equal(payload.grounded_id,null);
       assert.equal(payload.confirmation_id,undefined);assert.equal(payload.candidates,undefined);
+      assert.equal(payload.retry_allowed,undefined,'manual identity reviews do not start repeat paid requests');
       assert.equal(stub.ximilarCalls,1,'review must not trigger another paid vision request');
       assert.equal(await balance(),initial,'review is refunded exactly, including membership credits');checks++;
     }
     const normal=await h.scan(exact());
     assert.equal(normal.payload.success,true);assert.equal(normal.payload.card_name,'Pikachu','ordinary exact identity remains accepted');assert.equal(normal.payload.grounded_id,'set6-58');
     assert.equal(await balance(),billing==='membership'?initial-1:initial+1);checks++;
+    // A lost refund or durable-completion acknowledgment must never release
+    // the browser operation for another paid attempt.
+    const localFetch=globalThis.fetch;
+    for(const fault of billing==='membership'?['refund','complete']:['refund']){
+      let faultHits=0;
+      globalThis.fetch=async(input,init={})=>{
+        let args;try{args=JSON.parse(init.body||'null')}catch{}
+        if(Array.isArray(args)&&args[0]==='EVAL'){
+          const firstArg=args[3+Number(args[2])];
+          let action=firstArg;try{action=JSON.parse(firstArg).action}catch{}
+          if(action===fault){faultHits++;return Response.json({error:'ERR injected settlement unavailable'});}
+        }
+        return localFetch(input,init);
+      };
+      try{
+        const stub=exact();stub.ximilar={tcg:{miss:'invalid_response'}};
+        const {statusCode,payload}=await h.scan(stub);
+        assert.ok(faultHits>0,`${billing} ${fault}: injected failure reached the ledger`);
+        assert.equal(statusCode,503);assert.equal(payload.retry_allowed,undefined);
+        assert.notEqual(payload.code,'IDENTIFY_PROVIDER_UNAVAILABLE','uncertain settlement cannot use the legacy confirmed-refund contract');checks++;
+      }finally{globalThis.fetch=localFetch}
+    }
   }finally{h.restore();if(before===undefined)delete process.env.MEMBERSHIP_BILLING_V2;else process.env.MEMBERSHIP_BILLING_V2=before;}
 }
 assert.equal(scanIdentityReview({card_type:'pokemon',card_name:'Mega Greninja ex',set_code:'MEP',card_number:'081'}),null);checks++;
