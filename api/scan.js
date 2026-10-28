@@ -2,6 +2,7 @@ import { parseCenteringRatio, selectCenteringEvidence, finalGradeDistribution } 
 import { catalogText, matchesCatalogPrinting, uniqueCatalogMatch, ygoPrinting } from './_catalogEvidence.js';
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
+import { scanIdentityReview } from './_scanIdentityReview.js';
 import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
 import { limitingFactorContradicts } from './_limitingFactor.js';
 // PSA's published label for each whole grade. The label must follow the FINAL
@@ -159,6 +160,7 @@ export async function groundYugiohCardInfo(cardInfo) {
     if (ygoHit.name)        cardInfo.card_name = ygoHit.name;
     if (ygoHit.printingMatched && ygoHit.set_name)    cardInfo.set_name  = ygoHit.set_name;
     if (ygoHit.printingMatched && ygoHit.set_code)    cardInfo.set_code  = ygoHit.set_code;
+    if (ygoHit.printingMatched && ygoHit.set_code)    cardInfo.card_number = ygoHit.set_code;
     if (ygoHit.printingMatched && ygoHit.set_rarity && !cardInfo.rarity) cardInfo.rarity = ygoHit.set_rarity;
     if (ygoHit.printingMatched && ygoHit.image_url)   cardInfo.image_url = ygoHit.image_url;
     if (ygoHit.printingMatched && ygoHit.image_small) cardInfo.image_small = ygoHit.image_small;
@@ -1394,6 +1396,18 @@ export default async function handler(req, res) {
         }
       }
 
+      // Slabs and ambiguous promo/printing identities must not receive raw
+      // card prices or become saved inventory from the first provider guess.
+      const identityReview = scanIdentityReview(cardInfo);
+      if (identityReview) {
+        await refundCredits();
+        return res.status(200).json({ success: true, mode: 'identify', scan_id: scanId,
+          identified: false, grounded: false, grounded_id: null, card_name: '',
+          card_number: '', set_name: '', set_code: '', card_type: '',
+          confidence: 'low', source: 'ximilar', identity_review: identityReview,
+          detected_game: cardInfo.card_type, retake_hint: identityReview.message });
+      }
+
       // Multi-candidate picker path
       if (xim.needsPicker && Array.isArray(xim.candidates) && xim.candidates.length >= 2) {
         const cleanCandidates = xim.candidates.map(c => ({
@@ -1402,6 +1416,7 @@ export default async function handler(req, res) {
           is_japanese: c.is_japanese === true, rarity: c.rarity || '',
           jp_name: c.jp_name || '', language: c.language || c.lang || '',
           sport: c.sport || '', year: c.year || '', brand: c.brand || '',
+          full_name: c._ximilar_full_name || '', variant: c.variant || '',
           grounded_id: c.grounded_id || c._grounded_id || null,
         }));
         const confirmation = await offerIdConfirmation({ ...idContext, cardType: cardInfo.card_type }, cleanCandidates, freeRetry);

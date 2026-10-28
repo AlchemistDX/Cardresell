@@ -70,6 +70,7 @@ T.check(`disk: found ${present.size} suite files (floor 20)`,
  * regression suites had drifted out of the runner with nothing recording it.
  */
 const EXCLUDED = {
+  'scanner-identity-review-browser.mjs': 'Required original-photo finding regression gate: CR_CHROMIUM=<binary> node tests/scanner-identity-review-browser.mjs. Shipped single/bulk review UI, refund-result handling, exact-printing price rejection and unsupported-game recovery; synthetic services only, not a recognition benchmark.',
   'scan-text-recovery-browser.mjs': 'Required scanner recovery release gate: CR_CHROMIUM=<binary> CR_TESSERACT=<binary> node tests/scan-text-recovery-browser.mjs. Shipped single/binder OCR review, all supported game routes, cancellation, immutable identity and native OCR of synthetic crop fixtures; no paid scans.',
   'scan-recovery-routing.mjs': 'Required scanner routing release gate: node tests/scan-recovery-routing.mjs. Actual scan handler and isolated Redis verify visual game hints survive refunded misses without new identities or additional paid vision calls.',
   'core-values-browser.mjs': 'Required product-clarity gate: CR_CHROMIUM=<binary> node tests/core-values-browser.mjs. Shipped responsive UI, stale marketplace-link isolation, truthful feature labels and discoverable recovery; external/API traffic blocked.',

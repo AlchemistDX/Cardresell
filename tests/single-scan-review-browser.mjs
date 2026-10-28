@@ -17,7 +17,8 @@ try {
   const magic=mode.startsWith('magic');
   const raw=stub.ximilar.candidates.map((c,i)=>({...c,card_type:magic?'mtg':'pokemon',
     card_name:magic?'Fixture Wizard':c.card_name,is_japanese:mode.includes('japanese'),jp_name:mode.includes('japanese')?'日本語のカード':'',
-    language:mode.includes('japanese')?'ja':'en',grounded_id:'verified-'+i,_grounded_id:'verified-'+i}));
+    language:mode.includes('japanese')?'ja':'en',grounded_id:'verified-'+i,_grounded_id:'verified-'+i,
+    variant:'Variant '+i,_ximilar_full_name:'Catalogue printing '+i}));
   stub.ximilar.candidates=raw;stub.ximilar.cardInfo={...raw[0]};
   if(magic){const f=globalThis.fetch;globalThis.fetch=async(u,o)=>new URL(String(u)).hostname==='api.scryfall.com'?Response.json({},{status:404}):f(u,o)}
   const offered=(await h.scan(stub)).payload;
@@ -63,6 +64,7 @@ try {
         };
       }
     },{offered,uid:UID,mode});
+    if(mode==='magic')t.check('single choices show variant and full catalogue label',/Variant 6.*Catalogue printing 6/.test(await page.locator('#scanResult').innerText()));
     if(mode.startsWith('grade-')){
       await page.evaluate(mode=>{
         cancelScan();document.getElementById('scanOverlay').style.display='flex';
