@@ -87,7 +87,11 @@ async function identify(imageBase64, apiToken, kind, observe) {
     return { ok: false, reason: 'record_error' };
   }
 
-  if (!Array.isArray(rec._objects)) return { ok: false, reason: 'invalid_response' };
+  const invalid = responseIssue => {
+    observe?.({ responseIssue });
+    return { ok: false, reason: 'invalid_response' };
+  };
+  if (!Array.isArray(rec._objects)) return invalid('objects_missing');
   // Detection can include a Slab Label before the Card. Never identify the
   // label as the card. Older responses omitted the name on a sole object.
   const cards = rec._objects.filter(o => o?.name === 'Card' ||
@@ -105,17 +109,17 @@ async function identify(imageBase64, apiToken, kind, observe) {
   const ident = obj._identification || {};
   const best  = ident.best_match;
   if (!best?.name) return { ok: false, reason: 'no_match', gameHint };
-  if (typeof best.name !== 'string' || !best.name.trim()) return { ok: false, reason: 'invalid_response' };
+  if (typeof best.name !== 'string' || !best.name.trim()) return invalid('best_name_invalid');
 
   const alternatives = Array.isArray(ident.alternatives) ? ident.alternatives : [];
   const distances    = Array.isArray(ident.distances)    ? ident.distances    : [];
   // Scores are ordered numeric distances, not probabilities. A corrupt or
   // incomplete score must never become a confident match through JS coercion.
-  if (distances.length < alternatives.length + 1 ||
-      distances.some((d, i) => typeof d !== 'number' || !Number.isFinite(d) || d < 0 || (i && d < distances[i - 1])) ||
-      alternatives.some(a => !a || typeof a.name !== 'string' || !a.name.trim())) {
-    return { ok: false, reason: 'invalid_response' };
-  }
+  observe?.({ scoreCount: distances.length, alternativeCount: alternatives.length });
+  if (distances.length < alternatives.length + 1) return invalid('scores_missing');
+  if (distances.some(d => typeof d !== 'number' || !Number.isFinite(d) || d < 0)) return invalid('score_invalid');
+  if (distances.some((d, i) => i && d < distances[i - 1])) return invalid('scores_unordered');
+  if (alternatives.some(a => !a || typeof a.name !== 'string' || !a.name.trim())) return invalid('alternative_name_invalid');
   const dBest   = distances[0];
   const dSecond = distances[1] ?? Infinity;
   observe?.({ matchDistance: distances[0], ...(distances.length > 1 ? { matchGap: distances[1] - distances[0] } : {}) });
@@ -183,7 +187,7 @@ async function identify(imageBase64, apiToken, kind, observe) {
       // Only one plausible answer — return it as single (medium confidence)
       // A close second distance without its candidate cannot establish a
       // unique identity. Ask for a retry instead of hiding the ambiguity.
-      if (dSecond < Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25)) return { ok: false, reason: 'invalid_response' };
+      if (dSecond < Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25)) return invalid('close_candidate_missing');
       return { ok: true, cardInfo: buildCardInfo(best, dBest) };
     }
 

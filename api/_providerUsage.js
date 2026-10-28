@@ -13,6 +13,7 @@ const reasons = new Set(['http', 'empty', 'parse', 'parse_error', 'network', 'ne
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const jobStatuses = new Set(['CREATED', 'PROCESSING', 'PENDING', 'QUEUED', 'DONE', 'ERROR', 'FAILED', 'CANCELLED', 'CANCELED']);
 const httpStatus = value => Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
+const responseIssues = new Set(['objects_missing', 'best_name_invalid', 'scores_missing', 'score_invalid', 'scores_unordered', 'alternative_name_invalid', 'close_candidate_missing']);
 
 export async function observeProviderAttempt(meta, work) {
   const started = Date.now();
@@ -31,11 +32,12 @@ export async function observeProviderAttempt(meta, work) {
     // 2026-10-10: Ximilar identification match distance (lower = closer) and
     // gap to the second candidate, for threshold calibration. Numbers only.
     match_distance: null, match_gap: null,
+    response_issue: null, score_count: null, alternative_count: null,
     // Async grading: submission HTTP success is not job completion. Keep the
     // last poll separate; never log provider payloads or arbitrary status text.
     job_status: null, poll_http_status: null, poll_count: null,
   };
-  const observe = ({ status, usage, matchDistance, matchGap, jobStatus, pollStatus, polls } = {}) => {
+  const observe = ({ status, usage, matchDistance, matchGap, responseIssue, scoreCount, alternativeCount, jobStatus, pollStatus, polls } = {}) => {
     if (httpStatus(status) !== null) record.http_status = status;
     if (record.provider === 'ximilar' && record.operation === 'card_grade') {
       if (jobStatus !== undefined) record.job_status = jobStatuses.has(jobStatus) ? jobStatus : 'UNKNOWN';
@@ -45,6 +47,11 @@ export async function observeProviderAttempt(meta, work) {
     const dist = v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2 ? Math.round(v * 1000) / 1000 : null;
     if (record.provider === 'ximilar' && matchDistance !== undefined) record.match_distance = dist(matchDistance);
     if (record.provider === 'ximilar' && matchGap !== undefined) record.match_gap = dist(matchGap);
+    if (record.provider === 'ximilar' && ['tcg_id', 'sport_id'].includes(record.operation)) {
+      if (responseIssue !== undefined) record.response_issue = responseIssues.has(responseIssue) ? responseIssue : null;
+      if (scoreCount !== undefined) record.score_count = count(scoreCount);
+      if (alternativeCount !== undefined) record.alternative_count = count(alternativeCount);
+    }
     if (record.provider !== 'openai' || !usage || typeof usage !== 'object') return;
     record.prompt_tokens = count(usage.prompt_tokens);
     record.completion_tokens = count(usage.completion_tokens);
