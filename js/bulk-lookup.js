@@ -50,7 +50,8 @@
       info:{prices:{},variant:'',marketPrice:null}};
   }
   const eligible = row => row && !window._bulkProcessing && !window._bulkSaved && !window._bulkDraftBusy &&
-    !row.success && !row.providerNeedsReview && (row.definiteMiss || row.photoRejected) &&
+    !row.success && !row.identityReview && (row.providerNeedsReview
+      ? window.CardResellBulkMatchReview?.canSearch(row) : row.definiteMiss || row.photoRejected) &&
     !row._rescanning && !row._photoChecking && !row._replacementPhoto;
   function current(s) {
     return active === s && window._bulkResults === s.results && s.results.includes(s.row) &&
@@ -127,7 +128,7 @@
     if (savedSearch?.owner === s.owner && savedSearch?.file === s.file) {
       game.value=savedSearch.game; name.value=savedSearch.name; number.value=savedSearch.number;
     } else {
-      const read=window.CardResellScanTextRecovery?.suggestion(row);
+      const read=window.CardResellBulkMatchReview?.searchHint(row) || window.CardResellScanTextRecovery?.suggestion(row);
       if(read && games[read.game]) {game.value=read.game;name.value=read.name;}
     }
     const placeholders = () => {
@@ -171,7 +172,7 @@
         // condition and seller metadata remain intact; nothing is saved yet.
         const {info,...identity} = card;
         searches.delete(row);
-        Object.assign(row,identity,{catalogCard:card.catalogCard || null,success:true,manualIdentity:true,error:'',definiteMiss:false,photoRejected:false,
+        Object.assign(row,identity,{catalogCard:card.catalogCard || null,success:true,manualIdentity:true,providerNeedsReview:false,providerConfirmed:false,error:'',definiteMiss:false,photoRejected:false,
           textRescue:false,marketPrice:null,priceVariant:'',priceSource:null,tcgplayerUrl:'',unavailableReason:''});
         window._scanApplyFinishReview?.(row,info);
         close();

@@ -31,6 +31,29 @@
       (window._bulkResults || []).includes(s.row) && s.row.file === s.file && !window._bulkSaved;
   }
   const locked = row => { const s = states.get(row); return !!s && current(s) && (s.busy || s.uncertain); };
+  const canSearch = row => { const s = states.get(row); return !!s && current(s) && !row.success && !s.busy && !s.uncertain; };
+  function searchHint(row) {
+    if (!canSearch(row)) return null;
+    const candidates = states.get(row).offer?.candidates || [];
+    const same = key => candidates.length && candidates.every(c=>label(c[key]).trim().toLowerCase()===label(candidates[0][key]).trim().toLowerCase());
+    return {name:same('card_name') ? label(candidates[0].card_name) : '',
+      game:same('card_type') ? label(candidates[0].card_type) : ''};
+  }
+  function searchOther(s) {
+    if (!canSearch(s.row) || window._bulkProcessing || window._bulkDraftBusy) return;
+    close(); window.CardResellBulkLookup?.open(s.row.rowId);
+  }
+  function sameNumber(a, b, game) {
+    const normalize = value => String(value || '').normalize('NFKC').trim().toLowerCase();
+    const left=normalize(a), right=normalize(b);
+    if (left===right) return true;
+    const pattern=/^(\d+)(?:\/(\d+))?$/;
+    const l=pattern.exec(left), r=pattern.exec(right);
+    if (!l || !r) return false;
+    if ((l[2] || r[2]) && !['pokemon','pokemonjp','lorcana'].includes(game)) return false;
+    const digits=s=>s.replace(/^0+(?=\d)/,'');
+    return digits(l[1])===digits(r[1]) && (!l[2] || !r[2] || digits(l[2])===digits(r[2]));
+  }
   function guardClose() {
     if (!(window._bulkResults || []).some(locked)) return false;
     window.showToast?.('Finish checking your selected match before closing this batch.');
@@ -74,6 +97,7 @@
     if (s && !s.invalid && !s.terminal) button(s.attempt ? 'Check confirmation' : 'Review matches',actions,()=>open(row.rowId));
     else button('Scan photo again · up to 1 credit',actions,()=>window.bulkRetryRow?.(row.rowId));
     if (!locked(row)) {
+      if (s && canSearch(row)) button('Search other printings · free',actions,()=>searchOther(s));
       if (s) button('Choose new photo',actions,()=>retake(s));
       button('Remove from batch',actions,()=>window.bulkRemoveResult?.(row.rowId));
     }
@@ -126,6 +150,7 @@
         node('strong',label(c.card_name),b,{style:'display:block;overflow-wrap:anywhere'});
         node('span',[label(c.set_name) || label(c.set_code), c.card_number ? '#'+c.card_number : '', c.is_japanese ? 'Japanese' : '', label(c.year), label(c.sport), label(c.variant), label(c.full_name)].filter(Boolean).join(' · '),b,{style:'display:block;color:#cbd5e1;overflow-wrap:anywhere'});
       }
+      button('Search other printings · free',area,()=>searchOther(s));
       button('None of these match · choose new photo',area,()=>retake(s));
       return;
     }
@@ -214,7 +239,7 @@
         // choice must not inherit that other card's price or artwork.
         const normalize = value => String(value || '').trim().toLowerCase();
         if (!info.matchedSet || !info.matchedNumber || normalize(info.matchedSet)!==normalize(row.setName) ||
-            normalize(info.matchedNumber)!==normalize(row.cardNumber)) return;
+            !sameNumber(info.matchedNumber,row.cardNumber,row.cardType)) return;
         row.marketPrice=info.marketPrice;row.priceVariant=info.variant;row.imageUrl=info.imageUrl;row.tcgplayerUrl=info.tcgplayerUrl;
         row.unavailableReason=info.unavailableReason||'';if(info.marketPrice!=null)row.priceSource='comp';
         window._scanApplyFinishReview?.(row,info);refresh(s);
@@ -232,6 +257,6 @@
       expired = true; clearTimeout(timeout); clearInterval(watch); s.busy = false; refresh(s);
     }
   }
-  window.CardResellBulkMatchReview = {stage,render,open,close,locked,guardClose,guardSave,
+  window.CardResellBulkMatchReview = {stage,render,open,close,locked,guardClose,guardSave,canSearch,searchHint,
     blocksRescan:row=>locked(row) || row?.providerNeedsReview && !(states.get(row)?.invalid || states.get(row)?.terminal || states.get(row)?.retake)};
 })();
