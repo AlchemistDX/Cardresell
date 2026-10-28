@@ -72,8 +72,8 @@ try{for(const width of [320,390,844,1280]){
  check(await page.evaluate(()=>{const r=_bulkResults[0];return _bulkDupKey(r)!==_bulkDupKey({...r,isJapanese:true})&&_bulkDupKey(r)!==_bulkDupKey({...r,priceVariant:'reverseHolofoil'})&&_bulkDupKey(r)!==_bulkDupKey({...r,conditionChosen:true,condition:'LP'})&&_bulkDupKey({...r,cardNumber:''})!==_bulkDupKey({...r,cardNumber:'',scanUid:'other'})}),'language, finish, condition and incomplete identities are not merged');
  await page.evaluate(()=>{_bulkResults=keptResults;_bulkClearDupBanner()});
  check(await page.locator('#bulkCreateDraftsBtn').isVisible(),'completion rebuild keeps listing drafts in the primary row');
- check(!await page.locator('#bulkCompareSellingBtn').isVisible(),'comparison is collapsed initially');
- await page.locator('#bulkMoreActions summary').click();check(await page.locator('#bulkCompareSellingBtn').isVisible(),'comparison available under More actions');await page.locator('#bulkMoreActions summary').click();
+ check(await page.locator('#bulkCompareSellingBtn').isVisible(),'comparison is visible immediately after the batch completes');
+ check(await page.locator('#bulkCompareSellingBtn').evaluate(el=>!el.closest('details')),'fee comparison is a primary action, outside More actions');
  await page.evaluate(()=>{_bulkStartPackCost=12;bulkAddAllToCollection()});check(await page.evaluate(()=>savedRows.length===2&&savedCosts[0]===4&&savedCosts[1]===4),'save reuses upfront cost per physical copy without cost sheet');
  await page.evaluate(()=>{_bulkStartPackCost=0;bulkAddAllToCollection()});check(await page.evaluate(()=>savedCosts[0]===null&&savedCosts[1]===null),'blank upfront cost remains unknown');
  await page.evaluate(()=>{_bulkProcessing=true;_bulkDraftSel=['a'];_bulkUpdatePackTracker()});check(await page.locator('#bulkPackTrackerAmt').textContent()==='$120.00','running total covers all cards even with a previous selection');check(!await page.locator('#bulkSelectedValue').isVisible(),'selection details hidden while scanning');
@@ -83,7 +83,6 @@ try{for(const width of [320,390,844,1280]){
  check(await page.locator('#bulkAddAllBtn').isVisible()&&await page.locator('#bulkCreateDraftsBtn').isVisible(),'collection and listing drafts stay available');
  if(process.env.CR_SHOT_DIR)await page.screenshot({path:process.env.CR_SHOT_DIR+'/bulk-results-'+width+'.png'});
  await page.evaluate(()=>{bulkDraftToggleRow('a')});check(await page.locator('#bulkPackTrackerAmt').textContent()==='$20.00','selected total is the main number');check((await page.locator('#bulkSelectedValue').textContent()).includes('$120.00'),'all-card value remains available for a partial selection');
- await page.locator('#bulkMoreActions summary').click();
  await page.locator('#bulkCompareSellingBtn').click();check((await page.locator('#sellingPlanSummary').textContent()).includes('2 selected cards'),'bulk comparison consumes selected rows');
  check((await page.locator('#sellingPlanResults').textContent()).includes('Best estimated venue for all singles'),'single venue recommendation visible');
  await page.keyboard.press('Tab');check(await page.evaluate(()=>!!document.activeElement.closest('#sellingPlan')),'Tab stays inside planner');

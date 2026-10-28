@@ -91,3 +91,23 @@ These counts measure this small batch, not general recognition accuracy. The ori
 The follow-up implements that numeric comparison for Pokémon and Lorcana totals, preserving exact set equality and rejecting conflicting totals and suffixes. Unconfirmed provider review now exposes **Search other printings · free**, with the common name/game prefilled but no guessed card number. The existing catalogue path requires explicit printing selection and keeps the original photo, copy identifiers, quantity, condition and cost. It cannot bypass an in-flight or uncertain paid confirmation, or a slab/promo identity safeguard.
 
 Verification passed: **660 bulk-review browser checks** with real confirmation handlers and isolated credit ledgers, **100 catalogue-recovery browser checks**, **285 immutable-asset checks**, the configured build and whitespace validation. The complete 172-slot local runner passed all **170 enabled suites**, including the condition-applicability browser gate. Real-store writes and production HTTP smoke were explicitly excluded. The fixture corrections preserve authoritative catalogue numbering and intercept Lorcana catalogue HTTP; no live provider or account calls occur in these tests. Original-photo acceptance of these final frontend changes remains to be recorded after production deployment.
+
+## Live acceptance after PR #147
+
+Production `532a9d04f5aa8c524aba1c7a0af326c49e9048cb` deployed as `dpl_ExXNQAJcm9YBphtKsffHwqu4q83e`. Both changed frontend assets matched their tested bytes on the public site. Live HTTP checks returned **17 passed, 1 degraded, 0 failed**; individual eBay sold comparisons remain unavailable.
+
+A fresh three-photo batch used the original Dusclops, Mimikyu and Make the Potion fronts. All three initially reached review with their ID credits refunded. The free catalogue action found Mimikyu **Paldean Fates #037** after explicit selection; it remains unpriced rather than borrowing another printing's price. Correct provider choices confirmed Dusclops **Vivid Voltage #70**, now displaying **$0.13 Normal**, and Make the Potion **Ursula's Return #94**, displaying **$0.04 Normal**. Those two confirmations changed the authoritative account balance from **382 to 380**; Mimikyu recovery cost no credit. No inventory, draft or listing was created.
+
+Across the 14 originals, the final accepted identities are **5 automatic + 3 confirmed provider choices + 1 free manual catalogue recovery**. Four protected reviews and one unsupported game remain. This does not establish general recognition accuracy or exact finish/condition valuation. Items 1 and the software portion of the earlier required follow-up are complete; phone/export acceptance, variant review, provider cost reconciliation and a small seller pilot remain.
+
+## Completed-batch credit display
+
+The three-photo run also exposed a display race: the completed batch showed **381** while a fresh account panel correctly showed **382** after all refunds. Both showed **380** after the two confirmations. The transport's asynchronous account read could finish after the last batch worker painted its label.
+
+The workflow now repaints the same batch when the existing authoritative credit read settles. It uses the account reader's validated total, including paid and free credits once, and adds no scan, debit or network request. Responses for an older queue or another account cannot repaint the batch; an unavailable read is labeled unavailable rather than shown as a numeric balance.
+
+The shipped-browser workflow gate passed **206 checks**, including delayed and out-of-order balances, zero and singular balances, failed reads, queue changes, account changes, and no additional scan/debit requests.
+
+## Bulk fee-comparison entry point
+
+Final live acceptance found the batch comparison button still nested under More actions, even though the comparison dialog itself was simplified. The final change moves Compare selling options into the main results controls in both the initial markup and the reset template. Card selection still scopes the comparison; it does not change prices or saved inventory. Existing browser coverage now requires the comparison to be visible before opening More actions and after rebuilding the action bar, across phone, landscape and desktop sizes.
