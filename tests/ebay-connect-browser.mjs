@@ -24,6 +24,8 @@ try {
   await page.evaluate(async()=>{available=true;await CardResellEbayConnect.mount(true)});await page.locator('#ebayConnectionBtn').click();
   const dialog=page.locator('#ebayConnectDialog');await dialog.getByRole('button',{name:'Continue to eBay',exact:true}).waitFor();
   check((await dialog.textContent()).includes('read-only')&&(await dialog.textContent()).includes('not enabled'),'scope and publishing status stated clearly');
+  check((await dialog.textContent()).includes('does not unlock sold-price data'),'connection does not promise sold comps');
+  check((await dialog.textContent()).includes('without connecting'),'manual CSV export is independent of connection');
   await dialog.getByRole('button',{name:'Continue to eBay',exact:true}).click();await page.waitForFunction(()=>[...document.querySelectorAll('#ebayConnectDialog [role=alert]')].some(n=>n.textContent.includes('link could not be confirmed')));
   check(page.url().startsWith('http://127.0.0.1'),'untrusted redirect cannot leave app');
   await dialog.getByRole('button',{name:'Close',exact:true}).click();await page.evaluate(()=>pending=true);await page.locator('#ebayConnectionBtn').click();await dialog.getByRole('button',{name:'Confirm eBay connection',exact:true}).waitFor();

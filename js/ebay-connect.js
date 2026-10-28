@@ -34,7 +34,8 @@
     const dialog=el('dialog');dialog.id='ebayConnectDialog';dialog.className='ebay-connect';dialog.setAttribute('aria-labelledby','ebayConnectTitle');
     const state={dialog,owner:owner(),closed:false,busy:false,returnFocus:document.activeElement};active=state;
     const header=el('header'),title=el('h2','eBay seller connection');title.id='ebayConnectTitle';header.append(title,button('Close',()=>dialog.close()));dialog.append(header);
-    dialog.append(el('p','Check your eBay seller registration, policies, and inventory locations. This connection is read-only. Listing publication and automatic inventory sync are not enabled.'));
+    dialog.append(el('p','This optional, read-only connection checks your eBay seller registration, policies, and inventory locations. Draft review can reuse your selected selling settings.'));
+    dialog.append(el('p','Connecting does not unlock sold-price data. Direct publishing and automatic sales or inventory sync are not enabled. You can download draft CSVs and upload them in Seller Hub without connecting.'));
     const status=el('p','Checking connection…');status.setAttribute('role','status');dialog.append(status);
     // The return result is independent of errors from refreshing account status.
     // Keep it visible until a fresh authorization or confirmation succeeds.
