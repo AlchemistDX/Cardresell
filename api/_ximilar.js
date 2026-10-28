@@ -113,16 +113,22 @@ async function identify(imageBase64, apiToken, kind, observe) {
 
   const alternatives = Array.isArray(ident.alternatives) ? ident.alternatives : [];
   const distances    = Array.isArray(ident.distances)    ? ident.distances    : [];
-  // Scores are ordered numeric distances, not probabilities. A corrupt or
-  // incomplete score must never become a confident match through JS coercion.
+  // Distances belong to best_match followed by each alternative. Live results
+  // can contain an unsorted tail; never sort scores away from their candidates
+  // or assume the first alternative is the nearest competitor.
   observe?.({ scoreCount: distances.length, alternativeCount: alternatives.length });
   if (distances.length < alternatives.length + 1) return invalid('scores_missing');
   if (distances.some(d => typeof d !== 'number' || !Number.isFinite(d) || d < 0)) return invalid('score_invalid');
-  if (distances.some((d, i) => i && d < distances[i - 1])) return invalid('scores_unordered');
   if (alternatives.some(a => !a || typeof a.name !== 'string' || !a.name.trim())) return invalid('alternative_name_invalid');
+  if (distances.some((d, i) => i && d < distances[i - 1])) observe?.({ responseIssue: 'scores_unordered' });
   const dBest   = distances[0];
-  const dSecond = distances[1] ?? Infinity;
-  observe?.({ matchDistance: distances[0], ...(distances.length > 1 ? { matchGap: distances[1] - distances[0] } : {}) });
+  const dSecond = distances.slice(1).reduce((nearest, d) => Math.min(nearest, d), Infinity);
+  observe?.({ matchDistance: dBest, ...(Number.isFinite(dSecond) ? { matchGap: Math.max(0, dSecond - dBest) } : {}) });
+  const closeLimit = Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25);
+  // Some documented responses have more distances than named alternatives.
+  // A close unnamed competitor must not disappear from an automatic decision
+  // or a supposedly complete set of choices, even when another choice exists.
+  if (distances.slice(alternatives.length + 1).some(d => d < closeLimit)) return invalid('close_candidate_missing');
 
   // Extract card-tag signals for cardInfo enrichment
   const tags = obj._tags || {};
@@ -186,14 +192,15 @@ async function identify(imageBase64, apiToken, kind, observe) {
     // Build 2-3 candidates: top + close alternatives (within 0.2 of top)
     const closeAlts = alternatives
       .map((a, i) => ({ ...a, dist: distances[i + 1] }))
-      .filter(a => a.dist < Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25))
+      .filter(a => a.dist < closeLimit)
+      .sort((a, b) => a.dist - b.dist)
       .slice(0, 2);
 
     if (closeAlts.length === 0) {
       // Only one plausible answer — return it as single (medium confidence)
       // A close second distance without its candidate cannot establish a
       // unique identity. Ask for a retry instead of hiding the ambiguity.
-      if (dSecond < Math.min(DIST_MEDIUM_CONF + 0.1, dBest + 0.25)) return invalid('close_candidate_missing');
+      if (dSecond < closeLimit) return invalid('close_candidate_missing');
       return { ok: true, cardInfo: buildCardInfo(best, dBest) };
     }
 

@@ -85,6 +85,24 @@ window.cardResellScanRequest = async function (url, options) {
     current();
     const buffered = new Response([204, 205, 304].includes(response.status) ? null : responseBytes,
       { status: response.status, statusText: response.statusText, headers: response.headers });
+    // Retain uncertain/charged requests for recovery, but a confirmed refunded
+    // identification failure must not replay forever on the next user attempt.
+    // This only retires the local key; it never sends an automatic paid retry.
+    // The legacy provider-error contract also follows an awaited refund, so
+    // failures journaled before retry_allowed existed can recover after deploy.
+    if (!body.mode || body.mode === 'identify') {
+      try {
+        const result = await buffered.clone().json();
+        const legacyProviderFailure = buffered.status === 503 &&
+          result.code === 'IDENTIFY_PROVIDER_UNAVAILABLE' && !result.billing_reference;
+        const confirmedRefund = result.retry_allowed === true && result.credits_charged === 0 &&
+          result.identified === false && !result.card_name && !result.needsPicker && !result.identity_review;
+        if ((legacyProviderFailure || confirmedRefund) && !result.billing_reference &&
+            !['scan_intent_pending', 'billing_reconciliation_required'].includes(result.code) &&
+            sessionStorage.getItem(key) === operation) sessionStorage.removeItem(key);
+      } catch (_) { /* Keep recovery on malformed JSON or unavailable storage. */ }
+    }
+    current();
     // The response is durable before refreshing the server-owned balances.
     // A refresh failure must never turn a completed scan into a retry.
     try { Promise.resolve(window.loadSettingsScanCredits?.()).catch(() => {}); } catch (_) {}

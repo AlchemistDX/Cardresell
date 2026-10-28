@@ -1247,6 +1247,7 @@ export default async function handler(req, res) {
           error: 'Card identification is temporarily unavailable. Please try again.',
           code: 'IDENTIFY_PROVIDER_UNAVAILABLE',
           provider_reason: xim.reason || 'unknown',
+          retry_allowed: true, credits_charged: 0,
         });
       }
       console.log('[scan] ximilar miss (' + xim.reason + ') — returning unidentified; no GPT fallback');
@@ -1255,6 +1256,7 @@ export default async function handler(req, res) {
         mode: 'identify',
         scan_id: scanId,
         identified: false,
+        retry_allowed: true, credits_charged: 0,
         confidence: 'low',
         image_quality: 'unknown',
         glare_regions: [],

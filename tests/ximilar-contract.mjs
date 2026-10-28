@@ -89,9 +89,41 @@ try {
     const c = match(); c._identification.distances = [bad];
     const r = await run([c]); assert.equal(r.ok, false); assert.equal(r.reason, 'invalid_response');
   });
-  for (const ds of [[0.1, -0.1], [0.2, 0.1], [0.1, '0.9'], [0.1]]) await test(`invalid alternative distances ${JSON.stringify(ds)}`, async () => {
+  for (const ds of [[0.1, -0.1], [0.1, '0.9'], [0.1]]) await test(`invalid alternative distances ${JSON.stringify(ds)}`, async () => {
     const c = match(); c._identification.alternatives = [{ ...c._identification.best_match, set: 'Other set' }]; c._identification.distances = ds;
     const r = await run([c]); assert.equal(r.ok, false); assert.equal(r.reason, 'invalid_response');
+  });
+  await test('unsorted distant alternatives do not reject a unique strong match', async () => {
+    const c = match(); c._identification.distances = [.1, .9, .8, .95, .85];
+    c._identification.alternatives = ['A','B','C','D'].map(set => ({...c._identification.best_match,set}));
+    const r = await run([c]); assert.equal(r.ok,true); assert.equal(r.needsPicker,undefined);
+    assert.equal(r.cardInfo.set_name,'Magic 2010'); assert.equal(r.cardInfo._ximilar_dist,.1);
+  });
+  await test('a later close competitor blocks automatic identity and retains its score', async () => {
+    const c = match(); c._identification.distances = [.2, .9, .24, .22, .8];
+    c._identification.alternatives = ['Far A','Close B','Close C','Far D'].map(set => ({...c._identification.best_match,set}));
+    const r = await run([c]); assert.equal(r.needsPicker,true);
+    assert.deepEqual(r.candidates.map(x=>[x.set_name,x._ximilar_dist]),[['Magic 2010',.2],['Close C',.22],['Close B',.24]]);
+  });
+  await test('an alternative better than best_match requires review, never an automatic promotion', async () => {
+    const c = match(); c._identification.distances = [.2,.1];
+    c._identification.alternatives = [{...c._identification.best_match,set:'Other set'}];
+    const r = await run([c]); assert.equal(r.needsPicker,true);
+    assert.deepEqual(r.candidates.map(x=>[x.set_name,x._ximilar_dist]),[['Magic 2010',.2],['Other set',.1]]);
+  });
+  for (const distances of [[.1,.9,.12],[.3,.31,.32]]) await test('missing close candidate remains rejected '+distances,async()=>{
+    const c=match();c._identification.distances=distances;
+    c._identification.alternatives=[{...c._identification.best_match,set:'Named alternative'}];
+    const r=await run([c]);assert.equal(r.ok,false);assert.equal(r.reason,'invalid_response');
+  });
+  await test('distant unnamed scores do not invent alternatives',async()=>{
+    const c=match();c._identification.distances=[.1,.9,.8];
+    const r=await run([c]);assert.equal(r.ok,true);assert.equal(r.needsPicker,undefined);
+  });
+  await test('weak best_match is not rescued automatically by a better alternative',async()=>{
+    const c=match();c._identification.distances=[.6,.1];
+    c._identification.alternatives=[{...c._identification.best_match,set:'Other set'}];
+    assert.equal((await run([c])).reason,'low_confidence');
   });
   await test('candidate owns its distance; no uncalibrated percentage or photo-quality claim', async () => {
     const c = match(); c._identification.distances = [0.3, 0.4];
