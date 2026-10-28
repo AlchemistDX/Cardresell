@@ -57,7 +57,7 @@ export function printedCandidates(catalog, game, text) {
       const parts = String(row[3]).split('/').map(num);
       return ratios.some(([n,total]) => n === parts[0] && (!parts[1] || total === parts[1]));
     }
-    if (!token(text.replace(/[‐‑–—]/g,'-'), row[3])) return false;
+    if (!token(text.replace(/[‐‑–—]/g,'-').replace(/\s*-\s*/g,'-'), row[3])) return false;
     if (game === 'onepiece' && /^P-/i.test(row[3])) {
       // A promo code is reused across events. Only a named printed event can
       // distinguish it; a base promo or unspecified artwork is never enough.
@@ -90,7 +90,8 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
         const total = String(data.cardCount?.official || '');
         if (!total || !new RegExp('/\\s*0*'+escape(total)+'\\b').test(evidence.text)) return;
         if (abbreviation) {
-          if (!token(evidence.text, abbreviation)) return;
+          // OCR often joins the adjacent printed set and language boxes.
+          if (!token(evidence.text, abbreviation) && !token(evidence.text, abbreviation + 'EN')) return;
         } else {
           // Older cards have a symbol instead of a set abbreviation. Require
           // independent visual agreement as well as the printed name/ratio.
@@ -124,8 +125,14 @@ export function resolveSlabEvidence(visual, evidence) {
   const text = label._ocr?.full_text;
   console.info('[scan-evidence]', JSON.stringify({stage:'slab_label',hasDetails:!!details,hasText:typeof text === 'string',labelCount:evidence.labels.length,choices:1+(visual.candidates?.length || 0)}));
   const company = label._tags?.Company?.[0] || label._tags?.Category?.[0];
-  if (!details || typeof text !== 'string' || !['PSA','BECKETT','CGC','SGC','TAG','ACE'].includes(company?.name) || !Number.isFinite(company.prob) || company.prob < .95) return null;
-  const grade = String(details.grade || ''), cert = String(details.certificate_number || '');
+  if (typeof text !== 'string' || !['PSA','BECKETT','CGC','SGC','TAG','ACE'].includes(company?.name) || !Number.isFinite(company.prob) || company.prob < .95) return null;
+  // Some OCR responses omit structured identification. PSA's printed verbal
+  // grade plus one unique eight-digit certificate can supply those two fields;
+  // identity still has to agree with the visual catalogue match below.
+  const printedGrades = company.name === 'PSA' ? [...text.matchAll(/(?:GEM\s*(?:MT|MINT)|MINT|NM\s*[-–]?\s*MT|NEAR\s*MINT|EX\s*[-–]?\s*MT|EXCELLENT|VERY\s*GOOD|GOOD|FAIR|POOR)\s*(10|[1-9])(?=$|[^0-9.])/gi)].map(m=>m[1]) : [];
+  const printedCerts = company.name === 'PSA' ? [...text.matchAll(/(?:^|\D)(\d{8})(?=$|\D)/g)].map(m=>m[1]) : [];
+  const uniqueGrade = new Set(printedGrades), uniqueCert = new Set(printedCerts);
+  const grade = String(details?.grade || (uniqueGrade.size === 1 ? printedGrades[0] : '')), cert = String(details?.certificate_number || (uniqueCert.size === 1 ? printedCerts[0] : ''));
   if (!/^(?:[1-9](?:\.5)?|10)$/.test(grade) || !/^\d{6,14}$/.test(cert) || !token(text, cert) || !token(text, grade)) return null;
   if (company.name === 'PSA' && grade.includes('.')) return null;
   const choices = [visual.cardInfo,...(visual.candidates || [])].filter(Boolean);
