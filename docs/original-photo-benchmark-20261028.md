@@ -38,7 +38,7 @@ Prices above are observed test outputs, not current valuations or endorsements o
 
 Focused controlled tests passed: 39 provider-adapter cases, 27 real-handler/isolated-ledger routing checks including legacy free/paid and membership refunds, and 150 shipped-browser checks at 320px, 390px and 1280px. Browser checks include free manual handoff, no accepted raw identity, no inventory/draft writes, escaped provider text, unsupported-game handling and rejection of wrong-printing prices. Additional browser gates passed: 476 bulk confirmation checks with real isolated ledgers, 134 single-scan review checks, 135 bulk retry checks, 62 text-recovery checks and 17 condition-applicability checks. The configured build and immutable-asset validation passed. The full local runner completed with one failing suite: two obsolete assertions required the removed Yu-Gi-Oh name-wide fallback. After replacing those assertions with execution of the shipped exact-printing lookup, all 187 deeplink checks passed; asset and affected browser checks were rerun successfully. Together with the separate condition-applicability run, 170 of 172 registered suites have passing coverage. The real-store and production HTTP smoke gates were excluded from the local run; post-deployment results are recorded separately.
 
-**Original-photo acceptance of the safeguards is still pending.** The first session ended when the browser service timed out during fresh uploads and also failed its recovery calls. Controlled responses verify application handling; they do not prove that the provider will detect every slab or distinguish a particular photographed promo.
+The first acceptance session ended when the browser service timed out during fresh uploads and also failed its recovery calls. Controlled responses verify application handling; they do not prove that the provider will detect every slab or distinguish a particular photographed promo. The later live run below supersedes the pending status for these 14 supplied originals.
 
 ## Diagnostic continuation
 
@@ -54,9 +54,40 @@ Focused tests passed: **45 provider-contract checks, 61 transport/recovery check
 
 ## Required follow-up before advertising
 
-1. Fresh production scans of all 14 originals, prioritizing Dusclops, Mimikyu, both slabs, Luffy, Blitzclique and the unresolved review receipts. Capture bounded diagnostic reasons for the two malformed-response failures before changing validation.
+1. Complete the follow-up price-number normalization and free catalogue recovery, then verify those paths on original photographs. Mimikyu's exact Paldean Fates printing was absent from its three provider choices; never accept a different set to improve a success count.
 2. Exact finish/printing review, particularly reverse holo Applin, Luffy's anniversary artwork, sports parallels and slab label grade. Avoid treating a base-price estimate as proof of the photographed variant's value.
 3. Real-phone save/reload and draft/export acceptance with confirmed identities; a real Seller Hub CSV import and inspection of its validation report.
 4. Reconcile provider invoices, allowances and retry usage with credit revenue. Complete a small seller pilot before broader advertising.
 
 See [launch readiness](launch-readiness-20261027.md) for fee comparison, sourced ranges, draft guidance and eBay capability boundaries. Those features remain shipped; market-wide individual sold comparisons and direct publishing are still unavailable.
+
+## Live acceptance after PR #146
+
+Production commit `c0e121ee940cc0e04f55f265a29aa1069ca33ff3` deployed as `dpl_GfKRSw5JJYMtKqZKGJnABPHvt1WL`. The production homepage references `scan-request.855dc932.js`, and its served bytes match the tested source. The live HTTP smoke check returned **17 passed, 1 degraded, 0 failed**; the degraded check is the unavailable individual eBay sold-comps feed.
+
+All 14 original front photos were uploaded in a fresh signed-in tab. Provider calls ran approximately **13:42:49–13:43:08 UTC**. The initial UI result was **5 identified, 8 needing review and 1 unsupported**, with 390 → 385 visible credits. Two unordered-score responses now reached review successfully. Selecting the correct Dusclops, Applin and Make the Potion printings completed their fresh confirmations, giving **8 accepted identities and 382 visible credits**. Mimikyu was not confirmed because none of its three choices matched. No customer inventory, draft or listing was created.
+
+| Original | Post-deployment outcome |
+| --- | --- |
+| Dusclops 070/185 | Vivid Voltage #070 offered and successfully confirmed. Price missing in UI even though the public price route returns Vivid Voltage #070/185, normal $0.11. |
+| Applin 012/142 | Stellar Crown #12 confirmed. Explicit Reverse Holofoil selection changed the base $0.23 estimate to $0.32. |
+| Mimikyu 037/091 | Review offered Paldea Evolved #97, Trick or Trade 2024 #37 and Trick or Trade 2023 #97. Correct Paldean Fates printing absent; left unaccepted. |
+| Luffy P-043 anniversary | Free promo/event review. The previous wrong Dreamhack printing was not accepted. |
+| Blitzclique CORI-EN051 | Free printing review. No name-wide price or invented collector number accepted. |
+| Mega Greninja ex MEP 081 | Correct automatic identity again; bulk estimate $0.76 Holofoil. |
+| Eager Glyphmage SOS 0011 | Correct identity, $0.14 foil estimate. |
+| Stadium Tidalmage SOS 0232 | Correct identity, $0.07 normal estimate. |
+| Charizard PSA 9 | Slab detected; free grade/printing review. No raw-card price accepted. |
+| Noi 119/204 | Correct Ursula's Return identity, $0.11 normal estimate. |
+| Make the Potion 94/204 | Correct Ursula's Return #94 confirmed before receipt expiry. Price missing in UI even though public route returns #94/204, normal $0.04. |
+| Satoru Gojo | Explicit unsupported-game result, no Pokémon OCR substitution. |
+| LeBron PSA 9 | Slab detected; free grade/printing review. No raw-card price accepted. |
+| Josh Sweat Prizm #4 | Correct identity; explicitly unpriced sports research remains. |
+
+These counts measure this small batch, not general recognition accuracy. The original two provider-error cases no longer return an infrastructure failure, but Mimikyu still requires another exact-printing route. The next change normalizes numeric collector numbers with optional printed totals without relaxing set equality, and provides free catalogue recovery for unconfirmed provider choices. Pending or uncertain paid confirmations must remain locked to their original receipt.
+
+## Reviewed-price and missing-printing recovery
+
+The follow-up implements that numeric comparison for Pokémon and Lorcana totals, preserving exact set equality and rejecting conflicting totals and suffixes. Unconfirmed provider review now exposes **Search other printings · free**, with the common name/game prefilled but no guessed card number. The existing catalogue path requires explicit printing selection and keeps the original photo, copy identifiers, quantity, condition and cost. It cannot bypass an in-flight or uncertain paid confirmation, or a slab/promo identity safeguard.
+
+Verification passed: **660 bulk-review browser checks** with real confirmation handlers and isolated credit ledgers, **100 catalogue-recovery browser checks**, **285 immutable-asset checks**, the configured build and whitespace validation. The complete 172-slot local runner passed all **170 enabled suites**, including the condition-applicability browser gate. Real-store writes and production HTTP smoke were explicitly excluded. The fixture corrections preserve authoritative catalogue numbering and intercept Lorcana catalogue HTTP; no live provider or account calls occur in these tests. Original-photo acceptance of these final frontend changes remains to be recorded after production deployment.

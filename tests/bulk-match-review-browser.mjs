@@ -17,7 +17,7 @@ const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args
 async function until(fn) { for(let i=0;i<400;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error('request did not reach test boundary') }
 try {
  for(const billing of ['legacy','membership']) {
-  for(const mode of ['cancel','retake','success','lost-after-commit','lost-auth','expired','no-credits','account','batch','scan-account','token-account','token-timeout','invalid-offer','malformed','wrong-price','late-price','magic']) {
+  for(const mode of ['cancel','retake','success','lost-after-commit','lost-auth','expired','no-credits','account','batch','scan-account','token-account','token-timeout','invalid-offer','malformed','wrong-price','late-price','magic','catalogue','number-total','wrong-total','number-suffix','lorcana-total']) {
    const prefix=billing+'/'+mode;
    const h=billingHarness({bucket:'free',balance:4});
    if(billing==='membership') {
@@ -28,6 +28,17 @@ try {
    const balance=async()=>billing==='membership'?(await consume('snapshot',{owner:UID,receipt:'0'.repeat(64),scan:'read-only',mode:'identify'})).monthly:30-Number(h.store.get(freeKey()));
    const stub=ambiguous();
    stub.ximilar.candidates=stub.ximilar.candidates.map((c,i)=>({...c,variant:'Variant '+i,_ximilar_full_name:'Catalogue printing '+i}));
+   if(mode==='wrong-total'){
+    stub.ximilar.candidates=stub.ximilar.candidates.map(c=>({...c,card_number:'58/100'}));
+    stub.catalog=stub.catalog.map(c=>({...c,number:'58/100'}));
+   }
+   if(mode==='lorcana-total'){
+    stub.ximilar.cardInfo.card_type='lorcana';stub.ximilar.cardInfo.card_name='Fixture Potion';
+    stub.ximilar.candidates=stub.ximilar.candidates.map(c=>({...c,card_type:'lorcana',card_name:'Fixture Potion'}));
+    const fixtureFetch=globalThis.fetch;
+    globalThis.fetch=async(input,init)=>new URL(String(input?.url||input)).hostname==='api.lorcana-api.com'
+      ?Response.json([]):fixtureFetch(input,init);
+   }
    if(mode==='magic') {
     stub.ximilar.cardInfo.card_type='mtg';stub.ximilar.cardInfo.card_name='Fixture Wizard';
     stub.ximilar.candidates=stub.ximilar.candidates.map(c=>({...c,card_type:'mtg',card_name:'Fixture Wizard'}));
@@ -47,10 +58,12 @@ try {
     if(['api.pokemontcg.io','api.scryfall.com'].includes(u.hostname)) {
      priceUrls.push(u.href);priceRequests++;if(mode==='late-price')await new Promise(r=>{priceHold=r});
      if(u.hostname==='api.scryfall.com')return json({data:[{name:'Fixture Wizard',set_name:'set6',set:'set6',collector_number:'58',finishes:['nonfoil','foil'],prices:{usd:'7',usd_foil:'9'}}]});
-     const cards=mode==='wrong-price'?[catalogue[0]]:catalogue;
+     const cards=mode==='wrong-price'?[catalogue[0]]:catalogue.map(c=>({...c,number:
+       mode==='number-total'?'00058/185':mode==='wrong-total'?'58/101':mode==='number-suffix'?'58a':c.number}));
      return json({data:u.pathname.split('/').length>3?(mode==='wrong-price'?cards[0]:cards.find(c=>u.pathname.endsWith('/'+c.id))):cards});
     }
     if(u.origin!==ORIGIN)return route.abort('blockedbyclient');
+    if(u.pathname==='/api/tcg-price'&&mode==='lorcana-total')return json({market:7,setName:'set6',cardNumber:'058/204',variant:'normal',allVariants:{normal:7}});
     if(u.pathname==='/api/scan'){scanCalls++;if(mode==='scan-account')await new Promise(r=>{scanHold=r});return json(scanCalls>1?(await h.scan(stub)).payload:mode==='invalid-offer'?{...offered,confirmation_id:''}:offered)}
     if(u.pathname==='/api/scan-debit-id') {
      calls.push({body:req.postDataJSON(),raw:req.postData()});
@@ -133,6 +146,21 @@ try {
      t.check(prefix+': cancel has zero acceptance, debit or inventory',calls.length===0&&await balance()===initial&&await page.evaluate(()=>!reviewRow.success&&!document.getElementById('bulkMatchDialog')&&loadPortData().length===0));
      continue;
     }
+    if(mode==='catalogue'){
+     await page.locator('#bulkMatchDialog').getByRole('button',{name:'Search other printings · free',exact:true}).click();
+     t.check(prefix+': free search retains review until explicit selection',await page.evaluate(()=>!reviewRow.success&&reviewRow.providerNeedsReview)&&calls.length===0&&await balance()===initial);
+     t.check(prefix+': common name and game prefilled without guessed number',await page.locator('[name=name]').inputValue()==='Pikachu'&&await page.locator('[name=game]').inputValue()==='pokemon'&&await page.locator('[name=number]').inputValue()==='');
+     await page.keyboard.press('Escape');
+     t.check(prefix+': cancelling retains paid review choices',await page.getByRole('button',{name:'Review matches',exact:true}).count()===1&&await balance()===initial);
+     await page.getByRole('button',{name:'Search other printings · free',exact:true}).click();
+     await page.getByRole('button',{name:'Search catalogue',exact:true}).click();
+     await page.locator('.lookup-results button').nth(6).click();
+     await page.getByRole('button',{name:'Use this printing',exact:true}).click();
+     t.check(prefix+': explicit catalogue printing accepted without paid confirmation',await page.evaluate(()=>reviewRow.success&&reviewRow.manualIdentity&&!reviewRow.providerNeedsReview&&!reviewRow.providerConfirmed&&reviewRow.setName==='set6'&&reviewRow.cardNumber==='58'&&reviewRow.marketPrice===7)&&calls.length===0&&scanCalls===1&&await balance()===initial);
+     t.check(prefix+': catalogue recovery preserves physical copy and seller metadata',await page.evaluate(()=>reviewRow.file===original.file&&reviewRow.scanUid===original.uid&&JSON.stringify(reviewRow.copyUids)===JSON.stringify(original.copies)&&reviewRow.qty===2&&reviewRow.location==='Box A'&&reviewRow.acquisitionCost===1.25&&reviewRow.condition==='LP'));
+     t.check(prefix+': no inventory or draft write',writes.length===0&&await page.evaluate(()=>loadPortData().length===0));
+     continue;
+    }
     await page.locator('.bulk-match-choices button').nth(6).click();
     t.check(prefix+': choosing alone is still unaccepted',calls.length===0&&await page.evaluate(()=>!reviewRow.success));
     if(mode==='success')await page.screenshot({path:shots+'/'+billing+'-choose.png'});
@@ -167,14 +195,15 @@ try {
      continue;
     }
     const confirm=page.getByRole('button',{name:'Confirm this match',exact:true});
-    const priceResponse=['wrong-price','late-price'].includes(mode)
+    const rejectPrice=['wrong-price','wrong-total','number-suffix'].includes(mode);
+    const priceResponse=[...['wrong-price','wrong-total','number-suffix'],'late-price'].includes(mode)
       ?page.waitForResponse(r=>new URL(r.url()).hostname==='api.pokemontcg.io'):null;
     await confirm.click();await page.evaluate(()=>document.querySelector('#bulkMatchDialog button:disabled')?.click());
     await until(()=>hold);
     t.check(prefix+': double tap sends exactly one immutable seventh choice',calls.length===1&&calls[0].body.candidate.set_name==='set6'&&calls[0].body.confirmation_id===offered.confirmation_id);
     t.check(prefix+': pending acknowledgement cannot save/draft/rescan/remove',await page.evaluate(()=>{
-     bulkAddAllToCollection();bulkRemoveResult(reviewRow.rowId);bulkRetryRow(reviewRow.rowId);bulkChooseNewPhoto(reviewRow.rowId);
-     return !reviewRow.success&&!_bulkSaved&&_bulkResults[0]===reviewRow&&_bulkDraftSelectable().length===0&&!document.querySelector('.bulk-new-photo-input');
+     bulkAddAllToCollection();bulkRemoveResult(reviewRow.rowId);bulkRetryRow(reviewRow.rowId);bulkChooseNewPhoto(reviewRow.rowId);CardResellBulkLookup.open(reviewRow.rowId);
+     return !reviewRow.success&&!_bulkSaved&&_bulkResults[0]===reviewRow&&_bulkDraftSelectable().length===0&&!document.querySelector('.bulk-new-photo-input')&&!document.getElementById('bulkLookupDialog');
     })&&scanCalls===1);
     if(['account','batch'].includes(mode))await page.evaluate(kind=>{
      if(kind==='account'){_fbAuth.currentUser={uid:'another'};googleUser={uid:'another'}}else _bulkQueue=[];
@@ -190,6 +219,10 @@ try {
      await page.getByRole('button',{name:'Retry same confirmation',exact:true}).waitFor();
      t.check(prefix+': committed response failure retains unaccepted UI',await balance()===initial-1&&await page.evaluate(()=>!reviewRow.success));
      t.check(prefix+': uncertain outcome cannot select a different candidate',await page.getByRole('button',{name:'Back to matches',exact:true}).count()===0);
+     t.check(prefix+': uncertain debit cannot bypass recovery through free catalogue',await page.evaluate(()=>{
+      CardResellBulkLookup.open(reviewRow.rowId);
+      return !CardResellBulkMatchReview.canSearch(reviewRow)&&!document.getElementById('bulkLookupDialog');
+     }));
      await page.keyboard.press('Escape');await page.evaluate(()=>closeBulkScan());
      t.check(prefix+': closing sheet retains recovery and batch cannot be discarded',await page.evaluate(()=>_bulkResults[0]===reviewRow&&document.getElementById('bulkScanOverlay').style.display!=='none'));
      await page.getByRole('button',{name:'Check confirmation',exact:true}).click();
@@ -214,7 +247,7 @@ try {
      await until(()=>priceHold);await page.evaluate(()=>{reviewRow.marketPrice=12;reviewRow.priceSource='seller'});
      priceHold();priceHold=null;
     }
-    if(mode!=='wrong-price')await page.waitForFunction(()=>reviewRow.marketPrice!=null);
+    if(!rejectPrice)await page.waitForFunction(()=>reviewRow.marketPrice!=null);
     else await until(()=>priceRequests>0);
     if(priceResponse) {
      await (await priceResponse).finished();
@@ -228,12 +261,12 @@ try {
      cost:reviewRow.acquisitionCost,location:reviewRow.location,price:reviewRow.marketPrice,
      draft:_bulkScanRowToCard(reviewRow),units:_bulkDraftUnits(reviewRow).length,selectable:_bulkDraftSelectable().length,
      finish:reviewRow.finishConfirmed,confirmed:reviewRow.providerConfirmed}));
-    t.check(prefix+': only server-confirmed seventh printing accepted',row.set==='set6'&&row.number==='58'&&row.confirmed===true);
+    t.check(prefix+': only server-confirmed seventh printing accepted',row.set==='set6'&&row.number===(mode==='wrong-total'?'58/100':'58')&&row.confirmed===true);
     t.check(prefix+': physical copies, photo, condition and cost preserved',row.photo&&row.uid&&row.copies&&row.condition==='LP'&&row.chosen&&row.cost===1.25&&row.location==='Box A');
     t.check(prefix+': one debit despite retry and two physical copies',await balance()===initial-1&&h.store.get(PAID_KEY)==='4');
-    t.check(prefix+': exact accepted identity reaches draft mapper',row.draft.card===row.name&&row.draft.set==='set6'&&row.draft.number==='58'&&row.units===2&&row.selectable===1);
+    t.check(prefix+': exact accepted identity reaches draft mapper',row.draft.card===row.name&&row.draft.set==='set6'&&row.draft.number===row.number&&row.units===2&&row.selectable===1);
     t.check(prefix+': confirmation never invents inspected finish',row.finish===false);
-    t.check(prefix+': price follows exact printing or stays unknown',row.price===(mode==='wrong-price'?null:mode==='late-price'?12:7));
+    t.check(prefix+': price follows exact printing or stays unknown',row.price===(rejectPrice?null:mode==='late-price'?12:7));
     t.check(prefix+': confirmation alone does not create inventory or drafts',writes.length===0&&await page.evaluate(()=>loadPortData().length===0),writes.join(','));
     if(mode==='success'||mode==='magic') {
      if(mode==='success') {
@@ -249,7 +282,7 @@ try {
      await page.screenshot({path:shots+'/'+billing+'-'+mode+'-accepted.png'});
     }
     t.check(prefix+': no browser exceptions',errors.length===0,errors.join('\n'));
-    t.check(prefix+': no provider/account network calls',h.outbound.length===0);
+    t.check(prefix+': no provider/account network calls',h.outbound.length===0,h.outbound.join(' | '));
    } finally {
     if(hold)hold();if(priceHold)priceHold();if(scanHold)scanHold();await ctx.close();delete process.env.MEMBERSHIP_BILLING_V2;h.restore();
    }
