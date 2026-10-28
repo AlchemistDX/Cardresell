@@ -31,4 +31,22 @@ await test('OCR request uses one bounded call without logging image',async()=>{
  let calls=0;const r=await readPrintedEvidence('test-image','test-key',{fetchFn:async(url,init)=>{calls++;assert.equal(url,'https://api.ximilar.com/collectibles/v2/card_ocr_id');assert.equal(init.redirect,'error');assert.deepEqual(JSON.parse(init.body),{records:[{_base64:'test-image'}]});return Response.json({records:[{_status:{code:200},_objects:[{name:'Card',_ocr:{full_text:'Mimikyu PAF EN 037/091'}}]}]})}});assert.equal(calls,1);assert.equal(r.ok,true);
 });
 for(const objects of [[],[{name:'Card'},{name:'Card'}],[{name:'Card',_ocr:{full_text:''}}]]) await test('invalid OCR cannot become evidence '+objects.length,async()=>{const r=await readPrintedEvidence('image','key',{fetchFn:async()=>Response.json({records:[{_status:{code:200},_objects:objects}]})});assert.equal(r.ok,false)});
+await test('exact visual name set and number corroborate unreadable set box',async()=>{
+ const v={ok:true,cardInfo:{card_type:'pokemon',card_name:'Mimikyu',set_name:'Paldean Fates',card_number:'37'}};
+ const r=await resolve(v,{...evidence,text:'Mimikyu Safeguard 037/091'});assert.equal(r.grounded_id,'sv04.5-037');
+ assert.equal(await resolve(v,{...evidence,text:'Mimikyu PRE EN 037/091'}),null);
+ assert.equal(await resolve({...v,cardInfo:{...v.cardInfo,card_number:'160'}},{...evidence,text:'Mimikyu 037/091'}),null);
+});
+await test('symbol-era Pokemon does not require an unprinted provider abbreviation',async()=>{
+ const v={ok:true,cardInfo:{card_type:'pokemon',card_name:'Dusclops',set_name:'Vivid Voltage',card_number:'070'}};
+ const r=await resolve(v,{ok:true,text:'Dusclops 070/185',labels:[]},{fetchFn:async()=>Response.json({id:'swsh4',name:'Vivid Voltage',cardCount:{official:185},abbreviation:{official:'VIV'}})});
+ assert.equal(r.grounded_id,'swsh4-70');
+});
+await test('dedicated slab reader accepts label-only response and never requests raw OCR',async()=>{
+ let calls=0;const r=await readPrintedEvidence('image','key',{slab:true,fetchFn:async(url)=>{calls++;assert.equal(url,'https://api.ximilar.com/collectibles/v2/slab_id');return Response.json({records:[{_status:{code:200},_objects:slabEvidence.labels.map(l=>({...l,name:'Slab Label'}))}]})}});
+ assert.equal(calls,1);assert.equal(r.ok,true);assert.equal(resolveSlabEvidence(slabVisual,r).cert,'51044018');
+});
+await test('two slab labels cannot be combined into a single certified identity',async()=>{
+ const r=await readPrintedEvidence('image','key',{slab:true,fetchFn:async()=>Response.json({records:[{_status:{code:200},_objects:[{name:'Slab Label'},{name:'Slab Label'}]}]})});assert.equal(r.ok,false);
+});
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);

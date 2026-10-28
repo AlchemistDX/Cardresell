@@ -20,11 +20,12 @@ async function index(game) {
   return indexes.get(game);
 }
 
-export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, timeoutMs = 15000 } = {}) {
+export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, timeoutMs = 15000, slab = false } = {}) {
   if (!image || !tokenValue) return null;
-  return observeProviderAttempt({provider:'ximilar',operation:'card_ocr_id',mode:'identify',inputImages:1}, async observe => {
+  const operation = slab ? 'slab_id' : 'card_ocr_id';
+  return observeProviderAttempt({provider:'ximilar',operation,mode:'identify',inputImages:1}, async observe => {
     try {
-      const response = await fetchFn('https://api.ximilar.com/collectibles/v2/card_ocr_id', {
+      const response = await fetchFn('https://api.ximilar.com/collectibles/v2/' + operation, {
         method:'POST', redirect:'error', signal:AbortSignal.timeout(timeoutMs),
         headers:{'Content-Type':'application/json',Authorization:`Token ${tokenValue}`},
         body:JSON.stringify({records:[{_base64:image}]}),
@@ -34,9 +35,9 @@ export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, 
       const body = await response.json(), record = body?.records?.[0];
       if (!record || record._status?.code !== 200 || !Array.isArray(record._objects)) return {ok:false,reason:'invalid_response'};
       const cards = record._objects.filter(o => o?.name === 'Card');
-      if (cards.length !== 1) return {ok:false,reason:cards.length ? 'multiple_cards' : 'no_card_detected'};
-      const card = cards[0], text = card._ocr?.full_text || '';
       const labels = record._objects.filter(o => o?.name === 'Slab Label');
+      if (cards.length > 1 || (!slab && cards.length !== 1) || (slab && labels.length !== 1)) return {ok:false,reason:'invalid_objects'};
+      const card = cards[0], text = card?._ocr?.full_text || '';
       if (typeof text !== 'string' || (!text.trim() && !labels.length) || text.length > 12000) return {ok:false,reason:'no_match'};
       return {ok:true,text,card,labels};
     } catch (error) { return {ok:false,reason:['AbortError','TimeoutError'].includes(error?.name)?'timeout':'network'}; }
@@ -90,15 +91,18 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
         const abbreviation = data.abbreviation?.official;
         const total = String(data.cardCount?.official || '');
         if (!total || !new RegExp('/\\s*0*'+escape(total)+'\\b').test(evidence.text)) return;
-        if (abbreviation) {
-          // OCR often joins the adjacent printed set and language boxes.
-          if (!token(evidence.text, abbreviation) && !token(evidence.text, abbreviation + 'EN')) return;
-        } else {
-          // Older cards have a symbol instead of a set abbreviation. Require
-          // independent visual agreement as well as the printed name/ratio.
-          const choices = [original,...(visual.candidates || [])].filter(Boolean);
-          if (!choices.some(c => normalized(c.set_name) === normalized(data.name))) return;
-        }
+        // Provider abbreviations exist even for older symbol-only sets. The
+        // printed name + full fraction + official set total may instead be
+        // corroborated by an exact visual candidate (name, set AND number).
+        const choices = [original,...(visual.candidates || [])].filter(Boolean);
+        const visualAgreement = matches.filter(r=>r[2]===set).some(row=>choices.some(c =>
+          normalized(c.card_name)===normalized(row[1]) &&
+          num(String(c.card_number).split('/')[0])===num(row[3]) &&
+          normalized(c.set_name)===normalized(data.name)));
+        const printedSet = abbreviation && (token(evidence.text,abbreviation) || token(evidence.text,abbreviation+'EN'));
+        const explicitCodes = [...evidence.text.matchAll(/\b([A-Z0-9]{2,5})\s*[·•★*]?\s*EN\b/g)].map(m=>m[1]);
+        if (abbreviation && explicitCodes.length && !explicitCodes.includes(abbreviation)) return;
+        if (!printedSet && !visualAgreement) return;
         verified.add(set);
       } catch(error) { console.info('[scan-evidence]',JSON.stringify({stage:'set_metadata',set,error:error?.name})); }
     }));

@@ -1243,7 +1243,7 @@ export default async function handler(req, res) {
       (!xim.ok && ['no_match','low_confidence'].includes(xim.reason));
     if (Date.now() - t0 < 20000 && evidenceNeeded && (['pokemon','lorcana','yugioh','onepiece'].includes(evidenceGame) || xim.cardInfo?._ximilar_graded)) {
       try {
-        const evidence = await readPrintedEvidence(imageBase64, ximilarToken);
+        const evidence = await readPrintedEvidence(imageBase64, ximilarToken, {slab:xim.cardInfo?._ximilar_graded === true});
         const resolved = xim.cardInfo?._ximilar_graded ? resolveSlabEvidence(xim,evidence) : await resolvePrintedEvidence(xim, evidence);
         if (resolved) xim = {ok:true,cardInfo:resolved};
       } catch (error) { console.warn('[scan-evidence] recovery unavailable', error?.name || 'Error'); /* Preserve review/refund semantics. */ }
