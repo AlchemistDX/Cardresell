@@ -74,7 +74,7 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
   if (!paths[game] || !evidence?.ok || evidence.labels?.length || original?._ximilar_graded) return null;
   const catalog = await loadIndex(game);
   let matches = printedCandidates(catalog, game, evidence.text);
-  console.info('[scan-evidence]', JSON.stringify({stage:'catalogue',game,textLength:evidence.text.length,candidates:matches.length}));
+  console.info('[scan-evidence]', JSON.stringify({stage:'catalogue',game,textLength:evidence.text.length,candidates:matches.length,ratios:(evidence.text.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4),nameRows:catalog.cards.filter(r=>normalized(evidence.text).includes(normalized(r[1].replace(/\s*\([^)]*\)/g,'')))).length,printedCodes:(evidence.text.match(/\b[A-Z0-9]{3,6}\s*[-–]?\s*EN\s*\d{3}\b/gi)||[]).slice(0,4)}));
   if (!matches.length || matches.length > 8) return null;
   if (game === 'pokemon') {
     const sets = [...new Set(matches.map(r => r[2]))];
@@ -83,8 +83,9 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
     await Promise.all(sets.map(async set => {
       try {
         const response = await fetchFn(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(set)}`, {signal:AbortSignal.timeout(5000),redirect:'error'});
-        if (!response.ok) { await response.body?.cancel(); return; }
+        if (!response.ok) { console.info('[scan-evidence]',JSON.stringify({stage:'set_metadata',set,status:response.status})); await response.body?.cancel(); return; }
         const data = await response.json();
+        console.info('[scan-evidence]',JSON.stringify({stage:'set_metadata',set,idMatches:data.id===set,nameMatches:normalized(data.name)===normalized(catalog.sets[set]),total:data.cardCount?.official,abbreviation:data.abbreviation?.official,abbreviationRead:!!data.abbreviation?.official && (token(evidence.text,data.abbreviation.official)||token(evidence.text,data.abbreviation.official+'EN')),visualSetMatches:[original,...(visual.candidates||[])].filter(Boolean).some(c=>normalized(c.set_name)===normalized(data.name))}));
         if (data.id !== set || normalized(data.name) !== normalized(catalog.sets[set])) return;
         const abbreviation = data.abbreviation?.official;
         const total = String(data.cardCount?.official || '');
@@ -99,7 +100,7 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
           if (!choices.some(c => normalized(c.set_name) === normalized(data.name))) return;
         }
         verified.add(set);
-      } catch { /* No evidence is not permission to pick a set. */ }
+      } catch(error) { console.info('[scan-evidence]',JSON.stringify({stage:'set_metadata',set,error:error?.name})); }
     }));
     matches = matches.filter(r => verified.has(r[2]));
   }
@@ -125,6 +126,7 @@ export function resolveSlabEvidence(visual, evidence) {
   const text = label._ocr?.full_text;
   console.info('[scan-evidence]', JSON.stringify({stage:'slab_label',hasDetails:!!details,hasText:typeof text === 'string',labelCount:evidence.labels.length,choices:1+(visual.candidates?.length || 0)}));
   const company = label._tags?.Company?.[0] || label._tags?.Category?.[0];
+  console.info('[scan-evidence]',JSON.stringify({stage:'slab_company',company:company?.name,prob:company?.prob,tagKeys:Object.keys(label._tags||{})}));
   if (typeof text !== 'string' || !['PSA','BECKETT','CGC','SGC','TAG','ACE'].includes(company?.name) || !Number.isFinite(company.prob) || company.prob < .95) return null;
   // Some OCR responses omit structured identification. PSA's printed verbal
   // grade plus one unique eight-digit certificate can supply those two fields;
@@ -133,6 +135,7 @@ export function resolveSlabEvidence(visual, evidence) {
   const printedCerts = company.name === 'PSA' ? [...text.matchAll(/(?:^|\D)(\d{8})(?=$|\D)/g)].map(m=>m[1]) : [];
   const uniqueGrade = new Set(printedGrades), uniqueCert = new Set(printedCerts);
   const grade = String(details?.grade || (uniqueGrade.size === 1 ? printedGrades[0] : '')), cert = String(details?.certificate_number || (uniqueCert.size === 1 ? printedCerts[0] : ''));
+  console.info('[scan-evidence]',JSON.stringify({stage:'slab_fields',grade,certLength:cert.length,printedGrades:printedGrades.length,printedCerts:printedCerts.length,gradeToken:token(text,grade),certToken:token(text,cert)}));
   if (!/^(?:[1-9](?:\.5)?|10)$/.test(grade) || !/^\d{6,14}$/.test(cert) || !token(text, cert) || !token(text, grade)) return null;
   if (company.name === 'PSA' && grade.includes('.')) return null;
   const choices = [visual.cardInfo,...(visual.candidates || [])].filter(Boolean);
