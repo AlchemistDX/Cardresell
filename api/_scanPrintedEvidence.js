@@ -1,13 +1,12 @@
 // Read printed evidence only when visual matching needs help. OCR is never a
 // catalogue identity: an exact, unique catalogue printing must corroborate it.
-import { readFile } from 'node:fs/promises';
 import { observeProviderAttempt } from './_providerUsage.js';
 
 const paths = {
-  pokemon: new URL('../data/catalog/pokemon.1b2a5316ec4a.json', import.meta.url),
-  lorcana: new URL('../data/catalog/lorcana.7b3e3281f96f.json', import.meta.url),
-  yugioh: new URL('../data/catalog/yugioh.88b8cbb13943.json', import.meta.url),
-  onepiece: new URL('../data/catalog/onepiece.740c7853cd03.json', import.meta.url),
+  pokemon: 'https://www.cardresell.org/data/catalog/pokemon.1b2a5316ec4a.json',
+  lorcana: 'https://www.cardresell.org/data/catalog/lorcana.7b3e3281f96f.json',
+  yugioh: 'https://www.cardresell.org/data/catalog/yugioh.88b8cbb13943.json',
+  onepiece: 'https://www.cardresell.org/data/catalog/onepiece.740c7853cd03.json',
 };
 const indexes = new Map();
 const normalized = s => String(s || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -17,7 +16,7 @@ const token = (text, value) => new RegExp('(?:^|[^a-z0-9])' + escape(value) + '(
 
 async function index(game) {
   if (!paths[game]) return null;
-  if (!indexes.has(game)) indexes.set(game, readFile(paths[game], 'utf8').then(JSON.parse).catch(e => { indexes.delete(game); throw e; }));
+  if (!indexes.has(game)) indexes.set(game, fetch(paths[game], {signal:AbortSignal.timeout(5000),redirect:'error'}).then(response => { if (!response.ok) throw new Error('Catalogue unavailable'); return response.json(); }).catch(e => { indexes.delete(game); throw e; }));
   return indexes.get(game);
 }
 
