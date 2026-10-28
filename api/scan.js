@@ -1246,7 +1246,7 @@ export default async function handler(req, res) {
         const evidence = await readPrintedEvidence(imageBase64, ximilarToken);
         const resolved = xim.cardInfo?._ximilar_graded ? resolveSlabEvidence(xim,evidence) : await resolvePrintedEvidence(xim, evidence);
         if (resolved) xim = {ok:true,cardInfo:resolved};
-      } catch { /* Preserve the original review/miss and its refund semantics. */ }
+      } catch (error) { console.warn('[scan-evidence] recovery unavailable', error?.name || 'Error'); /* Preserve review/refund semantics. */ }
     }
     const tMs = Date.now() - t0;
     console.log('[scan] ximilar took', tMs, 'ms ok=', xim.ok, 'reason=', xim.reason, 'dist=', xim.cardInfo?._ximilar_dist);

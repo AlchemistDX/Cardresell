@@ -74,6 +74,7 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
   if (!paths[game] || !evidence?.ok || evidence.labels?.length || original?._ximilar_graded) return null;
   const catalog = await loadIndex(game);
   let matches = printedCandidates(catalog, game, evidence.text);
+  console.info('[scan-evidence]', JSON.stringify({stage:'catalogue',game,textLength:evidence.text.length,candidates:matches.length}));
   if (!matches.length || matches.length > 8) return null;
   if (game === 'pokemon') {
     const sets = [...new Set(matches.map(r => r[2]))];
@@ -101,6 +102,7 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
     }));
     matches = matches.filter(r => verified.has(r[2]));
   }
+  console.info('[scan-evidence]', JSON.stringify({stage:'verified_printing',game,candidates:matches.length}));
   const unique = new Map(matches.map(r => [String(r[0]),r]));
   if (unique.size !== 1) return null;
   const row = unique.values().next().value;
@@ -120,6 +122,7 @@ export function resolveSlabEvidence(visual, evidence) {
   if (!visual?.ok || !evidence?.ok || evidence.labels?.length !== 1) return null;
   const label = evidence.labels[0], details = label._identification?.best_match;
   const text = label._ocr?.full_text;
+  console.info('[scan-evidence]', JSON.stringify({stage:'slab_label',hasDetails:!!details,hasText:typeof text === 'string',labelCount:evidence.labels.length,choices:1+(visual.candidates?.length || 0)}));
   const company = label._tags?.Company?.[0] || label._tags?.Category?.[0];
   if (!details || typeof text !== 'string' || !['PSA','BECKETT','CGC','SGC','TAG','ACE'].includes(company?.name) || !Number.isFinite(company.prob) || company.prob < .95) return null;
   const grade = String(details.grade || ''), cert = String(details.certificate_number || '');
@@ -136,6 +139,7 @@ export function resolveSlabEvidence(visual, evidence) {
     return true;
   });
   const unique = new Map(matches.map(c => [[c.card_type,normalized(c.card_name),normalized(c.set_name),c.card_number,c.variant || '',c.rarity || '',c._ximilar_card_id || '',c._ximilar_full_name || ''].join('|'),c]));
+  console.info('[scan-evidence]', JSON.stringify({stage:'slab_matches',matches:unique.size}));
   if (unique.size !== 1) return null;
   const card = unique.values().next().value;
   return {...card,_slab_verified:true,grader:company.name === 'BECKETT' ? 'BGS' : company.name,grade,cert};
