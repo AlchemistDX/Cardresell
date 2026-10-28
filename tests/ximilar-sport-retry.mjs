@@ -2,6 +2,7 @@
 // not matched). An empty photo (no_card_detected) must not cost a second call.
 // Executes the shipped block from api/scan.js against a mock provider.
 import { readFileSync } from 'node:fs';
+import {scanIdentityReview} from '../api/_scanIdentityReview.js';
 const src = readFileSync(new URL('../api/scan.js', import.meta.url), 'utf8');
 const start = src.indexOf("    let xim = await identifyWithXimilar(");
 const end = src.indexOf("    const tMs = Date.now() - t0;", start);
@@ -18,8 +19,8 @@ async function run(tcg, sport, source=block, deep=false) {
   const calls = [];
   const modes = [];
   const identifyWithXimilar = async (_b, _m, _t, kind, mode='identify') => { calls.push(kind); modes.push(mode); return kind === 'tcg' ? tcg : sport; };
-  const fn = new AsyncFunction('identifyWithXimilar', 'imageBase64', 'mimeType', 'ximilarToken', 'isDeepGrade', source + '\nreturn xim;');
-  const xim = await fn(identifyWithXimilar, 'AAAA', 'image/jpeg', 't', deep);
+  const fn = new AsyncFunction('identifyWithXimilar', 'imageBase64', 'mimeType', 'ximilarToken', 'isDeepGrade', 'scanIdentityReview', source + '\nreturn xim;');
+  const xim = await fn(identifyWithXimilar, 'AAAA', 'image/jpeg', 't', deep, scanIdentityReview);
   return { xim, calls, modes };
 }
 let r = await run({ ok: false, reason: 'no_card_detected' }, { ok: true, cardInfo: {} });

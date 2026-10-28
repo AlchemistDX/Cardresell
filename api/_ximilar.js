@@ -194,7 +194,7 @@ async function identify(imageBase64, apiToken, kind, observe) {
       .map((a, i) => ({ ...a, dist: distances[i + 1] }))
       .filter(a => a.dist < closeLimit)
       .sort((a, b) => a.dist - b.dist)
-      .slice(0, 2);
+      .slice(0, 8);
 
     if (closeAlts.length === 0) {
       // Only one plausible answer — return it as single (medium confidence)

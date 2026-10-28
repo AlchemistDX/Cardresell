@@ -639,7 +639,7 @@ try {
     const EXPECTED_KEYS = ['id', 'updatedAt', 'card', 'set', 'buyPrice', 'costMeta', 'currentValue',
       'condition', 'addedDate', 'source', 'img', 'imageUrl', 'number', 'tcgplayerUrl',
       'game', 'cardType', 'setCode', 'groundedId', 'rarity', 'isJapanese', 'grader',
-      'grade', 'sport', 'year', 'lastRefreshed',
+      'grade', 'cert', 'sport', 'year', 'lastRefreshed',
       // Added 2026-09-12 for owner requirement Q1. The mapper now emits the
       // catalogue artwork URL under its OWN name, so the seller's local
       // photograph and the catalogue's stock image can never be confused for
