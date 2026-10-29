@@ -70,28 +70,28 @@ try {
     check(await page.locator('#sellingFeeComparison .winner').isVisible(),'a different printing still shows the fee comparison');
     await page.locator('#condPills [data-cond="mp"]').click();
     await page.locator('#priceOverride').fill('17.25');await page.locator('#priceOverride').dispatchEvent('input');
-    await advice.getByRole('button',{name:'Review eBay draft',exact:true}).click();
+    await advice.getByRole('button',{name:'Create eBay draft',exact:true}).click();
     await page.waitForFunction(()=>draftIntents.length===1);
     const intent=await page.evaluate(()=>{const x=draftIntents[0];return {price:x.price,source:x.priceSource,finish:x.card.finish,condition:x.card.pricingSelection.condition,instanceId:x.instanceId};});
     check(intent.price===17.25&&intent.source==='seller'&&/reverse/i.test(intent.finish)&&intent.condition==='mp','draft receives the selected finish, condition and asking price');
     check(!!intent.instanceId,'single-card handoff retains physical-copy identity');
     // A delayed eligibility response must not prepare a newly selected finish.
     await page.evaluate(()=>{window._crSellApproved=null;window.releaseGate=null;fetchSellStamps=()=>new Promise(resolve=>window.releaseGate=()=>resolve({ok:true,stamps:[{eligible:true}]}));});
-    await advice.getByRole('button',{name:'Review eBay draft',exact:true}).click();
+    await advice.getByRole('button',{name:'Create eBay draft',exact:true}).click();
     await page.waitForFunction(()=>!!releaseGate);
-    check(await advice.getByRole('button',{name:'Review eBay draft',exact:true}).isDisabled(),'repeated clicks are blocked during preparation');
+    check(await advice.getByRole('button',{name:'Create eBay draft',exact:true}).isDisabled(),'repeated clicks are blocked during preparation');
     await page.locator('#printingSelect').selectOption('holofoil');
     await page.evaluate(()=>releaseGate());
     await page.waitForTimeout(30);
     check(await page.evaluate(()=>draftIntents.length===1),'stale selection cannot create another draft');
     // And a new session for the SAME user must not inherit the old action.
     await page.evaluate(()=>{window._crSellApproved=null;window.releaseGate=null;calc();});
-    await advice.getByRole('button',{name:'Review eBay draft',exact:true}).click();await page.waitForFunction(()=>!!releaseGate);
+    await advice.getByRole('button',{name:'Create eBay draft',exact:true}).click();await page.waitForFunction(()=>!!releaseGate);
     await page.evaluate(()=>{googleUser={sub:'selling-flow-fixture'};releaseGate();});
     await advice.locator('[data-workflow-status]').getByText(/account changed/).waitFor();
     check(await page.evaluate(()=>draftIntents.length===1),'same-user new session blocks the old handoff');
     await page.evaluate(()=>{fetchSellStamps=async()=>({ok:true,stamps:[{eligible:false,message:'Confirm the printing first.'}]});window._crSellApproved=null;calc();});
-    await advice.getByRole('button',{name:'Review eBay draft',exact:true}).click();
+    await advice.getByRole('button',{name:'Create eBay draft',exact:true}).click();
     await advice.locator('[data-workflow-status]').getByText('Confirm the printing first.',{exact:true}).waitFor();
     check(await page.evaluate(()=>draftIntents.length===1),'ineligible card shows an actionable reason without creating a draft');
     await advice.getByText('Your selling preferences',{exact:true}).click();

@@ -88,6 +88,17 @@ try {
     await page.locator('#condPills [data-cond="lp"]').click();
     check(await page.evaluate(()=>getEffectivePrice())===81,'LP can be selected again after an unavailable condition at '+width);
 
+    const source=await page.evaluate(()=>{
+      const date=new Date().toISOString().slice(0,10);
+      const card=tplCardToNormalized({id:'provenance',name:'Mew',number:'76/214',set_name:'Unbroken Bonds',prices:{raw:{near_mint:{tcgplayer:{market:1,low:0.5,high:2,last_price_update:date}}}}},'pokemon');
+      document.querySelectorAll('#condPills .pill').forEach(p=>p.classList.toggle('sel',p.dataset.cond==='nm'));
+      setSelectedCard(card);loadCardUI(card);calc();qpApply(2,'ask-high');
+      return {own:_crPricingContext({card:selectedCard}),foreign:_crPricingContext({card:{...selectedCard,id:'other',name:'Pikachu',number:'99/214'}})};
+    });
+    check(source.own.basisMeta?.label.includes('Listed high')&&source.own.basisMeta?.label.includes('TCGplayer'),'chosen asking source survives draft handoff at '+width);
+    check(source.own.basisMeta?.high===2&&!!source.own.basisMeta?.retrievedAt,'reported range and original source date survive at '+width);
+    check(!source.foreign.basisMeta,'catalogue fallback never attributes current quote to another card at '+width);
+
     // Quotes keep their original retrieval time; null/empty ages do not become now.
     const ages=await page.evaluate(()=>{
       const now=Date.now,saved=window._crBasis,base=now();Date.now=()=>base;

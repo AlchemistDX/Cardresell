@@ -67,7 +67,7 @@
       if(a.buyers){const b=element('button','Explore buyers and submission rules');b.type='button';b.onclick=()=>{if(typeof openVenuePicker==='function')openVenuePicker();};output.append(b);}
       if(input.best&&Number.isFinite(input.best.net))how.append(element('p',`Single-card comparison at the entered costs: ${input.best.name} · ${money(input.best.net)} estimated proceeds if sold. ${card.costsConfirmed?'Buyer-tax fee effects and actual demand can still change the result.':'Confirm your shipping and packing amounts before relying on this figure.'}`,'ca-note'));
       how.append(element('p','Suggested next step, not a guaranteed sale or price forecast. Under-$5 cards can still have individual demand. Check the printing, condition and current sales.','ca-note'));
-      if(p.ship&&a.route!=='check')ebayWorkflow(output,{prepare:input.prepare,label:'Review eBay draft',quote:input.ebay,primary:a.route==='ebay-draft'});
+      if(p.ship&&a.route!=='check')ebayWorkflow(output,{prepare:input.prepare,label:'Create eBay draft',quote:input.ebay,primary:a.route==='ebay-draft'});
       output.append(how);
     }
     draw();

@@ -60,6 +60,20 @@ try{
   check(await page.locator('#draftsWrap .draft-row').count()===F.page1.body.rows.length,'saved drafts render at '+width);
   check(await page.locator('#draftsMoreBtn').isEnabled(),'pagination is available at '+width);
 
+  const usage={active:3,activeLimit:2000,remaining:1997,plan:'business'};
+  listPlan=(uid,params)=>params.has('cursor')?{...F.page1,body:{...F.page1.body,usage}}:
+    {status:200,body:{rows:[],total:214,nextCursor:25,usage}};
+  await page.evaluate(()=>loadDraftsFirstPage());
+  check(await page.locator('#draftsWrap .draft-row').count()>0,'deleted-only first page automatically advances at '+width);
+  check((await page.locator('#colSubDraftsCount').textContent()).trim()==='3','badge uses active count rather than indexed history at '+width);
+  listPlan=()=>({status:200,body:{rows:[],total:214,nextCursor:null,usage:{...usage,active:0}}});
+  await page.evaluate(()=>loadDraftsFirstPage());
+  check((await page.locator('#draftsWrap').innerText()).includes('No drafts yet'),'all-deleted history has a truthful empty state at '+width);
+  listPlan=()=>({status:200,body:{rows:[],total:214,nextCursor:25,usage}});
+  const repeatStart=calls.length;await page.evaluate(()=>loadDraftsFirstPage());
+  check(calls.length-repeatStart===2,'repeated cursor stops automatic traversal at '+width);
+  check((await page.locator('#draftsWrap').innerText()).includes('No saved drafts on this page'),'bounded pagination explains empty pages at '+width);
+
   const stalled=deferred();listPlan=()=>stalled.promise;
   await page.evaluate(()=>{void loadDraftsFirstPage();});await page.locator('#draftsRetryBtn').waitFor();
   check((await page.locator('#draftsWrap').innerText()).includes('Loading took too long'),'timeout explains recovery at '+width);

@@ -72,8 +72,15 @@ try{for(const width of [320,390,1280]){
   window.auditResearchAborted=false;
   window._compsActiveController={abort(){window.auditResearchAborted=true;}};
   window.auditResearchSeq=window._compsRequestSeq||0;
+  window.auditImageGen=window._imgGen||0;
+  cardImg.onload=()=>{cardImgWrap.style.display='block';};
+  cardImg.onerror=()=>{cardImgPhLabel.textContent='Image unavailable';};
+  window.auditLateImage=()=>{if(window._imgGen===auditImageGen)cardImgWrap.style.display='block';};
  });
  await page.locator('#gameSelect').selectOption('mtg');
+ await page.evaluate(()=>auditLateImage());
+ check(await page.locator('#cardImgWrap').isHidden(),'late image upgrade cannot revive the cleared card');
+ check(await page.evaluate(()=>cardImg.onload===null&&cardImg.onerror===null&&!cardImg.hasAttribute('src')),'reset detaches image handlers and removes source');
  check(await page.locator('#quickPricing').isHidden(),'game switch hides previous card price choices');
  check(await page.locator('#ebayCompsStatus').isHidden(),'game switch hides previous card research');
  check(await page.locator('#qpTiers').textContent()==='','old price actions are removed');

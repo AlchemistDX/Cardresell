@@ -1231,24 +1231,22 @@ try {
     T.check('the seller\u2019s own postage is read back too',
       !!seller && amt(seller.amount) === 4.50, seller && `${seller.label} ${seller.amount}`);
 
-    // The decision was ONE net figure. If a second appeared, or if the net
-    // moved to include shipping, this is where it would show.
+    // Keep one headline net, using complete recorded shipping assumptions.
     T.check('exactly one net figure is shown',
       f.rows.filter((r) => r.kind === 'net').length === 1,
       JSON.stringify(f.rows.map((r) => r.kind)));
     const net = f.rows.find((r) => r.kind === 'net');
-    T.check('the net is labelled for the exclusion',
-      !!net && /before shipping/i.test(net.label), net && net.label);
+    T.check('the net includes recorded shipping',
+      !!net && /after recorded shipping/i.test(net.label), net && net.label);
 
-    // The rows are DISCLOSED, not DEDUCTED. If either were counted, the net
-    // would no longer equal gross minus the fee rows alone.
+    // Buyer-paid shipping is income; postage is a cost. Fees use that shipping base.
     const gross = f.rows.find((r) => r.kind === 'gross');
     const fees  = f.rows.filter((r) => r.kind === 'fee').reduce((a, r) => a + amt(r.amount), 0);
-    T.check('shipping is not subtracted from the net',
-      Math.abs((amt(gross.amount) + fees) - amt(net.amount)) < 0.005,
+    T.check('recorded buyer shipping and postage enter the net',
+      Math.abs((amt(gross.amount) + fees + 5.99 - 4.50) - amt(net.amount)) < 0.005,
       `gross ${gross.amount} fees ${fees} net ${net.amount}`);
-    T.check('and the shipping rows are marked as not counted',
-      !!buyer && /not in net/i.test(buyer.label), buyer && buyer.label);
+    T.check('and the shipping rows are marked as included',
+      !!buyer && /included in net/i.test(buyer.label), buyer && buyer.label);
     await ctx.close();
   });
 
