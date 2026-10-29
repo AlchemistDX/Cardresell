@@ -1427,11 +1427,8 @@ try {
                                     idx.indexOf('async function searchWithTPL'))),
         'a mis-parsed hint must degrade to upstream order, not to fewer results');
 
-  // A bare card name has no hint; inventing an order there would be worse
-  // than upstream relevance.
-  check('a bare card name leaves upstream order untouched',
-        /if \(!hint\) return rows/.test(idx),
-        'with no set hint there is nothing to rank on');
+  check('card identity is ranked before set similarity',
+        /b\.identity - a\.identity/.test(idx));
 
   // "Charizard ex" must not be read as card "Charizard" + set "ex".
   check('the longest matching card name wins when deriving the hint',
@@ -1441,6 +1438,24 @@ try {
   check('ties keep upstream order via an explicit index tiebreak',
         /\(b\.s - a\.s\) \|\| \(a\.i - b\.i\)/.test(idx),
         'unstable ties would reshuffle equal-scoring rows run to run');
+
+  // Execute the shipped ranker: the set alone must never outweigh card identity.
+  const rankSource = idx.slice(idx.indexOf('function _setHintScore'), idx.indexOf('/* ── TPL lookup outcome'));
+  const rank = new Function(rankSource + '; return _rankTplBySetHint;')();
+  const distractor = {name:'Squirtle',set:{name:'Base Set'}};
+  const exact = {name:'Charizard',set:{name:'Base Set'}};
+  const sequel = {name:'Charizard',set:{name:'Base Set 2'}};
+  check('card identity outranks an unrelated card from the exact requested set',
+    rank([distractor,sequel,exact], 'Charizard Base Set')[0] === exact);
+  check('bare names put exact card names ahead of related provider suggestions',
+    rank([{name:'Charizard ex'},exact], 'Charizard')[0] === exact);
+  check('ranking preserves every candidate and does not mutate provider order', (()=>{
+    const rows=[distractor,sequel,exact]; const result=rank(rows,'Charizard Base Set');
+    return rows[0]===distractor && result.length===rows.length && rows.every(c=>result.includes(c));
+  })());
+  check('unknown-name queries retain upstream order when all scores tie', (()=>{
+    const rows=[exact,sequel]; return rank(rows,'unknown query')[0]===exact;
+  })());
 
   // The field-shape fix.
   check('a TPL set-name helper exists and reads the nested set',
