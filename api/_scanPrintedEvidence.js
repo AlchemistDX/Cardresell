@@ -177,6 +177,7 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
   }
   let matches = printedCandidates(catalog, game, evidence.text);
   console.info('[scan-evidence]', JSON.stringify({stage:'catalogue',game,textLength:evidence.text.length,candidates:matches.length,ratios:(evidence.text.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4),nameRows:catalog.cards.filter(r=>normalized(evidence.text).includes(normalized(r[1].replace(/\s*\([^)]*\)/g,'')))).length,printedCodes:(evidence.text.match(/\b[A-Z0-9]{3,6}\s*[-–]?\s*EN\s*\d{3}\b/gi)||[]).slice(0,4)}));
+  if (game === 'onepiece' && !matches.length) console.info('[scan-evidence]',JSON.stringify({stage:'promo_identifiers',codes:(evidence.text.match(/\bP\s*-\s*\S{1,12}/gi)||[]).slice(0,3),events:(evidence.text.match(/\S{0,10}annivers\S{0,12}/gi)||[]).slice(0,3),numberedEvents:(evidence.text.match(/\d+(?:st|nd|rd|th)\s*\S{1,20}/gi)||[]).slice(0,3)}));
   if (!matches.length || matches.length > 8) return null;
   if (game === 'yugioh') {
     // A corrected suffix also requires the independent visual name. Exact
