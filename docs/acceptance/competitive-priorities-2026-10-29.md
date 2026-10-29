@@ -96,3 +96,8 @@ Search ordering was reproduced against shipped core.39b02d90.js: two new behavio
 - CardResell evidence: launch-checklist-2026-10-29.md, major-games-release.md, workflow-fixes-2026-10-29.md; ../launch-readiness-20261027.md; ../inventory-details-20261016.md.
 
 Status: competitive baseline and ordered work plan complete; first search correction deployed and live-verified. Search-ordering fix: 100% complete; broader identification and competitive work remain in progress. Overall competitive readiness is not assigned a percentage until these gates have comparable evidence. No claim that all seven phases are complete.
+
+
+## Follow-up release
+
+The ambiguous individual-sold warning and stale membership comparison have been corrected in application commit `bc3babb4079bf6fd94873cf4ca930aa47ccae613`. The membership issue was reproduced in mobile/desktop regression tests and independently confirmed on the prior live build. The complete release runner passed. See [readiness-followup-2026-10-29.md](readiness-followup-2026-10-29.md) for exact evidence, limitations and the inputs still needed; this does not close all seven phases.
