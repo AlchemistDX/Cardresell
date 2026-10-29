@@ -98,6 +98,7 @@ for (const foilHint of ['', 'non_foil', 'foil']) {
 }
 const mtg={cardType:'mtg',foilHint:'foil'};
 finishCtx._scanApplyFinishReview(mtg,{variant:'usd',prices:{usd:1,usd_foil:5}});
-ok(mtg.marketPrice===5,'other game finish handling unchanged');
+ok(mtg.marketPrice===1 && mtg.finishKey==='usd','Magic uses stable base price instead of inconclusive foil hint');
+ok(mtg.finishEstimated && !mtg.finishConfirmed && mtg.finishBasis==='base_printing' && !mtg.finishReviewRequired,'Magic base price is explicitly estimated without mandatory review');
 console.log(`bulk-variant-choice: ${pass} passed, ${fail} failed -- SUITE COMPLETE, exit=${fail ? 1 : 0}`);
 process.exit(fail ? 1 : 0);

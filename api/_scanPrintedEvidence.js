@@ -86,7 +86,7 @@ export async function readCollectorEvidence(image, tokenValue, evidence, {fetchF
       const record=(await response.json())?.records?.[0];
       if (record?._status?.code!==200) return evidence;
       const extra=printedText(record._ocr);
-      console.info('[scan-evidence]',JSON.stringify({stage:'collector_crop',collectorFragments:extra.split('\n').filter(t=>/[0-9/]/.test(t)).slice(0,5).map(t=>t.slice(0,90)),fractions:(extra.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4)}));
+      console.info('[scan-evidence]',JSON.stringify({stage:'collector_crop',fractions:(extra.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4)}));
       return {...evidence,text:evidence.text+'\n'+extra};
     });
   } catch {return evidence;}
@@ -136,6 +136,37 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
   const game = original?.card_type || visual?.gameHint;
   if (!paths[game] || !evidence?.ok || evidence.labels?.length || original?._ximilar_graded) return null;
   const catalog = await loadIndex(game);
+  const setCache = new Map();
+  const setMetadata = set => {
+    if (!setCache.has(set)) setCache.set(set,(async()=>{
+      const response=await fetchFn(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(set)}`,{signal:AbortSignal.timeout(5000),redirect:'error'});
+      if (!response.ok) {await response.body?.cancel();return null;}
+      return response.json();
+    })().catch(()=>null));
+    return setCache.get(set);
+  };
+  if (game === 'pokemon' && !/\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(evidence.text)) {
+    // Recover a missing separator only from an entire observed numeric token,
+    // exact visual name/set/number, and the independently verified set total.
+    const choices=[original,...(visual.candidates||[])].filter(Boolean);
+    const rows=catalog.cards.filter(r=>r[6]==='en' && r[8]!==true && r[3] &&
+      normalized(evidence.text).includes(normalized(r[1])) && choices.some(c=>
+        normalized(c.card_name)===normalized(r[1]) && normalized(c.set_name)===normalized(catalog.sets[r[2]]) &&
+        num(String(c.card_number).split('/')[0])===num(r[3])));
+    if (rows.length && rows.length<=8 && new Set(rows.map(r=>r[2])).size<=3) {
+      const fractions=await Promise.all(rows.map(async row=>{
+        const data=await setMetadata(row[2]);
+        if (!data || data.id!==row[2] || normalized(data.name)!==normalized(catalog.sets[row[2]])) return '';
+        const total=String(data.cardCount?.official||'');
+        if (!/^\d{2,4}$/.test(total)) return '';
+        const number=num(row[3]);
+        if (!new RegExp('(?:^|[^a-z0-9])0{0,2}'+escape(number)+escape(total)+'(?=$|[^a-z0-9])','i').test(evidence.text)) return '';
+        return number+'/'+total;
+      }));
+      const recovered=[...new Set(fractions.filter(Boolean))];
+      if (recovered.length===1) evidence={...evidence,text:evidence.text+'\n'+recovered[0]};
+    }
+  }
   let matches = printedCandidates(catalog, game, evidence.text);
   console.info('[scan-evidence]', JSON.stringify({stage:'catalogue',game,textLength:evidence.text.length,candidates:matches.length,ratios:(evidence.text.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4),nameRows:catalog.cards.filter(r=>normalized(evidence.text).includes(normalized(r[1].replace(/\s*\([^)]*\)/g,'')))).length,printedCodes:(evidence.text.match(/\b[A-Z0-9]{3,6}\s*[-–]?\s*EN\s*\d{3}\b/gi)||[]).slice(0,4)}));
   if (!matches.length || matches.length > 8) return null;
@@ -152,9 +183,8 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
     const verified = new Set();
     await Promise.all(sets.map(async set => {
       try {
-        const response = await fetchFn(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(set)}`, {signal:AbortSignal.timeout(5000),redirect:'error'});
-        if (!response.ok) { console.info('[scan-evidence]',JSON.stringify({stage:'set_metadata',set,status:response.status})); await response.body?.cancel(); return; }
-        const data = await response.json();
+        const data = await setMetadata(set);
+        if (!data) return;
         console.info('[scan-evidence]',JSON.stringify({stage:'set_metadata',set,idMatches:data.id===set,nameMatches:normalized(data.name)===normalized(catalog.sets[set]),total:data.cardCount?.official,abbreviation:data.abbreviation?.official,abbreviationRead:!!data.abbreviation?.official && (token(evidence.text,data.abbreviation.official)||token(evidence.text,data.abbreviation.official+'EN')),visualSetMatches:[original,...(visual.candidates||[])].filter(Boolean).some(c=>normalized(c.set_name)===normalized(data.name))}));
         if (data.id !== set || normalized(data.name) !== normalized(catalog.sets[set])) return;
         const abbreviation = data.abbreviation?.official;

@@ -90,4 +90,13 @@ await test('crop and provider failures preserve existing review evidence',async(
  assert.equal(await readCollectorEvidence('image','key',e,{cropFn:async()=>{throw Error('invalid')}}),e);
  assert.equal(await readCollectorEvidence('image','key',e,{cropFn:async()=>'crop',fetchFn:async()=>new Response('',{status:503})}),e);
 });
+await test('missing Pokemon slash needs matching visual printing and official denominator',async()=>{
+ const v={cardInfo:{card_type:'pokemon',card_name:'Applin',set_name:'Stellar Crown',card_number:'012'}};
+ const e={ok:true,text:'Applin 012142',labels:[]};
+ const extras={fetchFn:async()=>Response.json({id:'sv07',name:'Stellar Crown',cardCount:{official:142},abbreviation:{official:'SCR'}})};
+ assert.equal((await resolve(v,e,extras)).grounded_id,'sv07-012');
+ for(const text of ['Applin 012143','Applin 9912142','Applin 012142 012/143','Applin PRE EN 012142']) assert.equal(await resolve(v,{...e,text},extras),null);
+ assert.equal(await resolve({cardInfo:{...v.cardInfo,set_name:'Other'}},e,extras),null);
+ assert.equal(await resolve(v,e,{fetchFn:async()=>{throw Error('offline')}}),null);
+});
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);
