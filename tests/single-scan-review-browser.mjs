@@ -9,7 +9,7 @@ const root=resolve(new URL('..',import.meta.url).pathname),origin='https://singl
 const recoveryPhoto=readFileSync(resolve(root,'tests/fixtures/grade-check/front-sharp.jpg')).toString('base64');
 const browser=await chromium.launch({executablePath:process.env.CR_CHROMIUM,args:['--no-sandbox']});
 async function until(fn){for(let i=0;i<300;i++){if(fn())return;await new Promise(r=>setTimeout(r,10))}throw Error('request did not reach boundary')}
-const modes=['magic','japanese','magic-japanese','wrong-result','wrong-scan','lost','lost-auth','pending-close','account','token-account','token-timeout','body-timeout','invalid-offer','qc-cancel','qc-error','fastpath-error','compress-error','compress-failure','direct-html','direct-error-html','scan-recovery','scan-recovery-account','grade-recovery','grade-recovery-account','grade-cancel','grade-qc-cancel','grade-double-submit'];
+const modes=['magic','japanese','magic-japanese','wrong-result','wrong-scan','lost','lost-auth','pending-close','account','token-account','token-timeout','body-timeout','invalid-offer','qc-cancel','qc-error','fastpath-error','compress-error','compress-failure','direct-html','direct-error-html','scan-recovery','scan-recovery-service','scan-recovery-unreadable','scan-recovery-account','grade-recovery','grade-recovery-account','grade-cancel','grade-qc-cancel','grade-double-submit'];
 try {
  for(const mode of modes){
   const h=billingHarness({bucket:'free',balance:4});let hold=null,first=true;
@@ -39,7 +39,7 @@ try {
       if(mode==='wrong-scan'&&first){first=false;return json({...result.payload,scan_id:'other-scan'})}
       return json(result.payload,result.statusCode);
     }
-    if(u.pathname==='/api/scan'){scans.push(req.postDataJSON());if(mode==='direct-error-html')return json({error:'<b>Offline</b>'},503);return json(mode==='direct-html'?{success:true,identified:true,card_name:'<b>Fixture Wizard</b>',card_number:'<i>58</i>',set_name:'<u>set6</u>',card_type:'mtg',confidence:'high'}:{success:true,identified:false,card_name:''})}
+    if(u.pathname==='/api/scan'){scans.push(req.postDataJSON());if(scans.length===1&&['scan-recovery-service','scan-recovery-unreadable'].includes(mode))return route.fulfill({status:mode==='scan-recovery-service'?503:200,contentType:'text/html',body:'<html>Service unavailable</html>'});if(mode==='direct-error-html')return json({error:'<b>Offline</b>'},503);return json(mode==='direct-html'?{success:true,identified:true,card_name:'<b>Fixture Wizard</b>',card_number:'<i>58</i>',set_name:'<u>set6</u>',card_type:'mtg',confidence:'high'}:{success:true,identified:false,card_name:''})}
     if(u.pathname==='/api/pro-status')return json({tier:'pro',isPro:true,idFreeLeft:29,idPaidLeft:4});
     if(u.pathname.startsWith('/api/')){if(req.method()!=='GET')writes.push(u.pathname);return json({error:'offline'},503)}
     try{const p=resolve(root,'.'+(u.pathname==='/'?'/index.html':u.pathname));if(!p.startsWith(root+'/'))throw Error('path');return route.fulfill({body:readFileSync(p),contentType:p.endsWith('.js')?'application/javascript':p.endsWith('.css')?'text/css':'text/html'})}
@@ -124,7 +124,7 @@ try {
       continue;
     }
     if(mode.startsWith('scan-recovery')){
-      await page.evaluate(photo=>{
+      await page.evaluate(({photo,mode})=>{
         cancelScan();window._lastIdentifiedCard=null;
         window.photoChecks=0;window.photoCompressions=0;window._tryOCRRescue=async()=>null;
         window.CardResellPhotoQC.check=async()=>{photoChecks++;return {ok:true}};
@@ -134,12 +134,16 @@ try {
         const fetch=window.fetch;let first=true;
         window.fetch=async(...args)=>{
           const response=await fetch(...args);
-          if(String(args[0])==='/api/scan'&&first){first=false;response.arrayBuffer=()=>new Promise(resolve=>{window.releaseScanBody=()=>resolve(new TextEncoder().encode('{}').buffer)})}
+          if(String(args[0])==='/api/scan'&&first&&!['scan-recovery-service','scan-recovery-unreadable'].includes(mode)){first=false;response.arrayBuffer=()=>new Promise(resolve=>{window.releaseScanBody=()=>resolve(new TextEncoder().encode('{}').buffer)})}
           return response;
         };
         window.processing=processScanImage({files:[new File([Uint8Array.from(atob(photo),c=>c.charCodeAt(0))],'card.jpg',{type:'image/jpeg'})]});
-      },recoveryPhoto);
+      },{photo:recoveryPhoto,mode});
       await page.evaluate(()=>window.processing);
+      if(['scan-recovery-service','scan-recovery-unreadable'].includes(mode)){
+        t.check(mode+': one request before explicit recovery',scans.length===1);
+        t.check(mode+': service failure is not blamed on the photo',/unavailable|unreadable/.test(await page.locator('#scanStatus').innerText())&&!/clearer photo|retake/i.test(await page.locator('#scanStatus').innerText()));
+      }
       t.check(mode+': generic new-photo retry does not compete with recovery',!await page.locator('#scanRetryBtn').isVisible());
       t.check(mode+': a stalled scan offers recovery in the result screen',await page.getByRole('button',{name:'Retry same photo',exact:true}).count()===1);
       if(process.env.CR_SHOT_DIR&&mode==='scan-recovery')await page.screenshot({path:resolve(process.env.CR_SHOT_DIR,'scan-recovery.png')});

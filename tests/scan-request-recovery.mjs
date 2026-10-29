@@ -171,4 +171,19 @@ await t.section('late duplicate failure cannot erase a newer operation',async()=
   t.check('old completion leaves newer recovery intact',JSON.parse(s.calls.at(-1).body).operation_id===fresh);
  }finally{s.clean()}
 });
+for (const [status,text] of [[500,'FUNCTION_INVOCATION_FAILED'],[502,'<html>Bad gateway</html>'],[503,'unavailable'],[504,'timeout'],[429,'slow down'],[200,'<html>wrong route</html>'],[200,'null']]) await t.section('unreadable response '+status+' '+text,async()=>{
+ const s=transport();try {
+  s.fetch=async()=>new Response(text,{status});
+  const r=await settle(s.request());
+  t.check('service problem is recoverable, never blamed on photo',r.error?.code==='SCAN_RECOVERABLE' && !/clearer|retake|refund/i.test(r.error.message));
+  t.check('no automatic resend or success refresh',s.calls.length===1 && s.refreshes===0);
+  const first=JSON.parse(s.calls[0].body).operation_id;
+  s.fetch=async()=>Response.json({success:true,card_name:'Recovered'});await s.request();
+  t.check('explicit retry checks the existing operation',JSON.parse(s.calls[1].body).operation_id===first);
+  t.check('timers released',s.timers.size===0 && s.intervals.size===0);
+ }finally{s.clean()}
+});
+for(const status of [401,402]) await t.section('plain auth/credit '+status,async()=>{
+ const s=transport();try {s.fetch=async()=>new Response('Unavailable',{status});t.check('caller retains sign-in or credit handling',(await s.request()).status===status);}finally{s.clean()}
+});
 t.done();

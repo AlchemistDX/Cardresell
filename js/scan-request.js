@@ -85,6 +85,19 @@ window.cardResellScanRequest = async function (url, options) {
     current();
     const buffered = new Response([204, 205, 304].includes(response.status) ? null : responseBytes,
       { status: response.status, statusText: response.statusText, headers: response.headers });
+    // Edge/function failures may return HTML or plain text. These are service
+    // failures, not bad photos. Keep the operation so an explicit retry checks
+    // the same request; never claim a refund from an unreadable response.
+    if (![401,402].includes(buffered.status)) {
+      let validJson=false;
+      try { const value=await buffered.clone().json(); validJson=!!value && typeof value==='object' && !Array.isArray(value); } catch (_) {}
+      if (!validJson) {
+        const reason=buffered.status===429 ? 'The scanner is rate limited. Try again shortly.'
+          : buffered.status>=500 ? 'The scanner is temporarily unavailable. Try again shortly.'
+          : 'The scanner returned an unreadable response.';
+        throw recoverable(reason+' Retry the same '+photos+' to check the existing request.');
+      }
+    }
     // Retain uncertain/charged requests for recovery, but a confirmed refunded
     // identification failure must not replay forever on the next user attempt.
     // This only retires the local key; it never sends an automatic paid retry.
