@@ -32,7 +32,7 @@
         "set": "Vivid Voltage",
         "printed_number": "070/185"
       },
-      "status": "pending",
+      "status": "passed_identity",
       "observed": null
     },
     {
@@ -50,7 +50,7 @@
         "printed_number": "012/142"
       },
       "status": "review",
-      "observed": "Match needs review; OCR no collector fraction; no net credit debit"
+      "observed": "Collector fraction not extracted"
     },
     {
       "id": "applin-low-quality",
@@ -66,8 +66,8 @@
         "set": "Stellar Crown",
         "printed_number": "012/142"
       },
-      "status": "pending",
-      "observed": null
+      "status": "review",
+      "observed": "Collector fraction not extracted"
     },
     {
       "id": "mimikyu-original",
@@ -100,7 +100,7 @@
         "set": "Paldean Fates",
         "printed_number": "037/091"
       },
-      "status": "pending",
+      "status": "passed_identity",
       "observed": null
     },
     {
@@ -118,7 +118,7 @@
         "printed_number": "CORI-EN051"
       },
       "status": "review",
-      "observed": "Name found; printed set code unconfirmed; OCR no printed code; no net credit debit"
+      "observed": "Name found; printed set code not extracted"
     },
     {
       "id": "blitzclique-low-quality",
@@ -134,8 +134,8 @@
         "set": "Chaos Origins",
         "printed_number": "CORI-EN051"
       },
-      "status": "pending",
-      "observed": null
+      "status": "review",
+      "observed": "Name found; printed set code not extracted"
     },
     {
       "id": "greninja-original",
@@ -151,8 +151,8 @@
         "set": "Mega Evolution Promos",
         "printed_number": "MEP 081"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Mega Evolution Promos #81; holofoil"
     },
     {
       "id": "greninja-low-quality",
@@ -168,8 +168,8 @@
         "set": "Mega Evolution Promos",
         "printed_number": "MEP 081"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Mega Evolution Promos #81; holofoil"
     },
     {
       "id": "eager-original",
@@ -185,8 +185,9 @@
         "set": "Secrets of Strixhaven",
         "printed_number": "SOS 0011"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Secrets of Strixhaven #11; original selected foil, reduced-quality selected non-foil",
+      "finish_status": "inconsistent_requires_fix"
     },
     {
       "id": "eager-low-quality",
@@ -202,8 +203,9 @@
         "set": "Secrets of Strixhaven",
         "printed_number": "SOS 0011"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Secrets of Strixhaven #11; original selected foil, reduced-quality selected non-foil",
+      "finish_status": "inconsistent_requires_fix"
     },
     {
       "id": "stadium-original",
@@ -219,8 +221,8 @@
         "set": "Secrets of Strixhaven",
         "printed_number": "SOS 0232"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Secrets of Strixhaven #232; non-foil selected; physical finish not certified"
     },
     {
       "id": "stadium-low-quality",
@@ -236,8 +238,8 @@
         "set": "Secrets of Strixhaven",
         "printed_number": "SOS 0232"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Secrets of Strixhaven #232; non-foil selected; physical finish not certified"
     },
     {
       "id": "charizard-original",
@@ -255,8 +257,8 @@
         "grader": "PSA",
         "grade": "9"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Team Up #14; PSA 9; certificate 51044018; no verified graded price"
     },
     {
       "id": "charizard-low-quality",
@@ -274,8 +276,16 @@
         "grader": "PSA",
         "grade": "9"
       },
-      "status": "pending",
-      "observed": null
+      "status": "passed_identity",
+      "observed": "Team Up #14; PSA 9; certificate 51044018; no verified graded price"
     }
-  ]
+  ],
+  "summary": {
+    "executed": 16,
+    "automatic_identities": 12,
+    "reviews": 4,
+    "wrong_automatic_identities_observed": 0,
+    "launch_accepted": false,
+    "ending_id_credits": 361
+  }
 }

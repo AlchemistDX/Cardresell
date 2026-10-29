@@ -15,31 +15,40 @@ The reduced-quality fixtures use a maximum dimension of 1024 pixels, JPEG
 quality 65, brightness 0.8, and Gaussian blur radius 0.35. They are synthetic
 stress cases, not a representative customer accuracy study.
 
-Four original cases have now been tested on this release:
+All 16 live cases have now run on this application release.
 
-| Case | Live result |
-|---|---|
-| Dusclops | Automatic Vivid Voltage #70; $0.13 normal base-printing estimate |
-| Mimikyu | Automatic Paldean Fates #037; $0.27 holofoil estimate |
-| Applin | Match review; OCR returned no collector fraction |
-| Blitzclique | Name found, printing review; OCR returned no printed set code |
+| Card | Original | Reduced quality |
+|---|---|---|
+| Dusclops | Automatic Vivid Voltage #70 | Same identity |
+| Applin | Match review | Match review |
+| Mimikyu | Automatic Paldean Fates #037 | Same identity |
+| Blitzclique | Name found, printing review | Same review |
+| Mega Greninja ex | Automatic Mega Evolution Promos #81 | Same identity |
+| Eager Glyphmage | Automatic Secrets of Strixhaven #11, foil selected | Same identity, **non-foil selected** |
+| Stadium Tidalmage | Automatic Secrets of Strixhaven #232 | Same identity |
+| Charizard slab | Team Up #14, PSA 9, certificate 51044018 | Same identity, grade and certificate |
 
-Two pass identity; two remain review; twelve cases remain pending. Thus 4/16
-planned checks have run (25% execution), not 25% scanner accuracy or readiness.
-Earlier Magic and Greninja successes belong to the previous release and must
-not be reported as fresh passes.
+Execution: 16/16 (100%). Identity outcomes: 12 automatic, 4 review, no wrong
+automatic identity observed in this small test set. This is not general
+accuracy or launch-readiness certification. Eager's finish changes between
+photos and remains a separate pricing/variant failure. Stadium's physical
+finish is not independently certified. Charizard correctly states no verified
+price for this grade; no raw value is substituted.
 
-The previously timed-out three-photo upload recovered with all three images
-queued. One Scan All submission completed; balance moved from 372 to 371,
-consistent with Mimikyu consuming one credit and the two review cases having
-no net debit. No inventory or listing drafts were saved.
+Credit balance across this acceptance set: 373 to 361, twelve successful IDs
+and four reviews. No net debit for the review cases was observed. No inventory,
+real drafts or listings were saved. Original final batch: 371 to 367; reduced
+quality batch: 367 to 361.
 
-Production diagnostics on the current release: Applin textLength 247,
-nameRows 18, candidates 0, ratios []; Blitzclique textLength 506, nameRows 6,
-candidates 0, printedCodes []. Mimikyu's exact 037/091 evidence and PAF set
-corroboration yielded one verified printing. Increasing image resolution alone
-has not solved Applin or Blitzclique; the next repair must improve evidence
-extraction without replacing it with a guessed printing.
+Reduced-quality diagnostics: Applin textLength 261, nameRows 18, candidates 0,
+ratios []; Blitzclique textLength 491, nameRows 6, candidates 0, printedCodes [].
+Higher resolution alone did not solve these two cards. Current diagnostics
+cannot distinguish missing OCR characters from token-boundary/normalization
+problems, so do not claim a provider-only root cause. The reader currently uses
+_ocr.full_text. Provider documentation also describes per-region OCR text;
+inspect those structures with bounded, non-sensitive diagnostics before
+changing extraction. Do not substitute guessed _identification values for
+independent printed evidence.
 
 ## Changes already deployed
 
@@ -60,21 +69,20 @@ of this application source: billing/refund 15, sports retry 54, slab browser
 with ALL CHECKS PASSED; conditional/live suites may skip. These are not live
 photo accuracy results. The remote sandbox is stopped.
 
-## Live execution order
+## Remaining repair order
 
-1. The recovered three-photo batch is complete. Start a
-   fresh tab and upload one remaining original photo at a time. Confirm the queued image
-   before Scan All. Never repeatedly click Scan All while a request is pending.
-2. Prioritize Applin, Mimikyu, Blitzclique, and the Charizard slab. Then repeat
-   Greninja and both Magic cards against the current release.
-3. Run all eight reduced-quality cases. Record automatic exact identity,
-   wrong identity, review, unsupported, timeout, and unavailable price separately.
-4. Record start/end credits, displayed finish, price source, and elapsed scan
-   time. Do not count file-transfer time as identification latency.
-5. Inspect diagnostics for failures, repair the general cause, run relevant
-   regressions, deploy, then use a fresh tab to avoid idempotent result replay.
-6. Save visible result evidence. Do not save inventory, create real listing
-   drafts, publish listings, or buy credits during acceptance.
+1. Inspect missing collector evidence in full text versus OCR regions for
+   Applin and Blitzclique. Preserve exact printed-code and unique-printing checks.
+2. Repair extraction based on actual response evidence. Keep provider work
+   bounded and within the same customer operation; no extra credit debit.
+3. Fix finish uncertainty: Eager's degraded photo must not silently turn a foil
+   card into a confidently priced non-foil. Identity and finish need distinct
+   confidence handling without adding mandatory questions to every scan.
+4. Run relevant regression tests, verify production API startup, then repeat
+   both failing identities and finish checks in fresh tabs after deployment.
+5. Repeat the complete 16-case matrix when the scanner changes. Preserve
+   original fixtures and hashes; never count manual candidate selection as auto.
+6. Continue the broader pre-advertising checklist below after scanner acceptance.
 
 ## Acceptance gates
 
