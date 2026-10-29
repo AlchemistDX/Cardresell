@@ -36,10 +36,10 @@ if(!process.env.PRICE_MATCH_ONLY){
  check('a rounded reference cannot replace the actual listed high',JSON.stringify(E.tiers(E.assess({...input,row:{...row,market:100.119,low:100.11,high:100.12}})).map(t=>[t.id,t.amt]))==='[["ask-low",100.11],["ask-high",100.12]]');
  check('old observed endpoints retain their date and limitation',E.assess({...input,sourceUpdatedAt:'2026-10-10'}).stale&&/over 7 days/.test(E.assess({...input,sourceUpdatedAt:'2026-10-10'}).note));
 }
-const names=['_crTplAskEndpoints','_crTplSoldAverage','_crFinishLabel','tplCardToNormalized','fetchTPLGradedByNameNumber'];
+const names=['_crTplGameForCard','fetchFallbackJson','_crTplAskEndpoints','_crTplSoldAverage','_crFinishLabel','tplCardToNormalized','fetchTPLGradedByNameNumber'];
 const ast=parse(core,{ecmaVersion:'latest',sourceType:'script'}),source=ast.body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)).map(n=>core.slice(n.start,n.end)).join('\n');
 const card=(id,name='Mew',number='76/214',set='Unbroken Bonds')=>({id,name,number,set_name:set,last_price_update:'2026-10-24T12:00:00Z',prices:{graded:{psa:{10:{ebay:{avg_7d:100,avg_30d:160,avg_1d:80}}}}}});
-function fixture(cards){const c={console,tplApiKey:'fixture',selectedCard:{name:'Mew',number:'76/214',setName:'Unbroken Bonds',game:'pokemon'},fetch:async()=>({ok:true,json:async()=>({data:cards})})};c.window=c;vm.createContext(c);vm.runInContext(source,c);return c;}
+function fixture(cards){const c={console,AbortController,setTimeout,clearTimeout,tplApiKey:'fixture',selectedCard:{name:'Mew',number:'76/214',setName:'Unbroken Bonds',game:'pokemon'},fetch:async()=>({ok:true,json:async()=>({data:cards})})};c.window=c;vm.createContext(c);vm.runInContext(source,c);return c;}
 {
  const c=fixture([card('wrong','Other card'),card('right')]);const rows=await c.fetchTPLGradedByNameNumber('Mew','76/214','pokemon');
  check('a reused number cannot select a different card name',c.selectedCard.tplId==='right');
