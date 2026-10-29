@@ -35,6 +35,7 @@ Exit evidence: exact name/set/number preserved through selection and downstream 
 
 - Trace each paid database's supported games and fields through the response to the UI. Having a database subscription does not guarantee a quote for every printing.
 - Check condition/finish/edition and raw versus graded isolation. Expose missing exact-grade prices rather than substituting raw values.
+- Reconcile competing on-screen source messages: the live Greninja view showed “eBay sold prices unavailable” alongside a separately labelled TPL eBay 7-day aggregate. The sources differ, but the first label is too broad for that combination; scope it to individual sold comparisons.
 - Keep market references, listed asks and sold aggregates distinct. Show usable low or high independently; never reintroduce ±15% placeholders.
 - Determine actual TPL history entitlement before enabling history calls or estimating their cost.
 
@@ -84,7 +85,7 @@ Exit evidence: independently completed seller journeys and measured contribution
 
 ## First change and verification
 
-Search ordering was reproduced against shipped core.39b02d90.js: two new behavior assertions failed (428 passed / 2 failed). The correction in core.7472ba7d.js passes all 430 launch-audit regression checks and 285 asset-fingerprint checks. It changes ordering only, preserves every returned row, and does not add paid provider requests. Full release validation and deployment status must be recorded before calling this change live.
+Search ordering was reproduced against shipped core.39b02d90.js: two new behavior assertions failed (428 passed / 2 failed). The correction in core.7472ba7d.js passes all 430 launch-audit regression checks and 285 asset-fingerprint checks. It changes ordering only, preserves every returned row, and does not add paid provider requests. The full 176-entry release runner completed with ALL CHECKS PASSED, exit 0, in 636.6 seconds; conditional/live checks retained their normal skips. The tested index/core SHA-256 values match the release files. Application commit: c98cbc5d147e94b4c7a44c42905467473787724f. Production deployment dpl_5UCpamJhhdQrtfmUCYkaX7W7C1v8 reached READY on both production domains. The live browser loaded core.7472ba7d.js, and searching Charizard Base Set displayed Charizard Base Set #004/102 first, followed by Base Set 2 and other printings. The test made no inventory, draft or marketplace listing writes. Screenshot: screenshots/search-ranking-2026-10-29.jpg. This proves the sampled order, not the accuracy of every displayed provider price.
 
 ## Sources checked
 
@@ -94,4 +95,4 @@ Search ordering was reproduced against shipped core.39b02d90.js: two new behavio
 - CollX identification/manual recovery, pricing and marketplace: https://collx.app/faq
 - CardResell evidence: launch-checklist-2026-10-29.md, major-games-release.md, workflow-fixes-2026-10-29.md; ../launch-readiness-20261027.md; ../inventory-details-20261016.md.
 
-Status: competitive baseline and ordered work plan complete; first search correction in verification. Overall competitive readiness is not assigned a percentage until these gates have comparable evidence. No claim that all seven phases are complete.
+Status: competitive baseline and ordered work plan complete; first search correction deployed and live-verified. Search-ordering fix: 100% complete; broader identification and competitive work remain in progress. Overall competitive readiness is not assigned a percentage until these gates have comparable evidence. No claim that all seven phases are complete.
