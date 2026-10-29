@@ -42,3 +42,13 @@ Missing provider collector numbers, unsupported exact variants and absent graded
 - Full `bash tests/run-all.sh --local` completed with ALL CHECKS PASSED across 176 registered suite entries. Conditional/live suites retain their documented skip gates; this is not a real-payment or physical-device test.
 - Paid-provider browser outcome checks passed 142 checks, draft selection handoff 62, and immutable asset fingerprints 285.
 - Shipped core bundle: `js/core.302986f3.js`. Production release and post-release checks are recorded in the conversation handoff.
+
+## Production release
+
+- Application commit: `09ed446228efdb84f2545b5879c4fb44462a7336`.
+- Deployment: `dpl_CUWxrjzADR1D37nnxnpWuq9ZyQcW`, READY on `www.cardresell.org` and `cardresell.org`.
+- Public HTML references `js/core.302986f3.js`; fetched bytes independently hash to `302986f3` (1,525,821 bytes).
+- Full regression command exited 0 after 624 seconds, with ALL CHECKS PASSED. No app code changed after that run.
+- A fresh Chromium page at 390px executed the shipped detail helper against the live paid proxy. Mew/Pokémon, Lightning Bolt/Magic and Dark Magician/Yu-Gi-Oh! all returned their exact requested IDs, game and name, with 5/20/5 price rows respectively. This is a browser/provider integration check, not physical iPhone camera acceptance.
+- The initial early-page check returned null for Yu-Gi-Oh!; its direct API response was valid. A settled-page individual retry and then a complete three-game retry passed. The original null's precise cause was not established; it is not counted as a pass.
+- Deployment-scoped error/fatal logs returned no entries in the five-minute post-deployment check. This is a short observation window, not a future uptime guarantee.
