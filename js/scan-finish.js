@@ -38,12 +38,11 @@ function _scanApplyFinishReview(row, info) {
   row.finishEstimated = true;
   row.finishOptions = _scanFinishOptions(info);
   row.finishPriceDate = new Date().toISOString();
-  // Pokemon's generic foil tag is not evidence of a specific premium printing.
+  // A visual foil tag is not evidence of a specific premium printing in any game.
   // Keep a usable automatic base estimate, even if the feed prefers reverse.
   // A missing base price stays missing; never substitute a premium price.
   const options = row.finishOptions;
-  const base = row.cardType === 'pokemon'
-    ? options.find(o=>/^(normal|nonfoil|non_foil|usd)$/i.test(o.key)) : null;
+  const base = options.find(o=>/^(normal|nonfoil|non_foil|usd)$/i.test(o.key));
   const hinted = row.foilHint === 'non_foil'
     ? options.find(o=>/^(normal|nonfoil|non_foil|usd)$/i.test(o.key))
     : row.foilHint === 'foil'
@@ -52,7 +51,7 @@ function _scanApplyFinishReview(row, info) {
   // Keep it estimated until the seller chooses; no extra tap is required.
   const guess = base || hinted || options.find(o=>o.key===info?.variant) || (options.length===1 ? options[0] : null);
   row.finishBasis = base && options.length > 1 ? 'base_printing'
-    : row.cardType === 'pokemon' && options.length === 1 ? 'sole_available' : '';
+    : options.length === 1 ? 'sole_available' : '';
   row.finishKey = guess?.key || '';
   row.finish = guess?.label || '';
   if (guess) {

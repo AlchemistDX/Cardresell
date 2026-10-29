@@ -52,6 +52,12 @@ for (const width of [320,390,1280]) {
    document.getElementById('bulkResultsList').innerHTML='<div id="bulk-row-0" style="display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:#111;border-radius:10px;border:1px solid #1e1e1e"></div>';
    _bulkUpdateRow('bulk-row-0',window._bulkResults[0]);
  });
+ const finishStability=await page.evaluate(()=>['foil','non_foil',''].map(foilHint=>{
+   const row={cardType:'mtg',foilHint};
+   _scanApplyFinishReview(row,{variant:foilHint==='foil'?'usd_foil':'usd',prices:{usd:.13,usd_foil:.15}});
+   return [row.finishKey,row.marketPrice,row.finishBasis,row.finishConfirmed,row.finishReviewRequired];
+ }));
+ check(width+' Magic foil uncertainty uses stable labeled base without mandatory question',finishStability,Array(3).fill(['usd',.13,'base_printing',false,false]));
  const initial=await page.evaluate(()=>window._bulkResults[0]);
  check(width+' identifies card',initial.success,true);
  check(width+' automatic estimate is not seller confirmation',initial.finishConfirmed,false);

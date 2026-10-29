@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {printedCandidates,resolvePrintedEvidence,readPrintedEvidence,resolveSlabEvidence} from '../api/_scanPrintedEvidence.js';
+import {printedCandidates,resolvePrintedEvidence,readPrintedEvidence,resolveSlabEvidence,printedText} from '../api/_scanPrintedEvidence.js';
 let passed=0;
 const test=async(name,fn)=>{await fn();passed++;console.log('PASS '+name)};
 const data=async game=>{const m=JSON.parse(await readFile(new URL('../data/catalog/current.json',import.meta.url)));return JSON.parse(await readFile(new URL('..'+m.games[game].url,import.meta.url)))};
@@ -48,5 +48,19 @@ await test('dedicated slab reader accepts label-only response and never requests
 });
 await test('two slab labels cannot be combined into a single certified identity',async()=>{
  const r=await readPrintedEvidence('image','key',{slab:true,fetchFn:async()=>Response.json({records:[{_status:{code:200},_objects:[{name:'Slab Label'},{name:'Slab Label'}]}]})});assert.equal(r.ok,false);
+});
+await test('region boundaries retain independently read collector code',async()=>{
+ const text=printedText({full_text:'Blitzclique - Breakaway textCORI-EN051more',texts:[{text:'CORI-EN051',prob:.99}]});
+ assert.equal(printedCandidates(ygo,'yugioh',text).length,1);
+});
+await test('Unicode collector separator preserves exact digits',async()=>{
+ const text=printedText({full_text:'Applin SC EN',texts:[{text:'012／142',prob:.99}]});
+ assert.ok(printedCandidates(pokemon,'pokemon',text).length>0);
+ assert.equal(printedCandidates(pokemon,'pokemon',printedText({full_text:'Applin',texts:[{text:'012/142',prob:.6}]})).length,0);
+});
+await test('conflicting regions still reject automatic fraction selection',async()=>{
+ const text=printedText({full_text:'Applin 012/142',texts:[{text:'009/131',prob:.99}]});
+ assert.equal(printedCandidates(pokemon,'pokemon',text).length,0);
+ assert.equal(printedText({full_text:'x'.repeat(12001)}),'');
 });
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);

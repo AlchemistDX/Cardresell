@@ -14,6 +14,19 @@ const num = s => String(s || '').replace(/^0+(?=\d)/, '');
 const escape = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const token = (text, value) => new RegExp('(?:^|[^a-z0-9])' + escape(value) + '(?=$|[^a-z0-9])','i').test(text);
 
+// Preserve region boundaries lost in the provider's concatenated full_text.
+// Only actual OCR text is evidence; structured AI identification is not.
+export function printedText(ocr) {
+  const full = typeof ocr?.full_text === 'string' ? ocr.full_text : '';
+  if (full.length > 12000) return '';
+  const regions = Array.isArray(ocr?.texts) ? ocr.texts.slice(0,256)
+    .filter(r => typeof r?.text === 'string' && r.text.length <= 512 &&
+      Number.isFinite(r.prob) && r.prob >= .9).map(r => r.text) : [];
+  const text = [full,...regions].join('\n').normalize('NFKC')
+    .replace(/[⁄∕／]/g,'/').replace(/[‐‑–—−]/g,'-');
+  return text.length <= 24000 ? text : '';
+}
+
 async function index(game) {
   if (!paths[game]) return null;
   if (!indexes.has(game)) indexes.set(game, fetch(paths[game], {signal:AbortSignal.timeout(5000),redirect:'error'}).then(response => { if (!response.ok) throw new Error('Catalogue unavailable'); return response.json(); }).catch(e => { indexes.delete(game); throw e; }));
@@ -37,8 +50,11 @@ export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, 
       const cards = record._objects.filter(o => o?.name === 'Card');
       const labels = record._objects.filter(o => o?.name === 'Slab Label');
       if (cards.length > 1 || (!slab && cards.length !== 1) || (slab && labels.length !== 1)) return {ok:false,reason:'invalid_objects'};
-      const card = cards[0], text = card?._ocr?.full_text || '';
-      if (typeof text !== 'string' || (!text.trim() && !labels.length) || text.length > 12000) return {ok:false,reason:'no_match'};
+      const card = cards[0], text = printedText(card?._ocr);
+      if (!text.trim() && !labels.length) return {ok:false,reason:'no_match'};
+      if (!slab) console.info('[scan-evidence]',JSON.stringify({stage:'ocr_regions',count:card?._ocr?.texts?.length || 0,
+        // Bounded collector-like fragments only, never full OCR or images.
+        identifiers:(text.match(/[^\s]{0,8}(?:\/|[-]EN)[^\s]{0,12}/gi)||[]).slice(0,6)}));
       return {ok:true,text,card,labels};
     } catch (error) { return {ok:false,reason:['AbortError','TimeoutError'].includes(error?.name)?'timeout':'network'}; }
   });
