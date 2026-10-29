@@ -121,7 +121,11 @@ export function printedCandidates(catalog, game, text) {
   return catalog.cards.filter(row => {
     if (!Array.isArray(row) || row[6] !== 'en' || row[8] === true || !row[0] || !row[1] || !row[3]) return false;
     const baseName = row[1].replace(/\s*\([^)]*\)/g,'').replace(/\s*-\s*\d+\/\d+$/,'').trim();
-    if (normalized(baseName).length < 4 || !flat.includes(normalized(baseName))) return false;
+    const nameKey = normalized(baseName);
+    // Real names such as Mew and Muk are only three letters. Require an
+    // independent printed word so Mew cannot be inferred from Mewtwo.
+    if (nameKey.length < 3 || !flat.includes(nameKey)) return false;
+    if (nameKey.length === 3 && !new RegExp('(?:^|[^\\p{L}\\p{N}])' + escape(baseName) + '(?=$|[^\\p{L}\\p{N}])', 'iu').test(text)) return false;
     if (game === 'pokemon' || game === 'lorcana') {
       const parts = String(row[3]).split('/').map(num);
       return ratios.some(([n,total]) => n === parts[0] && (!parts[1] || total === parts[1]));

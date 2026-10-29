@@ -5,9 +5,23 @@ let passed=0;
 const test=async(name,fn)=>{await fn();passed++;console.log('PASS '+name)};
 const data=async game=>{const m=JSON.parse(await readFile(new URL('../data/catalog/current.json',import.meta.url)));return JSON.parse(await readFile(new URL('..'+m.games[game].url,import.meta.url)))};
 const pokemon=await data('pokemon'),ygo=await data('yugioh'),op=await data('onepiece'),lor=await data('lorcana');
+for (const text of ['Mew 032/068','MEW\n032/068','Mew, 032/068']) await test('short printed name reaches real catalogue '+text,async()=>{
+ assert.ok(printedCandidates(pokemon,'pokemon',text).some(r=>r[0]==='sm115-32'));
+});
+for (const text of ['Mewtwo 032/068','Somewhere 032/068','Mew2 032/068','éMew 032/068']) await test('short name cannot match inside another word '+text,async()=>{
+ assert.ok(!printedCandidates(pokemon,'pokemon',text).some(r=>r[1]==='Mew'));
+});
 const visual={ok:true,needsPicker:true,cardInfo:{card_type:'pokemon',card_name:'Mimikyu',set_name:'Paldea Evolved'}};
 const evidence={ok:true,text:'Mimikyu Safeguard PAF EN 037/091',labels:[]};
 const resolve=(v,e,extras={})=>resolvePrintedEvidence(v,e,{loadIndex:async g=>({pokemon,yugioh:ygo,onepiece:op,lorcana:lor})[g],fetchFn:async()=>Response.json({id:'sv04.5',name:'Paldean Fates',cardCount:{official:91},abbreviation:{official:'PAF'}}),...extras});
+await test('short Pokemon name still needs exact independent set evidence',async()=>{
+ const v={cardInfo:{card_type:'pokemon',card_name:'Mew',card_number:'32',set_name:'Hidden Fates'}};
+ const e={ok:true,text:'Mew 032/068',labels:[]};
+ const extras={fetchFn:async()=>Response.json({id:'sm115',name:'Hidden Fates',cardCount:{official:68},abbreviation:{official:'HIF'}})};
+ assert.equal((await resolve(v,e,extras)).grounded_id,'sm115-32');
+ assert.equal(await resolve({cardInfo:{card_type:'pokemon'}},e,extras),null);
+ assert.equal(await resolve(v,{...e,text:'Mewtwo 032/068'},extras),null);
+});
 await test('correct missing Mimikyu printing from independent printed set and number',async()=>{const r=await resolve(visual,evidence);assert.equal(r.grounded_id,'sv04.5-037');assert.equal(r.set_name,'Paldean Fates');});
 for(const text of ['Mimikyu 037/091','Mimikyu PRE EN 037/091','Mimikyu PAF EN 037/092','Pikachu PAF EN 037/091','Mimikyu PAF EN 037','Mimikyu PAF EN 037/091 160/091']) await test('no guess from incomplete/conflicting print '+text,async()=>assert.equal(await resolve(visual,{...evidence,text}),null));
 await test('catalogue metadata outage cannot promote an identity',async()=>assert.equal(await resolve(visual,evidence,{fetchFn:async()=>{throw Error('offline')}}),null));
