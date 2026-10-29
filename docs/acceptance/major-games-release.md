@@ -1,123 +1,103 @@
-# Major-game scanner release preparation
+# Major-game scanner release verification
 
-Status: PREPARED, NOT ACCEPTED FOR LAUNCH.
+Status: PRIORITY PHOTO ACCEPTANCE PASSED. This is not universal accuracy or a
+certification of every game, condition, finish, or future customer photo.
 
-Application: `892af836d596ea04a6dfa7e778c0b5c7385a5794`
-Production deployment: `dpl_A3UbdVgis12Lr2hi7uXyDSuxxTWd`
+Application: `5c137dbcd6da2dc1da891b523bf0a131f1c9eb19`
+Production deployment: `dpl_GeyjXpHqc1MKbRivhyGgDrxuDdxV`
 Production URL: https://www.cardresell.org/
+Verified: 2026-10-29 UTC.
 
-## Scope and evidence
+## Live acceptance
 
-Pokémon, Magic, and Yu-Gi-Oh! are the priority. The companion
-`major-games-cases.json` records 16 fixtures, their SHA-256 hashes, dimensions,
-expected names, sets, and printed identifiers. Photos remain outside Git.
-The reduced-quality fixtures use a maximum dimension of 1024 pixels, JPEG
-quality 65, brightness 0.8, and Gaussian blur radius 0.35. They are synthetic
-stress cases, not a representative customer accuracy study.
+All 16 unchanged fixtures ran through the signed-in production upload and scan
+flow in a fresh browser tab after deployment. No candidate was manually chosen.
+The companion JSON preserves original hashes and records each outcome.
 
-All 16 live cases have now run on this application release.
+| Card | Original and reduced-quality result |
+|---|---|
+| Dusclops | Automatic Vivid Voltage #70 |
+| Applin | Automatic Stellar Crown #012 |
+| Mimikyu | Automatic Paldean Fates #037 |
+| Blitzclique - Breakaway | Automatic Chaos Origins #CORI-EN051 |
+| Mega Greninja ex | Automatic Mega Evolution Promos #81 |
+| Eager Glyphmage | Automatic Secrets of Strixhaven #11 |
+| Stadium Tidalmage | Automatic Secrets of Strixhaven #232 |
+| Charizard slab | Automatic Team Up #14, PSA 9, certificate 51044018 |
 
-| Card | Original | Reduced quality |
-|---|---|---|
-| Dusclops | Automatic Vivid Voltage #70 | Same identity |
-| Applin | Match review | Match review |
-| Mimikyu | Automatic Paldean Fates #037 | Same identity |
-| Blitzclique | Name found, printing review | Same review |
-| Mega Greninja ex | Automatic Mega Evolution Promos #81 | Same identity |
-| Eager Glyphmage | Automatic Secrets of Strixhaven #11, foil selected | Same identity, **non-foil selected** |
-| Stadium Tidalmage | Automatic Secrets of Strixhaven #232 | Same identity |
-| Charizard slab | Team Up #14, PSA 9, certificate 51044018 | Same identity, grade and certificate |
+Result: 16 automatic correct identities, zero reviews, zero wrong automatic
+identities observed. The reduced-quality fixtures are synthetic stress cases
+(1024px maximum, JPEG quality 65, brightness 0.8, blur radius 0.35), not a
+representative sample of customers. Both Magic photos use the same clearly
+labeled base-printing estimate; this does not establish their physical finish.
+Both Charizard scans explicitly lack a verified price for the grade and never
+substitute a raw-card price. The final batch charged exactly 16 credits
+(balance 356 to 340). No inventory, real draft, or listing was saved.
 
-Execution: 16/16 (100%). Identity outcomes: 12 automatic, 4 review, no wrong
-automatic identity observed in this small test set. This is not general
-accuracy or launch-readiness certification. Eager's finish changes between
-photos and remains a separate pricing/variant failure. Stadium's physical
-finish is not independently certified. Charizard correctly states no verified
-price for this grade; no raw value is substituted.
+Earlier repair attempts are not counted in this final acceptance. One earlier
+Yu-Gi-Oh request was incorrectly classified as a slab by the upstream provider;
+it was held for review and refunded. The latest original and degraded scans
+both passed. That observation remains a monitoring concern rather than evidence
+that all provider classification failures have been eliminated. An in-page
+repeat reused cached results and was excluded; acceptance used a fresh tab.
 
-Credit balance across this acceptance set: 373 to 361, twelve successful IDs
-and four reviews. No net debit for the review cases was observed. No inventory,
-real drafts or listings were saved. Original final batch: 371 to 367; reduced
-quality batch: 367 to 361.
+## Implemented repairs
 
-Reduced-quality diagnostics: Applin textLength 261, nameRows 18, candidates 0,
-ratios []; Blitzclique textLength 491, nameRows 6, candidates 0, printedCodes [].
-Higher resolution alone did not solve these two cards. Current diagnostics
-cannot distinguish missing OCR characters from token-boundary/normalization
-problems, so do not claim a provider-only root cause. The reader currently uses
-_ocr.full_text. Provider documentation also describes per-region OCR text;
-inspect those structures with bounded, non-sensitive diagnostics before
-changing extraction. Do not substitute guessed _identification values for
-independent printed evidence.
+- Read bounded high-confidence OCR regions alongside full text, preserving
+  region boundaries and Unicode collector separators.
+- For English Yu-Gi-Oh codes, correct O/S/I only in the three numeric suffix
+  positions. Require a unique catalogue printing, printed name, and independent
+  visual name agreement for corrected codes. Prefixes are not fuzzed;
+  conflicting printed codes remain unresolved.
+- If a valid single-card Pokemon OCR read misses its collector fraction, make
+  one bounded OCR read of an enlarged lower-left image crop. Processing caps
+  image dimensions/bytes, respects request time budgets, and adds no customer
+  debit. Native image processing uses pinned sharp 0.35.5 and a lockfile.
+- A missing Pokemon slash can be recovered only from the complete observed
+  numeric token, exact visual name/set/number, and official set metadata.
+  Conflicting explicit fractions/set codes, outages, and ambiguous printings
+  still prevent automatic acceptance.
+- Preserve symbol-era set support and dedicated slab-label verification.
+- Use a stable labeled base-price estimate across games when finish is
+  uncertain. Finish correction stays optional; no mandatory new question.
 
-## Changes already deployed
+## Broader launch checklist verified
 
-- Pokémon symbol-era cards no longer require an abbreviation absent from the
-  physical card. Exact visual identity plus printed name/number and verified
-  official set denominator can corroborate a unique printing. Conflicting
-  printed set codes still prevent automatic acceptance.
-- Capture preserves up to 2048px at JPEG quality 0.92, within a 2 MB base64
-  budget. This is an implementation change, not proof of improved live OCR.
-- Slab evidence uses the dedicated slab identification endpoint, retaining
-  strict grade/certificate checks and preventing raw-price substitution.
+- Live bulk comparison shows lot and singles fees/net payouts immediately.
+  Negative payouts remain visible; unknown purchase cost is not invented.
+- The blanket +/-15% price tiers are removed. Reported asking-price ranges are
+  distinguished from sold data, and unavailable ranges remain explicit.
+- eBay draft downloads expose the Seller Hub Reports upload link. Draft help
+  supports Don't show again and can be reopened. This release did not upload
+  a real CSV to eBay or publish a listing.
+- eBay Connect copy correctly describes read-only seller setup/policy/location
+  checks and reusable selling settings. It does not unlock sold-price data,
+  direct publishing, or automatic sales/inventory synchronization. CSV export
+  does not require connecting.
 
-## Verification completed
+## Verification
 
-Printed evidence: 35 passed (rerun during preparation). Previous verification
-of this application source: billing/refund 15, sports retry 54, slab browser
-60, Ximilar contract 45, registry 12. The remote full local suite completed
-with ALL CHECKS PASSED; conditional/live suites may skip. These are not live
-photo accuracy results. The remote sandbox is stopped.
+Targeted checks: printed evidence 46, billing/refund 15, finish selection 74,
+finish browser 226, native focused crop processing passed. Broader checks:
+fee truth 132, price evidence 52, selling-price browser 219, draft help browser
+78. The full `bash tests/run-all.sh --local` run completed with ALL CHECKS PASSED.
+Conditional/live suites may skip; test counts are not photo accuracy results.
 
-## Remaining repair order
+## Remaining limits
 
-1. Inspect missing collector evidence in full text versus OCR regions for
-   Applin and Blitzclique. Preserve exact printed-code and unique-printing checks.
-2. Repair extraction based on actual response evidence. Keep provider work
-   bounded and within the same customer operation; no extra credit debit.
-3. Fix finish uncertainty: Eager's degraded photo must not silently turn a foil
-   card into a confidently priced non-foil. Identity and finish need distinct
-   confidence handling without adding mandatory questions to every scan.
-4. Run relevant regression tests, verify production API startup, then repeat
-   both failing identities and finish checks in fresh tabs after deployment.
-5. Repeat the complete 16-case matrix when the scanner changes. Preserve
-   original fixtures and hashes; never count manual candidate selection as auto.
-6. Continue the broader pre-advertising checklist below after scanner acceptance.
+- General recognition quality still depends on upstream visual/OCR services;
+  fail-closed reviews and refunds remain necessary.
+- Physical foil, reverse foil, condition, and authenticity are not certified
+  by identity acceptance. Estimates are labeled and sellers may correct them.
+- Sold-data access and verified graded prices are not guaranteed by an eBay
+  connection. Missing values are intentionally not fabricated.
+- Sports, One Piece, Lorcana, and Union Arena are outside this three-game
+  acceptance. The earlier 14-card report remains historical evidence only.
 
-## Acceptance gates
+## Rollback
 
-- Every original has the correct automatic name, set and collector identifier.
-  A review or manually selected candidate is not an automatic pass.
-- No wrong automatic identity in either group. Review on a degraded image is
-  safer than a fabricated match, but remains an unresolved usability result.
-- Finish and condition are separately checked; an identity pass does not
-  establish reverse holo, foil, physical condition, or authenticity.
-- Charizard retains PSA 9 and its photographed certificate; no raw price is
-  substituted. Missing graded price must be explicit.
-- Failed/review outcomes follow the refund contract; retries do not double-debit.
-- Production API startup and an authenticated photo scan succeed after deploy.
-- No claim of general scanner accuracy is based solely on this small fixture set.
-
-## Broader pre-advertising checklist
-
-These remain separate from scanner acceptance and require current verification:
-
-- Fee comparison is visible without an extra special dropdown, uses actual
-  venue formulas, and does not retain the blanket 15% placeholder.
-- Low/high ranges are measured provider data; missing data is explained without
-  fabricated bounds or false precision.
-- eBay Connect clearly states what it enables. Connection is not proof of sold
-  data access or automatic draft publishing.
-- Downloaded eBay drafts have clear upload guidance and a verified Seller Hub
-  destination, plus dismissible/reopenable help if implemented.
-- Sports, One Piece, Lorcana and Union Arena results are not implied by the
-  three-game acceptance. Known unsupported games remain explicitly labeled.
-
-## Rollback readiness
-
-If a new deployment fails module startup, stop paid testing and inspect the
-deployment logs before further scans. Do not reintroduce the import.meta URL
-runtime loader that previously failed under deployed CommonJS. A rollback
-target must be chosen from an inspected, healthy prior deployment; an older
-commit is not automatically a safe rollback. Preserve the current production
-deployment ID above and do not move aliases without checking its successor.
+The preceding healthy production deployment was
+`dpl_5UygnJivzcpWGiLS8dQXydoadjyD` (b406673). It lacks joined-digit recovery for
+original Applin. Inspect deployment health before any rollback. Never restore
+an import.meta URL runtime loader: it previously broke the deployed CommonJS
+scan route. No rollback was performed for this release.

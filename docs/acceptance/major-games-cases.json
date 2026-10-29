@@ -1,5 +1,5 @@
 {
-  "application_commit": "892af836d596ea04a6dfa7e778c0b5c7385a5794",
+  "application_commit": "5c137dbcd6da2dc1da891b523bf0a131f1c9eb19",
   "cases": [
     {
       "id": "dusclops-original",
@@ -16,7 +16,7 @@
         "printed_number": "070/185"
       },
       "status": "passed_identity",
-      "observed": "Vivid Voltage #70; $0.13 normal base-printing estimate; 1 credit"
+      "observed": "Vivid Voltage #70; normal base estimate $0.13"
     },
     {
       "id": "dusclops-low-quality",
@@ -33,7 +33,7 @@
         "printed_number": "070/185"
       },
       "status": "passed_identity",
-      "observed": null
+      "observed": "Vivid Voltage #70; normal base estimate $0.13"
     },
     {
       "id": "applin-original",
@@ -49,8 +49,8 @@
         "set": "Stellar Crown",
         "printed_number": "012/142"
       },
-      "status": "review",
-      "observed": "Collector fraction not extracted"
+      "status": "passed_identity",
+      "observed": "Stellar Crown #012; normal base estimate $0.23"
     },
     {
       "id": "applin-low-quality",
@@ -66,8 +66,8 @@
         "set": "Stellar Crown",
         "printed_number": "012/142"
       },
-      "status": "review",
-      "observed": "Collector fraction not extracted"
+      "status": "passed_identity",
+      "observed": "Stellar Crown #012; normal base estimate $0.23"
     },
     {
       "id": "mimikyu-original",
@@ -84,7 +84,7 @@
         "printed_number": "037/091"
       },
       "status": "passed_identity",
-      "observed": "Paldean Fates #037; $0.27 holofoil estimate; 1 credit"
+      "observed": "Paldean Fates #037; holofoil estimate $0.30"
     },
     {
       "id": "mimikyu-low-quality",
@@ -101,7 +101,7 @@
         "printed_number": "037/091"
       },
       "status": "passed_identity",
-      "observed": null
+      "observed": "Paldean Fates #037; holofoil estimate $0.30"
     },
     {
       "id": "blitzclique-original",
@@ -117,8 +117,8 @@
         "set": "Chaos Origins",
         "printed_number": "CORI-EN051"
       },
-      "status": "review",
-      "observed": "Name found; printed set code not extracted"
+      "status": "passed_identity",
+      "observed": "Chaos Origins #CORI-EN051; first-edition estimate $0.25"
     },
     {
       "id": "blitzclique-low-quality",
@@ -134,8 +134,8 @@
         "set": "Chaos Origins",
         "printed_number": "CORI-EN051"
       },
-      "status": "review",
-      "observed": "Name found; printed set code not extracted"
+      "status": "passed_identity",
+      "observed": "Chaos Origins #CORI-EN051; first-edition estimate $0.25"
     },
     {
       "id": "greninja-original",
@@ -152,7 +152,7 @@
         "printed_number": "MEP 081"
       },
       "status": "passed_identity",
-      "observed": "Mega Evolution Promos #81; holofoil"
+      "observed": "Mega Evolution Promos #81; holofoil estimate $0.79"
     },
     {
       "id": "greninja-low-quality",
@@ -169,7 +169,7 @@
         "printed_number": "MEP 081"
       },
       "status": "passed_identity",
-      "observed": "Mega Evolution Promos #81; holofoil"
+      "observed": "Mega Evolution Promos #81; holofoil estimate $0.79"
     },
     {
       "id": "eager-original",
@@ -186,7 +186,7 @@
         "printed_number": "SOS 0011"
       },
       "status": "passed_identity",
-      "observed": "Secrets of Strixhaven #11; original selected foil, reduced-quality selected non-foil",
+      "observed": "Secrets of Strixhaven #11; normal base estimate $0.13",
       "finish_status": "inconsistent_requires_fix"
     },
     {
@@ -204,7 +204,7 @@
         "printed_number": "SOS 0011"
       },
       "status": "passed_identity",
-      "observed": "Secrets of Strixhaven #11; original selected foil, reduced-quality selected non-foil",
+      "observed": "Secrets of Strixhaven #11; normal base estimate $0.13",
       "finish_status": "inconsistent_requires_fix"
     },
     {
@@ -222,7 +222,7 @@
         "printed_number": "SOS 0232"
       },
       "status": "passed_identity",
-      "observed": "Secrets of Strixhaven #232; non-foil selected; physical finish not certified"
+      "observed": "Secrets of Strixhaven #232; normal base estimate $0.08"
     },
     {
       "id": "stadium-low-quality",
@@ -239,7 +239,7 @@
         "printed_number": "SOS 0232"
       },
       "status": "passed_identity",
-      "observed": "Secrets of Strixhaven #232; non-foil selected; physical finish not certified"
+      "observed": "Secrets of Strixhaven #232; normal base estimate $0.08"
     },
     {
       "id": "charizard-original",
@@ -258,7 +258,7 @@
         "grade": "9"
       },
       "status": "passed_identity",
-      "observed": "Team Up #14; PSA 9; certificate 51044018; no verified graded price"
+      "observed": "Team Up #14; PSA 9; certificate 51044018; no verified grade price"
     },
     {
       "id": "charizard-low-quality",
@@ -277,7 +277,7 @@
         "grade": "9"
       },
       "status": "passed_identity",
-      "observed": "Team Up #14; PSA 9; certificate 51044018; no verified graded price"
+      "observed": "Team Up #14; PSA 9; certificate 51044018; no verified grade price"
     }
   ],
   "summary": {
@@ -287,5 +287,13 @@
     "wrong_automatic_identities_observed": 0,
     "launch_accepted": false,
     "ending_id_credits": 361
-  }
+  },
+  "deployment_id": "dpl_GeyjXpHqc1MKbRivhyGgDrxuDdxV",
+  "identity_results": {
+    "executed": 16,
+    "automatic_correct": 16,
+    "review": 0,
+    "wrong_automatic_observed": 0
+  },
+  "executed_on_utc": "2026-10-29"
 }
