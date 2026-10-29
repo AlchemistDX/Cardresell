@@ -3,7 +3,7 @@ import { catalogText, matchesCatalogPrinting, uniqueCatalogMatch, ygoPrinting } 
 import { verifyTokenFlexible } from './_verifyToken.js';
 import { identifyWithXimilar } from './_ximilar.js';
 import { scanIdentityReview } from './_scanIdentityReview.js';
-import { readPrintedEvidence, resolvePrintedEvidence, resolveSlabEvidence } from './_scanPrintedEvidence.js';
+import { readPrintedEvidence, readCollectorEvidence, resolvePrintedEvidence, resolveSlabEvidence } from './_scanPrintedEvidence.js';
 import { gradeModelPrimary, GRADE_FALLBACK_MODEL, isReasoningModel } from './_gradeModel.js';
 import { limitingFactorContradicts } from './_limitingFactor.js';
 // PSA's published label for each whole grade. The label must follow the FINAL
@@ -1243,7 +1243,10 @@ export default async function handler(req, res) {
       (!xim.ok && ['no_match','low_confidence'].includes(xim.reason));
     if (Date.now() - t0 < 20000 && evidenceNeeded && (['pokemon','lorcana','yugioh','onepiece'].includes(evidenceGame) || xim.cardInfo?._ximilar_graded)) {
       try {
-        const evidence = await readPrintedEvidence(imageBase64, ximilarToken, {slab:xim.cardInfo?._ximilar_graded === true});
+        let evidence = await readPrintedEvidence(imageBase64, ximilarToken, {slab:xim.cardInfo?._ximilar_graded === true});
+        if (evidenceGame === 'pokemon' && !xim.cardInfo?._ximilar_graded && Date.now()-t0<35000) {
+          evidence = await readCollectorEvidence(imageBase64,ximilarToken,evidence);
+        }
         const resolved = xim.cardInfo?._ximilar_graded ? resolveSlabEvidence(xim,evidence) : await resolvePrintedEvidence(xim, evidence);
         if (resolved) xim = {ok:true,cardInfo:resolved};
       } catch (error) { console.warn('[scan-evidence] recovery unavailable', error?.name || 'Error'); /* Preserve review/refund semantics. */ }

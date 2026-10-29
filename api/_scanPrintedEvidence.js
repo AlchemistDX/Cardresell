@@ -60,10 +60,54 @@ export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, 
   });
 }
 
+// Correct only the three numeric positions of a printed English YGO set code.
+// Prefixes and names are never fuzzed; conflicting codes remain ambiguous.
+export function yugiohPrintedCodes(text) {
+  return [...new Set([...String(text).matchAll(/\b([A-Z0-9]{3,6})\s*-\s*EN\s*([0-9OS]{3})\b/gi)]
+    .map(m => m[1].toUpperCase() + '-EN' + m[2].toUpperCase().replace(/O/g,'0').replace(/S/g,'5')))];
+}
+
+// A small collector line can disappear in whole-card OCR. Read one enlarged
+// lower-image crop, only after a valid single-card read missed the fraction.
+export async function readCollectorEvidence(image, tokenValue, evidence, {fetchFn=fetch, cropFn=collectorCrop, timeoutMs=12000}={}) {
+  if (!evidence?.ok || evidence.labels?.length || /\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(evidence.text)) return evidence;
+  try {
+    const crop = await cropFn(image);
+    if (!crop) return evidence;
+    return await observeProviderAttempt({provider:'ximilar',operation:'ocr_read',mode:'identify',inputImages:1},async observe=>{
+      const response=await fetchFn('https://api.ximilar.com/ocr/v2/read',{
+        method:'POST',redirect:'error',signal:AbortSignal.timeout(timeoutMs),
+        headers:{'Content-Type':'application/json',Authorization:`Token ${tokenValue}`},
+        body:JSON.stringify({lang:'en',records:[{_base64:crop}]}),
+      });
+      observe({status:response.status});
+      if (!response.ok) {await response.body?.cancel();return evidence;}
+      const record=(await response.json())?.records?.[0];
+      if (record?._status?.code!==200) return evidence;
+      const extra=printedText(record._ocr);
+      console.info('[scan-evidence]',JSON.stringify({stage:'collector_crop',fractions:(extra.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4)}));
+      return {...evidence,text:evidence.text+'\n'+extra};
+    });
+  } catch {return evidence;}
+}
+
+export async function collectorCrop(image) {
+  if (typeof image!=='string' || image.length>14000000) return null;
+  const {default:sharp}=await import('sharp');
+  const {data,info}=await sharp(Buffer.from(image,'base64'),{limitInputPixels:16000000})
+    .rotate().resize({width:1800,withoutEnlargement:true}).toBuffer({resolveWithObject:true});
+  if (info.height<200 || info.width<150) return null;
+  const top=Math.floor(info.height*.55);
+  return (await sharp(data).extract({left:0,top,width:info.width,height:info.height-top})
+    .resize({width:2200}).jpeg({quality:95}).toBuffer()).toString('base64');
+}
+
 // Pure first-stage filter, independently tested against conflicting printings.
 export function printedCandidates(catalog, game, text) {
   if (!catalog || !Array.isArray(catalog.cards) || typeof text !== 'string') return [];
   const flat = normalized(text);
+  const ygoCodes = game === 'yugioh' ? yugiohPrintedCodes(text) : [];
+  if (game === 'yugioh' && ygoCodes.length !== 1) return [];
   const ratios = [...text.matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m => [num(m[1]),num(m[2])]);
   if (['pokemon','lorcana'].includes(game) && new Set(ratios.map(r=>r.join('/'))).size !== 1) return [];
   return catalog.cards.filter(row => {
@@ -74,6 +118,7 @@ export function printedCandidates(catalog, game, text) {
       const parts = String(row[3]).split('/').map(num);
       return ratios.some(([n,total]) => n === parts[0] && (!parts[1] || total === parts[1]));
     }
+    if (game === 'yugioh') return ygoCodes[0] === String(row[3]).toUpperCase();
     if (!token(text.replace(/[‐‑–—]/g,'-').replace(/\s*-\s*/g,'-'), row[3])) return false;
     if (game === 'onepiece' && /^P-/i.test(row[3])) {
       // A promo code is reused across events. Only a named printed event can
@@ -93,6 +138,13 @@ export async function resolvePrintedEvidence(visual, evidence, { loadIndex = ind
   let matches = printedCandidates(catalog, game, evidence.text);
   console.info('[scan-evidence]', JSON.stringify({stage:'catalogue',game,textLength:evidence.text.length,candidates:matches.length,ratios:(evidence.text.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4),nameRows:catalog.cards.filter(r=>normalized(evidence.text).includes(normalized(r[1].replace(/\s*\([^)]*\)/g,'')))).length,printedCodes:(evidence.text.match(/\b[A-Z0-9]{3,6}\s*[-–]?\s*EN\s*\d{3}\b/gi)||[]).slice(0,4)}));
   if (!matches.length || matches.length > 8) return null;
+  if (game === 'yugioh') {
+    // A corrected suffix also requires the independent visual name. Exact
+    // printed codes retain the existing name + catalogue verification path.
+    const exact = token(evidence.text.replace(/\s*-\s*/g,'-'),matches[0][3]);
+    if (!exact && ![original,...(visual.candidates||[])].filter(Boolean).some(c =>
+      normalized(c.card_name)===normalized(matches[0][1].replace(/\s*\([^)]*\)/g,'')))) return null;
+  }
   if (game === 'pokemon') {
     const sets = [...new Set(matches.map(r => r[2]))];
     if (sets.length > 3) return null;

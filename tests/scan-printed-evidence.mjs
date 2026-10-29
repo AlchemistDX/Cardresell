@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {printedCandidates,resolvePrintedEvidence,readPrintedEvidence,resolveSlabEvidence,printedText} from '../api/_scanPrintedEvidence.js';
+import {printedCandidates,resolvePrintedEvidence,readPrintedEvidence,resolveSlabEvidence,printedText,readCollectorEvidence} from '../api/_scanPrintedEvidence.js';
 let passed=0;
 const test=async(name,fn)=>{await fn();passed++;console.log('PASS '+name)};
 const data=async game=>{const m=JSON.parse(await readFile(new URL('../data/catalog/current.json',import.meta.url)));return JSON.parse(await readFile(new URL('..'+m.games[game].url,import.meta.url)))};
@@ -62,5 +62,32 @@ await test('conflicting regions still reject automatic fraction selection',async
  const text=printedText({full_text:'Applin 012/142',texts:[{text:'009/131',prob:.99}]});
  assert.equal(printedCandidates(pokemon,'pokemon',text).length,0);
  assert.equal(printedText({full_text:'x'.repeat(12001)}),'');
+});
+const ygoVisual={cardInfo:{card_type:'yugioh',card_name:'Blitzclique - Breakaway'}};
+await test('numeric OCR confusion requires independent matching visual name',async()=>{
+ const e={ok:true,text:'Blitzclique - Breakaway CORI-ENOS1',labels:[]};
+ assert.equal((await resolve(ygoVisual,e)).card_number,'CORI-EN051');
+ assert.equal(await resolve({cardInfo:{card_type:'yugioh',card_name:'Dark Magician'}},e),null);
+ assert.equal(await resolve({cardInfo:{card_type:'yugioh'}},e),null);
+});
+for(const code of ['C0RI-ENOS1','CORI-EN0B1','CORI-EN051 CORI-EN052']) await test('do not repair prefix, arbitrary letters, or conflicts '+code,async()=>{
+ assert.equal(await resolve(ygoVisual,{ok:true,text:'Blitzclique - Breakaway '+code,labels:[]}),null);
+});
+await test('collector crop adds printed evidence in one bounded OCR call',async()=>{
+ let calls=0;const e={ok:true,text:'Applin',labels:[]};
+ const r=await readCollectorEvidence('image','key',e,{cropFn:async()=> 'cropped',fetchFn:async(url,init)=>{
+ calls++;assert.equal(url,'https://api.ximilar.com/ocr/v2/read');assert.deepEqual(JSON.parse(init.body),{lang:'en',records:[{_base64:'cropped'}]});
+ return Response.json({records:[{_status:{code:200},_ocr:{full_text:'SCR EN 012/142'}}]});
+ }});assert.equal(calls,1);assert.match(r.text,/012\/142/);assert.ok(printedCandidates(pokemon,'pokemon',r.text).length);
+});
+await test('existing fractions, failed reads, and slabs never cause another OCR call',async()=>{
+ for(const e of [{ok:true,text:'Applin 012/142',labels:[]},{ok:false},{ok:true,text:'Charizard',labels:[{}]}]) {
+ assert.equal(await readCollectorEvidence('image','key',e,{cropFn:async()=>{throw Error('must not crop')}}),e);
+ }
+});
+await test('crop and provider failures preserve existing review evidence',async()=>{
+ const e={ok:true,text:'Applin',labels:[]};
+ assert.equal(await readCollectorEvidence('image','key',e,{cropFn:async()=>{throw Error('invalid')}}),e);
+ assert.equal(await readCollectorEvidence('image','key',e,{cropFn:async()=>'crop',fetchFn:async()=>new Response('',{status:503})}),e);
 });
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);
