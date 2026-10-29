@@ -15,6 +15,7 @@ The live audit began on app commit `09ed446228efdb84f2545b5879c4fb44462a7336`, c
 | Medium | “Review eBay draft” creates a saved draft | Clicking this label for Greninja led to “Listing draft started” and an Open draft action. | Open. Label should make creation explicit, or review should be a non-saving preview until a save action. |
 | Medium | Draft headline uses a different net basis | Greninja at $1.50 with $1 postage: comparison $0.00; draft headline $1.00, labelled item price only. The draft explains that postage is excluded. | Open. Not an arithmetic failure; an inconsistent decision-making basis that needs clearer, consistent presentation. |
 | Medium | Draft pricing provenance missing after price choice | Choosing Greninja Listed high $1.50 and preparing a draft produced “No price source was recorded with these listing details.” | Open. Preserve the chosen price basis and timestamp through the handoff. |
+| Low | Previous card image remains after switching games | Post-deployment Pokémon → Magic cleared value, override and comparison but still displayed the Greninja image. | Open visual reset issue; do not treat the remaining image as a selected card. |
 | Low | Search results contain broad related matches | Exact queries return correct first result plus loosely related cards/products. A mixed nonsense query with “audit card” returned unrelated art cards. Pure nonsense returned a clear no-match message. | Open usability refinement: distinguish exact matches from related suggestions. |
 
 ## Live browser journey exercised
@@ -61,4 +62,4 @@ Evidence: `screenshots/user-audit-drafts-2026-10-29.jpg` captures the blank draf
 
 ## Release verification
 
-The 176-entry release runner completed with ALL CHECKS PASSED (offline mode; conditional/live gates remain skipped). Live deployment verification follows in a documentation update.
+The 176-entry release runner completed with ALL CHECKS PASSED (offline mode; conditional/live gates remain skipped). App commit `b0bc9ed3e5a3c2435d4485494c94b0828cc5ab8a` was deployed as `dpl_FEy7s2PVkYKz3CWzwVdntTMy8WCr`, READY with both production aliases. The live browser loaded `/js/core.493d2522.js`. Repeating Pokémon → Magic after entering a $1.50 override confirmed the override was empty, quick pricing and eBay research status hidden, and the welcome panel restored. The previous image nevertheless remained visible; this residual visual issue is recorded above. Screenshot: `screenshots/user-audit-reset-2026-10-29.jpg`. The test sandbox was stopped after verification.
