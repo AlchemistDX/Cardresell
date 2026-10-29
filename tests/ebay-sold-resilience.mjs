@@ -126,7 +126,7 @@ vm.runInContext(source.slice(start, end), ctx);
 for (const pc of [null, { source: 'pricecharting', median: 42 }]) {
   for (const ebay of [null, { available: false, count: 0, median: null }]) {
     const rendered = ctx.renderPriceStatus({ pc, ebay, fallbackEbayUrl: 'https://www.ebay.com/sch/i.html?_nkw=fixture' });
-    assert.match(rendered, /eBay sold prices unavailable/);
+    assert.match(rendered, /Individual eBay sold listings unavailable/);
     assert.match(rendered, /Check sold listings on eBay/);
     assert.doesNotMatch(rendered, /0 sold|median.*\$0/);
     if (pc) assert.match(rendered, /Guide value/);
@@ -134,7 +134,7 @@ for (const pc of [null, { source: 'pricecharting', median: 42 }]) {
   }
 }
 const sparse = ctx.renderPriceStatus({ ebay: { count: 0, median: null }, fallbackEbayUrl: 'https://www.ebay.com/' });
-assert.match(sparse, /Not enough verified eBay sales/); cases++;
+assert.match(sparse, /Not enough verified individual eBay sales/); cases++;
 const available = ctx.renderPriceStatus({ ebay: { count: 3, median: 10 }, fallbackEbayUrl: 'https://www.ebay.com/' });
 assert.match(available, /3 sold/); assert.doesNotMatch(available, /prices unavailable/); cases++;
 const reviewed = ctx.renderPriceStatus({ebay:{count:3,median:10,windowDays:30,matchReviewRequired:true,shippingIncluded:false,items:[{title:'<img src=x> Mew',price:10,soldDate:'2026-10-23',url:'https://www.ebay.com/itm/123'}]},fallbackEbayUrl:'https://www.ebay.com/'});
@@ -149,7 +149,7 @@ for(const selection of [{graded:true,finish:''},{graded:false,finish:'Reverse Ho
 const one=ctx.renderPriceStatus({ebay:{available:true,count:1,median:10,low:10,high:10,windowDays:30,matchReviewRequired:true,items:[{title:'Mew',price:10,soldDate:'2026-10-23',url:'https://www.ebay.com/itm/123'}]},fallbackEbayUrl:'https://www.ebay.com/'});
 assert.match(one,/Review 1 recent sold listing/);assert.match(one,/one listing does not establish a price range/i);assert.doesNotMatch(one,/· median/);cases++;
 const unavailableWithOldNumbers=ctx.renderPriceStatus({ebay:{available:false,count:3,median:99,low:90,high:100},fallbackEbayUrl:'https://www.ebay.com/'});
-assert.match(unavailableWithOldNumbers,/eBay sold prices unavailable/);assert.doesNotMatch(unavailableWithOldNumbers,/\$99\.00/);cases++;
+assert.match(unavailableWithOldNumbers,/Individual eBay sold listings unavailable/);assert.doesNotMatch(unavailableWithOldNumbers,/\$99\.00/);cases++;
 const hostile=ctx.renderPriceStatus({pc:{source:'pricecharting',median:42,url:'javascript:alert(1)',productName:'<img src=x onerror=alert(1)>'},ebay:{count:3,median:10,confidence:'high',confidenceReasons:['<svg onload=alert(1)>'],searchUrl:'https://www.ebay.com.evil.test/'},fallbackEbayUrl:'https://www.ebay.com/'});
 assert.doesNotMatch(hostile,/<img|<svg|javascript:|ebay\.com\.evil/);assert.match(hostile,/Needs review/);cases++;
 for(const median of [0,-1,Infinity,NaN]){

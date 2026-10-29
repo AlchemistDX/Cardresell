@@ -136,7 +136,7 @@ try {
   check(await page.locator('#ebayCompsRefreshBtn').isDisabled()&&await page.locator('#ebayCompsStatus').getAttribute('aria-busy')==='true','refresh indicates loading and prevents repeated clicks at '+width);
   await page.waitForFunction(()=>!document.getElementById('ebayCompsRefreshBtn').disabled&&document.getElementById('ebayCompsStatus').getAttribute('aria-busy')==='false');
   researchDelayMs=0;
-  check(await status.isVisible()&&(await status.innerText()).includes('eBay sold prices unavailable'),'all-provider failure retains the availability explanation at '+width);
+  check(await status.isVisible()&&(await status.innerText()).includes('Individual eBay sold listings unavailable'),'all-provider failure retains the availability explanation at '+width);
   let researchLink=new URL(await page.locator('[data-ebay-research]').getAttribute('href'));
   check(/Lightly Played/.test(researchLink.searchParams.get('_nkw'))&&/76\/214/.test(researchLink.searchParams.get('_nkw')),'empty-state research retains exact card and condition at '+width);
   const soldDate=new Date().toISOString().slice(0,10);

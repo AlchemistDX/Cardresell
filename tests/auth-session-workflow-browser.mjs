@@ -40,7 +40,7 @@ try{
    if(url.pathname==='/api/pro-status'){
     const uid=(req.headers().authorization||'').replace('Bearer local-','');
     if(!uid)return route.fulfill({status:401,json:{error:'authentication_required'}});
-    return route.fulfill({json:{isPro:uid==='alice',tier:uid==='alice'?'business':'free',emailVerified:!uid.startsWith('unverified'),paidScansLeft:uid==='alice'?71:7,idPaidLeft:uid==='alice'?123:9,idFreeLeft:0,freeScansLeft:0}});
+    return route.fulfill({json:{billing_version:'launch-v2',capabilities:{venueTier:uid==='alice'?'pro_max':'free'},isPro:uid==='alice',tier:uid==='alice'?'business':'free',emailVerified:!uid.startsWith('unverified'),paidScansLeft:uid==='alice'?71:7,idPaidLeft:uid==='alice'?123:9,idFreeLeft:0,freeScansLeft:0}});
    }
    if(url.pathname==='/api/verify-claim-firebase'){
     if(holdClaim)await new Promise(r=>releaseClaim=r);
@@ -65,6 +65,27 @@ try{
   await page.waitForFunction(()=>_idScanCredits===123&&_googleIdToken==='local-alice');
   check((await page.locator('#googleName').textContent())==='alice','signed-in identity renders at '+width);
   check((await page.locator('#idScanSubCredits').textContent()).includes('123'),'first account credits render at '+width);
+  const membershipRefresh=await page.evaluate(async()=>{
+   const card={name:'Mew',setName:'Fixture set',number:'1',game:'pokemon',priceVariants:[{key:'normal',label:'Normal',market:10}]};
+   setSelectedCard(card);loadCardUI(card);
+   window._isPro=false;window._userTier='free';window._membershipVenueAccess=null;calc();
+   const before=document.getElementById('resultsArea').innerText;
+   const requestsBefore=authRequests.length;
+   await checkProStatus();
+   return {before,after:document.getElementById('resultsArea').innerText,requests:authRequests.slice(requestsBefore).map(r=>r.url)};
+  });
+  check(/best free payout/i.test(membershipRefresh.before),'fixture begins with free payout at '+width);
+  check(!/best free payout/i.test(membershipRefresh.after),'resolved paid membership refreshes existing payout at '+width);
+  check(!membershipRefresh.requests.some(url=>/tcg-price|pricecharting|ebay-sold|identify/.test(url)),'membership refresh does not refetch prices or scan at '+width);
+  const downgradeRefresh=await page.evaluate(async()=>{
+   const original=window.fetch;
+   window.fetch=(url,opts)=>String(url).startsWith('/api/pro-status')
+    ?Promise.resolve({ok:true,status:200,json:async()=>({isPro:false,tier:'free',billing_version:'launch-v2',capabilities:{venueTier:'free'}})})
+    :original(url,opts);
+   try {await checkProStatus();return document.getElementById('resultsArea').innerText;}
+   finally {window.fetch=original;await checkProStatus();}
+  });
+  check(/best free payout/i.test(downgradeRefresh),'server-confirmed downgrade refreshes existing payout at '+width);
   await page.evaluate(()=>{savePortData([{id:'fixture-card-a',card:'Alice private card',game:'pokemon',currentValue:2,buyPrice:1}]);switchView('collection');});
   check((await page.locator('#collectionWrap').innerText()).includes('Alice private card'),'first account collection is visible at '+width);
   await page.evaluate(()=>{const b=makeFixtureUser('bob');b.pending=true;return emitFixtureUser(b);});
