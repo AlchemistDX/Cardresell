@@ -49,6 +49,7 @@ export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, 
       if (!record || record._status?.code !== 200 || !Array.isArray(record._objects)) return {ok:false,reason:'invalid_response'};
       const cards = record._objects.filter(o => o?.name === 'Card');
       const labels = record._objects.filter(o => o?.name === 'Slab Label');
+      if (slab) console.info('[scan-evidence]',JSON.stringify({stage:'slab_objects',cards:cards.length,labels:labels.length,classification:record['Graded Slab']}));
       if (cards.length > 1 || (!slab && cards.length !== 1) || (slab && labels.length !== 1)) return {ok:false,reason:'invalid_objects'};
       const card = cards[0], text = printedText(card?._ocr);
       if (!text.trim() && !labels.length) return {ok:false,reason:'no_match'};
@@ -63,8 +64,8 @@ export async function readPrintedEvidence(image, tokenValue, { fetchFn = fetch, 
 // Correct only the three numeric positions of a printed English YGO set code.
 // Prefixes and names are never fuzzed; conflicting codes remain ambiguous.
 export function yugiohPrintedCodes(text) {
-  return [...new Set([...String(text).matchAll(/\b([A-Z0-9]{3,6})\s*-\s*EN\s*([0-9OS]{3})\b/gi)]
-    .map(m => m[1].toUpperCase() + '-EN' + m[2].toUpperCase().replace(/O/g,'0').replace(/S/g,'5')))];
+  return [...new Set([...String(text).matchAll(/\b([A-Z0-9]{3,6})\s*-\s*EN\s*([0-9OSI]{3})\b/gi)]
+    .map(m => m[1].toUpperCase() + '-EN' + m[2].toUpperCase().replace(/O/g,'0').replace(/S/g,'5').replace(/I/g,'1')))];
 }
 
 // A small collector line can disappear in whole-card OCR. Read one enlarged
@@ -85,7 +86,7 @@ export async function readCollectorEvidence(image, tokenValue, evidence, {fetchF
       const record=(await response.json())?.records?.[0];
       if (record?._status?.code!==200) return evidence;
       const extra=printedText(record._ocr);
-      console.info('[scan-evidence]',JSON.stringify({stage:'collector_crop',fractions:(extra.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4)}));
+      console.info('[scan-evidence]',JSON.stringify({stage:'collector_crop',collectorFragments:extra.split('\n').filter(t=>/[0-9/]/.test(t)).slice(0,5).map(t=>t.slice(0,90)),fractions:(extra.match(/\b\d{1,4}\s*\/\s*\d{1,4}\b/g)||[]).slice(0,4)}));
       return {...evidence,text:evidence.text+'\n'+extra};
     });
   } catch {return evidence;}
@@ -97,8 +98,8 @@ export async function collectorCrop(image) {
   const {data,info}=await sharp(Buffer.from(image,'base64'),{limitInputPixels:16000000})
     .rotate().resize({width:1800,withoutEnlargement:true}).toBuffer({resolveWithObject:true});
   if (info.height<200 || info.width<150) return null;
-  const top=Math.floor(info.height*.55);
-  return (await sharp(data).extract({left:0,top,width:info.width,height:info.height-top})
+  const top=Math.floor(info.height*.75);
+  return (await sharp(data).extract({left:0,top,width:Math.ceil(info.width*.65),height:info.height-top})
     .resize({width:2200}).jpeg({quality:95}).toBuffer()).toString('base64');
 }
 

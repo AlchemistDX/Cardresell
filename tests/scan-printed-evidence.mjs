@@ -65,7 +65,7 @@ await test('conflicting regions still reject automatic fraction selection',async
 });
 const ygoVisual={cardInfo:{card_type:'yugioh',card_name:'Blitzclique - Breakaway'}};
 await test('numeric OCR confusion requires independent matching visual name',async()=>{
- const e={ok:true,text:'Blitzclique - Breakaway CORI-ENOS1',labels:[]};
+ const e={ok:true,text:'Blitzclique - Breakaway CORI-ENOSI',labels:[]};
  assert.equal((await resolve(ygoVisual,e)).card_number,'CORI-EN051');
  assert.equal(await resolve({cardInfo:{card_type:'yugioh',card_name:'Dark Magician'}},e),null);
  assert.equal(await resolve({cardInfo:{card_type:'yugioh'}},e),null);
