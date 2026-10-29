@@ -103,7 +103,8 @@ export async function collectorCrop(image,game='pokemon') {
   if (info.height<200 || info.width<150) return null;
   // One Piece prints its code on the lower right; the lower half also retains promo stamps.
   const top=Math.floor(info.height*(game==='onepiece'?.55:.75));
-  return (await sharp(data).extract({left:0,top,width:game==='onepiece'?info.width:Math.ceil(info.width*.65),height:info.height-top})
+  const left=game==='onepiece'?Math.floor(info.width*.5):0;
+  return (await sharp(data).extract({left,top,width:game==='onepiece'?info.width-left:Math.ceil(info.width*.65),height:info.height-top})
     .resize({width:2200}).jpeg({quality:95}).toBuffer()).toString('base64');
 }
 

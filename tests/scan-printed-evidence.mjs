@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {printedCandidates,resolvePrintedEvidence,readPrintedEvidence,resolveSlabEvidence,printedText,readCollectorEvidence} from '../api/_scanPrintedEvidence.js';
+import {printedCandidates,resolvePrintedEvidence,readPrintedEvidence,resolveSlabEvidence,printedText,readCollectorEvidence,collectorCrop} from '../api/_scanPrintedEvidence.js';
 let passed=0;
 const test=async(name,fn)=>{await fn();passed++;console.log('PASS '+name)};
 const data=async game=>{const m=JSON.parse(await readFile(new URL('../data/catalog/current.json',import.meta.url)));return JSON.parse(await readFile(new URL('..'+m.games[game].url,import.meta.url)))};
@@ -112,5 +112,14 @@ await test('promo with code but unread event gets one stamp crop',async()=>{
  const e={ok:true,text:'Monkey.D.Luffy P-043',labels:[]};let calls=0;
  const r=await readCollectorEvidence('image','key',e,{game:'onepiece',cropFn:async()=>'crop',fetchFn:async()=>{calls++;return Response.json({records:[{_status:{code:200},_ocr:{full_text:'2nd Anniversary'}}]})}});
  assert.equal(calls,1);assert.equal((await resolve({cardInfo:{card_type:'onepiece'}},r)).grounded_id,'603076');
+});
+await test('collector crop focuses One Piece right-side print while preserving Pokemon left-side print',async()=>{
+ const {default:sharp}=await import('sharp');const pixels=Buffer.alloc(200*400*3);
+ for(let y=0;y<400;y++)for(let x=0;x<200;x++)pixels[(y*200+x)*3+(x<100?0:1)]=255;
+ const image=(await sharp(pixels,{raw:{width:200,height:400,channels:3}}).png().toBuffer()).toString('base64');
+ const op=await sharp(Buffer.from(await collectorCrop(image,'onepiece'),'base64')).stats();
+ assert.ok(op.channels[1].mean>240&&op.channels[0].mean<10);
+ const pk=await sharp(Buffer.from(await collectorCrop(image,'pokemon'),'base64')).stats();
+ assert.ok(pk.channels[0].mean>pk.channels[1].mean);
 });
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);
