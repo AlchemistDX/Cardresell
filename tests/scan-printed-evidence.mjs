@@ -17,6 +17,8 @@ await test('YGO passcode does not establish a printing',async()=>assert.equal(pr
 await test('exact anniversary stamp distinguishes reused promo code',async()=>{const r=await resolve({cardInfo:{card_type:'onepiece'}},{ok:true,text:'Monkey.D.Luffy P-043 2nd Anniversary ONE PIECE',labels:[]});assert.equal(r.grounded_id,'603076');assert.equal(r._printed_promo,true);});
 for(const text of ['Monkey.D.Luffy P-043','Monkey.D.Luffy P-043 Dreamhack Dallas','Monkey.D.Luffy P-043 3rd Anniversary']) await test('unresolved event remains review '+text,async()=>assert.equal(printedCandidates(op,'onepiece',text).length,0));
 await test('Lorcana collector fraction distinguishes reprint',async()=>{const r=await resolve({cardInfo:{card_type:'lorcana'}},{ok:true,text:'MAKE THE POTION 94/204 EN 4',labels:[]});assert.equal(r.set_name,"Ursula's Return");});
+for(const code of ['94/204EN-4','94/204en-4','94/204EN 4']) await test('joined Lorcana language marker '+code,async()=>{const r=await resolve({cardInfo:{card_type:'lorcana'}},{ok:true,text:'MAKE THE POTION '+code,labels:[]});assert.equal(r.grounded_id,'550585');});
+for(const code of ['94/204FR-4','94/204END','94/2040EN-4','94/204EN-4 98/204EN-4']) await test('joined fraction rejects other language, extended tokens or conflicts '+code,async()=>assert.equal(printedCandidates(lor,'lorcana','MAKE THE POTION '+code).length,0));
 await test('conflicting Lorcana totals rejected',async()=>assert.equal(printedCandidates(lor,'lorcana','MAKE THE POTION 94/205').length,0));
 const slabVisual={ok:true,cardInfo:{card_name:'Charizard',set_name:'Team Up',card_number:'14',year:'2019',card_type:'pokemon',_ximilar_graded:true}};
 const slabEvidence={ok:true,labels:[{_tags:{Company:[{name:'PSA',prob:.99}]},_ocr:{full_text:'2019 POKEMON CHARIZARD TEAM UP #14 MINT 9 51044018'},_identification:{best_match:{grade:'9',certificate_number:'51044018'}}}]};
@@ -98,5 +100,12 @@ await test('missing Pokemon slash needs matching visual printing and official de
  for(const text of ['Applin 012143','Applin 9912142','Applin 012142 012/143','Applin PRE EN 012142']) assert.equal(await resolve(v,{...e,text},extras),null);
  assert.equal(await resolve({cardInfo:{...v.cardInfo,set_name:'Other'}},e,extras),null);
  assert.equal(await resolve(v,e,{fetchFn:async()=>{throw Error('offline')}}),null);
+});
+await test('One Piece crop reads lower-right code but still requires the exact event',async()=>{
+ let calls=0;const e={ok:true,text:'Monkey.D.Luffy 2nd Anniversary',labels:[]};
+ const r=await readCollectorEvidence('image','key',e,{game:'onepiece',cropFn:async(i,g)=>{assert.equal(g,'onepiece');return 'crop'},fetchFn:async()=>{calls++;return Response.json({records:[{_status:{code:200},_ocr:{full_text:'P-043'}}]})}});
+ assert.equal(calls,1);assert.equal((await resolve({cardInfo:{card_type:'onepiece'}},r)).grounded_id,'603076');
+ assert.equal(await resolve({cardInfo:{card_type:'onepiece'}},{...r,text:'Monkey.D.Luffy P-043'}),null);
+ assert.equal(await readCollectorEvidence('image','key',r,{game:'onepiece',cropFn:async()=>{throw Error('must not crop again')}}),r);
 });
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);

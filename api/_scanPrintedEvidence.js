@@ -70,10 +70,12 @@ export function yugiohPrintedCodes(text) {
 
 // A small collector line can disappear in whole-card OCR. Read one enlarged
 // lower-image crop, only after a valid single-card read missed the fraction.
-export async function readCollectorEvidence(image, tokenValue, evidence, {fetchFn=fetch, cropFn=collectorCrop, timeoutMs=12000}={}) {
-  if (!evidence?.ok || evidence.labels?.length || /\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(evidence.text)) return evidence;
+export async function readCollectorEvidence(image, tokenValue, evidence, {fetchFn=fetch, cropFn=collectorCrop, timeoutMs=12000, game='pokemon'}={}) {
+  if (!['pokemon','onepiece'].includes(game) || !evidence?.ok || evidence.labels?.length) return evidence;
+  const hasNumber = game === 'onepiece' ? /\b(?:P|OP\d{2}|ST\d{2}|EB\d{2}|PRB\d{2})\s*-\s*\d{3}\b/i.test(evidence.text) : /\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(evidence.text);
+  if (hasNumber) return evidence;
   try {
-    const crop = await cropFn(image);
+    const crop = await cropFn(image,game);
     if (!crop) return evidence;
     return await observeProviderAttempt({provider:'ximilar',operation:'ocr_read',mode:'identify',inputImages:1},async observe=>{
       const response=await fetchFn('https://api.ximilar.com/ocr/v2/read',{
@@ -92,14 +94,15 @@ export async function readCollectorEvidence(image, tokenValue, evidence, {fetchF
   } catch {return evidence;}
 }
 
-export async function collectorCrop(image) {
+export async function collectorCrop(image,game='pokemon') {
   if (typeof image!=='string' || image.length>14000000) return null;
   const {default:sharp}=await import('sharp');
   const {data,info}=await sharp(Buffer.from(image,'base64'),{limitInputPixels:16000000})
     .rotate().resize({width:1800,withoutEnlargement:true}).toBuffer({resolveWithObject:true});
   if (info.height<200 || info.width<150) return null;
-  const top=Math.floor(info.height*.75);
-  return (await sharp(data).extract({left:0,top,width:Math.ceil(info.width*.65),height:info.height-top})
+  // One Piece prints its code on the lower right; the lower half also retains promo stamps.
+  const top=Math.floor(info.height*(game==='onepiece'?.55:.75));
+  return (await sharp(data).extract({left:0,top,width:game==='onepiece'?info.width:Math.ceil(info.width*.65),height:info.height-top})
     .resize({width:2200}).jpeg({quality:95}).toBuffer()).toString('base64');
 }
 
@@ -109,7 +112,9 @@ export function printedCandidates(catalog, game, text) {
   const flat = normalized(text);
   const ygoCodes = game === 'yugioh' ? yugiohPrintedCodes(text) : [];
   if (game === 'yugioh' && ygoCodes.length !== 1) return [];
-  const ratios = [...text.matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m => [num(m[1]),num(m[2])]);
+  // Lorcana prints the language immediately after the fraction; OCR can join EN.
+  const ratioText = game === 'lorcana' ? text.replace(/(\d{1,4}\s*\/\s*\d{1,4})(?=EN(?:$|[^a-z0-9]))/gi,'$1 ') : text;
+  const ratios = [...ratioText.matchAll(/\b(\d{1,4})\s*\/\s*(\d{1,4})\b/g)].map(m => [num(m[1]),num(m[2])]);
   if (['pokemon','lorcana'].includes(game) && new Set(ratios.map(r=>r.join('/'))).size !== 1) return [];
   return catalog.cards.filter(row => {
     if (!Array.isArray(row) || row[6] !== 'en' || row[8] === true || !row[0] || !row[1] || !row[3]) return false;

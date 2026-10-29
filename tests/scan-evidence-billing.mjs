@@ -26,4 +26,23 @@ for (const mode of ['matched','timeout','conflict']) {
   else {assert.equal(r.payload.identified,false);assert.equal(r.payload.identity_review.kind,'printing');checks+=2;}
  }finally{h.restore()}
 }
+for(const mode of ['matched','missing-event']) {
+ const h=billingHarness();
+ try {
+  const stub=exact();stub.ximilar={cardInfo:{card_type:'onepiece',card_name:'Monkey.D.Luffy',card_number:'P-043',set_name:'One Piece Promotion Cards',_ximilar:true},candidates:[],needsPicker:true};
+  const previous=globalThis.fetch;let calls=0;
+  globalThis.fetch=async(url,init)=>{
+   if(String(url).includes('/data/catalog/onepiece.'))return new Response(await readFile(new URL('../data/catalog/onepiece.740c7853cd03.json',import.meta.url),'utf8'));
+   if(String(url).includes('/card_ocr_id')){calls++;return Response.json({records:[{_status:{code:200},_objects:[{name:'Card',_ocr:{full_text:'Monkey.D.Luffy '+(mode==='matched'?'2nd Anniversary':'')}}]}]})}
+   if(String(url).includes('/ocr/v2/read')){calls++;return Response.json({records:[{_status:{code:200},_ocr:{full_text:'P-043'}}]})}
+   return previous(url,init);
+  };
+  const image=(await readFile(new URL('./fixtures/grade-check/front-sharp.jpg',import.meta.url))).toString('base64');
+  const r=await h.scan(stub,{imageBase64:image});
+  assert.equal(r.statusCode,200);checks++;
+  assert.equal(h.net(),mode==='matched'?1:0);checks++;
+  if(mode==='matched'){assert.equal(r.payload.grounded_id,'603076');checks++;}
+  assert.equal(calls,2);checks++;
+ } finally {h.restore()}
+}
 finish(checks,0);
