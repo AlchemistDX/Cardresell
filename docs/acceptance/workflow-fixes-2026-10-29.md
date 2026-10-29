@@ -17,7 +17,9 @@ Targeted isolated browser checks: core values 93; draft reads 56; draft price in
 
 The first new provenance fixture failed because it retained the prior Lightly Played selection and reused the same set/number identity for its supposedly different card. The fixture now selects Near Mint and uses a different card number; production matching rules were not weakened.
 
-Full 176-entry release runner: ALL CHECKS PASSED, exit 0, 424 seconds, with live/conditional gates skipped. Tested index and core SHA-256 hashes match the release files. Live post-deployment verification: pending.
+Full 176-entry release runner: ALL CHECKS PASSED, exit 0, 424 seconds, with live/conditional gates skipped. Tested index and core SHA-256 hashes match the release files. Live verification of the first release confirmed all three active drafts are accessible, badge and heading both show 3, the existing Greninja draft estimates $0.00 after its recorded $1 postage, and switching card types clears the previous card image. No additional production draft was created.
+
+That live review found a legacy saved packet note contradicting the shipping-inclusive estimate. The follow-up renders that note consistently when complete recorded shipping is included, without changing historical packet data, and adds a regression assertion. Final release verification is recorded separately after deployment.
 
 ## Limits
 

@@ -1245,6 +1245,9 @@ try {
     T.check('recorded buyer shipping and postage enter the net',
       Math.abs((amt(gross.amount) + fees + 5.99 - 4.50) - amt(net.amount)) < 0.005,
       `gross ${gross.amount} fees ${fees} net ${net.amount}`);
+    const shippingNote=await page.locator('[data-packet-note="SHIPPING_NOT_IN_NET"]').innerText();
+    T.check('legacy packet note agrees with the shipping-inclusive estimate',
+      /includes the shipping amounts recorded/i.test(shippingNote) && !/not applied|item price only/i.test(shippingNote), shippingNote);
     T.check('and the shipping rows are marked as included',
       !!buyer && /included in net/i.test(buyer.label), buyer && buyer.label);
     await ctx.close();
