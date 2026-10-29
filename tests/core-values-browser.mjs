@@ -60,10 +60,30 @@ try{for(const width of [320,390,1280]){
  check(await page.locator('#flipReportToggle').isVisible(),'sales reporting remains directly available');
  await page.locator('#flipSyncTools summary').click();
  check(await page.locator('#flipSyncTools').getByRole('button',{name:'Review inventory sync',exact:true}).isVisible(),'Flips has the same single-step recovery entry');
+ check(!(await page.locator('.welcome-source-note').textContent()).includes('when eBay serves them'),'welcome copy does not imply sold-data access follows from connection');
+ // Reproduce a real game-switch reset with the previous card's evidence present.
+ await page.evaluate(()=>{
+  switchView('lookup');
+  window._qpChosenTier='high';window._crBasis={amt:1.50};window._ovAutoFilled=true;
+  document.getElementById('priceOverride').value='1.50';
+  for(const id of ['quickPricing','ebayCompsStatus'])document.getElementById(id).style.display='block';
+  document.getElementById('qpTiers').innerHTML='<button>Old card $1.50</button>';
+  document.getElementById('ebayCompsStatusText').innerHTML='<a href="https://www.ebay.com/">Old card research</a>';
+  window.auditResearchAborted=false;
+  window._compsActiveController={abort(){window.auditResearchAborted=true;}};
+  window.auditResearchSeq=window._compsRequestSeq||0;
+ });
+ await page.locator('#gameSelect').selectOption('mtg');
+ check(await page.locator('#quickPricing').isHidden(),'game switch hides previous card price choices');
+ check(await page.locator('#ebayCompsStatus').isHidden(),'game switch hides previous card research');
+ check(await page.locator('#qpTiers').textContent()==='','old price actions are removed');
+ check(await page.locator('#ebayCompsStatusText').textContent()==='','old research links are removed');
+ check(await page.locator('#priceOverride').inputValue()==='','card-specific override clears on game switch');
+ check(await page.evaluate(()=>auditResearchAborted&&window._compsRequestSeq>auditResearchSeq),'game switch aborts and invalidates pending research');
+ check(await page.evaluate(()=>!window._crBasis&&!window._qpChosenTier&&!window._ovAutoFilled),'reset clears previous price ownership');
  await page.evaluate(()=>{googleUser=null;switchView('flips');});
  check((await page.locator('#flipsSignInWall').textContent()).includes('10 flips'),'Free sign-in message states the actual flip allowance');
  check(!(await page.locator('#flipsSignInWall').textContent()).includes('all free'),'sign-in message does not imply unlimited free tracking');
- check(!(await page.locator('.welcome-source-note').textContent()).includes('when eBay serves them'),'welcome copy does not imply sold-data access follows from connection');
  check(!writes.some(p=>/^\/api\/(scan|scan-debit-id|ebay-listing-operations)$/.test(p)),'audit does not make paid or marketplace calls');
  assert.deepEqual(errors,[],'no browser errors');count++;
  await page.close();
