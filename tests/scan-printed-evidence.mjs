@@ -15,7 +15,7 @@ await test('slab cannot enter raw recovery',async()=>assert.equal(await resolve(
 await test('printed YGO code recovers exact physical printing',async()=>{const r=await resolve({cardInfo:{card_type:'yugioh'}},{ok:true,text:'Blitzclique - Breakaway CORI-EN051 1st Edition',labels:[]});assert.equal(r.set_name,'Chaos Origins');assert.equal(r.card_number,'CORI-EN051');});
 await test('YGO passcode does not establish a printing',async()=>assert.equal(printedCandidates(ygo,'yugioh','Blitzclique - Breakaway 64049762').length,0));
 await test('exact anniversary stamp distinguishes reused promo code',async()=>{const r=await resolve({cardInfo:{card_type:'onepiece'}},{ok:true,text:'Monkey.D.Luffy P-043 2nd Anniversary ONE PIECE',labels:[]});assert.equal(r.grounded_id,'603076');assert.equal(r._printed_promo,true);});
-for(const text of ['Monkey.D.Luffy P-043','Monkey.D.Luffy P-043 Dreamhack Dallas','Monkey.D.Luffy P-043 3rd Anniversary']) await test('unresolved event remains review '+text,async()=>assert.equal(printedCandidates(op,'onepiece',text).length,0));
+for(const text of ['Monkey.D.Luffy P-043','Monkey.D.Luffy P-043 Dreamhack Dallas','Monkey.D.Luffy P-043 3rd Anniversary','Monkey.D.Luffy P-043 2nd Anniversary 3rd Anniversary']) await test('unresolved event remains review '+text,async()=>assert.equal(printedCandidates(op,'onepiece',text).length,0));
 await test('Lorcana collector fraction distinguishes reprint',async()=>{const r=await resolve({cardInfo:{card_type:'lorcana'}},{ok:true,text:'MAKE THE POTION 94/204 EN 4',labels:[]});assert.equal(r.set_name,"Ursula's Return");});
 for(const code of ['94/204EN-4','94/204en-4','94/204EN 4']) await test('joined Lorcana language marker '+code,async()=>{const r=await resolve({cardInfo:{card_type:'lorcana'}},{ok:true,text:'MAKE THE POTION '+code,labels:[]});assert.equal(r.grounded_id,'550585');});
 for(const code of ['94/204FR-4','94/204END','94/2040EN-4','94/204EN-4 98/204EN-4']) await test('joined fraction rejects other language, extended tokens or conflicts '+code,async()=>assert.equal(printedCandidates(lor,'lorcana','MAKE THE POTION '+code).length,0));
@@ -107,5 +107,10 @@ await test('One Piece crop reads lower-right code but still requires the exact e
  assert.equal(calls,1);assert.equal((await resolve({cardInfo:{card_type:'onepiece'}},r)).grounded_id,'603076');
  assert.equal(await resolve({cardInfo:{card_type:'onepiece'}},{...r,text:'Monkey.D.Luffy P-043'}),null);
  assert.equal(await readCollectorEvidence('image','key',r,{game:'onepiece',cropFn:async()=>{throw Error('must not crop again')}}),r);
+});
+await test('promo with code but unread event gets one stamp crop',async()=>{
+ const e={ok:true,text:'Monkey.D.Luffy P-043',labels:[]};let calls=0;
+ const r=await readCollectorEvidence('image','key',e,{game:'onepiece',cropFn:async()=>'crop',fetchFn:async()=>{calls++;return Response.json({records:[{_status:{code:200},_ocr:{full_text:'2nd Anniversary'}}]})}});
+ assert.equal(calls,1);assert.equal((await resolve({cardInfo:{card_type:'onepiece'}},r)).grounded_id,'603076');
 });
 console.log(`scan-printed-evidence: ${passed} passed, 0 failed -- SUITE COMPLETE`);

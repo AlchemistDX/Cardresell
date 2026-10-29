@@ -73,7 +73,8 @@ export function yugiohPrintedCodes(text) {
 export async function readCollectorEvidence(image, tokenValue, evidence, {fetchFn=fetch, cropFn=collectorCrop, timeoutMs=12000, game='pokemon'}={}) {
   if (!['pokemon','onepiece'].includes(game) || !evidence?.ok || evidence.labels?.length) return evidence;
   const hasNumber = game === 'onepiece' ? /\b(?:P|OP\d{2}|ST\d{2}|EB\d{2}|PRB\d{2})\s*-\s*\d{3}\b/i.test(evidence.text) : /\b\d{1,4}\s*\/\s*\d{1,4}\b/.test(evidence.text);
-  if (hasNumber) return evidence;
+  const promoNeedsEvent = game === 'onepiece' && /\bP\s*-\s*\d{3}\b/i.test(evidence.text) && !/\b\d+(?:st|nd|rd|th)\s*Anniversary/i.test(evidence.text);
+  if (hasNumber && !promoNeedsEvent) return evidence;
   try {
     const crop = await cropFn(image,game);
     if (!crop) return evidence;
@@ -129,6 +130,8 @@ export function printedCandidates(catalog, game, text) {
     if (game === 'onepiece' && /^P-/i.test(row[3])) {
       // A promo code is reused across events. Only a named printed event can
       // distinguish it; a base promo or unspecified artwork is never enough.
+      const events = [...new Set([...text.matchAll(/\b(\d+(?:st|nd|rd|th))\s*Anniversary/gi)].map(m=>m[1].toLowerCase()))];
+      if (events.length !== 1) return false;
       const event = row[1].match(/\((\d+(?:st|nd|rd|th) Anniversary)(?: Stamped)? Promo\)/i)?.[1];
       return !!event && flat.includes(normalized(event));
     }
