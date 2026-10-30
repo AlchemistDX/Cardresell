@@ -21,13 +21,13 @@ This review combines current repository acceptance records and first-party compe
 
 ## Work from the beginning
 
-### 1. Find the correct card — in progress
+### 1. Find the correct card — software updated; broader acceptance open
 
 - Fix reproduced search ordering: card-name identity must outrank set similarity. An unrelated Squirtle from Base Set must not precede the requested Charizard from Base Set. Exact bare names must precede related names. Preserve all candidates and stable ties.
-- Next: distinguish exact matches from broader suggestions in the UI, including fallback catalogues. Avoid silently hiding the right card when the query is incomplete.
+- Implemented in the follow-up upgrade: matching query name/set/number results precede labelled broader suggestions in both grid and list views, including fallback catalogues. All candidates remain selectable; explicit price sorting is preserved. The 70-check search workflow covers mobile/desktop, punctuation, collector-only input, misspellings and outage recovery.
 - Recheck name, name+set, collector number, punctuation, spelling errors, no result and provider outage for the three main games.
 - Maintain a balanced benchmark: common/rare, old/new, promo, foil/reverse, similar art, glare, blur, tilted, cropped and slab cases. Separate automatic correct identity, review, wrong identity, unsupported and unavailable price.
-- Measure median and slow-tail time, credit use and recovery; do not silently resubmit billable scans.
+- Provider usage reporting now includes OCR and slab operations previously omitted by the report, with observed median/p95 duration, image counts and missing-usage counts. These are provider-attempt timings, not end-to-end scan latency or billed costs. Do not silently resubmit billable scans. A wider benchmark still needs independently labelled photos and end-to-end timings.
 
 Exit evidence: exact name/set/number preserved through selection and downstream pricing; zero wrong-card automatic selections in the agreed benchmark. Review outcomes remain visible, not relabelled as successes.
 
@@ -43,7 +43,7 @@ Exit evidence: source/date and price meaning survive selection → comparison �
 
 ### 3. Make the selling comparison the obvious next step
 
-- Verify free and paid venue visibility against actual entitlement, including cancelled/legacy memberships. The earlier Business badge/free-result wording observation is unconfirmed and must be investigated before calling it a defect.
+- Verify free and paid venue visibility against actual entitlement, including cancelled/legacy memberships. The Business badge/free-result mismatch was reproduced and fixed in bc3babb; current-account membership refresh now rerenders comparisons, including downgrades.
 - Test a $1 card, $10 card, expensive slab, 100 low-value cards, unknown acquisition cost, free shipping and buyer-paid shipping.
 - Keep purchase cost separate from selling payout; show actual profit only when costs are known. Compare lots and singles without extra mandatory questions.
 
@@ -77,8 +77,8 @@ Exit evidence: no paid-success/zero-credit mismatch, no duplicate charges/grants
 ### 7. Establish proof and economics before broad advertising
 
 - Reconcile invoices/usage with actual scan/grade paths, retries, refunded misses, allowances and discounts. The older unit-economics planning model is not a current profit statement.
-- Publish a reproducible accuracy report with sample composition, date/build, exact-printing criteria and failure categories; keep grading estimates distinct from professional grades/authentication.
-- Pilot with 5–10 independent sellers. Record task completion, time to comparison/draft, corrections, repeat usage and reasons to pay. Set success thresholds before the pilot; do not manufacture them afterward.
+- Published the dated 16-attempt / eight-card major-game identity check, transformation recipe, hashes, tested build and explicit exclusions on accuracy.html and in benchmarks/major-games-identification-20261029.json. This makes existing acceptance evidence inspectable; it is not an independent balanced benchmark or universal accuracy score. Keep grading estimates distinct from professional grades/authentication.
+- Pilot with 5–10 independent sellers. Record task completion, time to comparison/draft, corrections, repeat usage and reasons to pay. The task script, held-out photo composition and proposed acceptance thresholds are prepared in seller-pilot-protocol-2026-10-29.md. No participants have been recruited and no pilot results are claimed.
 - Describe shipped capabilities accurately. Do not advertise automatic market-wide sold comps, direct publishing, automatic sales sync or universal game coverage while those remain unavailable.
 
 Exit evidence: independently completed seller journeys and measured contribution margin. This is the gate for expanding advertising, not another feature-count milestone.
@@ -95,7 +95,7 @@ Search ordering was reproduced against shipped core.39b02d90.js: two new behavio
 - CollX identification/manual recovery, pricing and marketplace: https://collx.app/faq
 - CardResell evidence: launch-checklist-2026-10-29.md, major-games-release.md, workflow-fixes-2026-10-29.md; ../launch-readiness-20261027.md; ../inventory-details-20261016.md.
 
-Status: competitive baseline and ordered work plan complete; first search correction deployed and live-verified. Search-ordering fix: 100% complete; broader identification and competitive work remain in progress. Overall competitive readiness is not assigned a percentage until these gates have comparable evidence. No claim that all seven phases are complete.
+Status: implementation and acceptance are tracked separately. Search ordering, match-versus-suggestion UI, scoped sold-data wording, membership comparison refresh, complete provider-operation reporting and publication of the dated identity sample are implemented. The full release and live deployment evidence are recorded in competitive-upgrades-2026-10-29.md. Independent sample/pilot, physical-device acceptance, actual Seller Hub import, history entitlement and invoice reconciliation remain open; no overall readiness percentage or all-seven-phases completion is claimed.
 
 
 ## Follow-up release
