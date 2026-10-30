@@ -1,0 +1,275 @@
+{
+  "test_date_utc": "2026-10-29",
+  "application_commit": "5c137dbcd6da2dc1da891b523bf0a131f1c9eb19",
+  "deployment_id": "dpl_GeyjXpHqc1MKbRivhyGgDrxuDdxV",
+  "scope": "Targeted regression sample: 8 physical cards, 2 photos each. Not a random or independent accuracy benchmark.",
+  "method": {
+    "originals": 8,
+    "synthetic_variations": 8,
+    "max_side_px": 1024,
+    "jpeg_quality": 65,
+    "brightness_factor": 0.8,
+    "blur_radius_px": 0.35,
+    "manual_candidate_selection": false
+  },
+  "limitations": [
+    "No universal accuracy percentage.",
+    "Physical finish is not established by these identity results.",
+    "Both Magic cards use a labelled base-printing estimate.",
+    "The PSA 9 label is read; no verified exact-grade price is available.",
+    "Images are not redistributed in this public record.",
+    "Live provider prices can change."
+  ],
+  "results": {
+    "executed": 16,
+    "automatic_correct": 16,
+    "review": 0,
+    "wrong_automatic_observed": 0
+  },
+  "cases": [
+    {
+      "id": "dusclops-original",
+      "sha256": "10e5cbf8eace6f08c21b31be82c3ee0cf13cead7e6eae55b2d377d50f3f41966",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Dusclops",
+        "set": "Vivid Voltage",
+        "printed_number": "070/185"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "dusclops-low-quality",
+      "sha256": "d2e3bb7b38d3e3a4fdbfc1a564526652e3fc048a9b0a3d93acdc2705fdbe522b",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Dusclops",
+        "set": "Vivid Voltage",
+        "printed_number": "070/185"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "applin-original",
+      "sha256": "6b2b0a20f512ed4dd146ca5c79ce267afaee35f38d301aacf011ff7bbfc06bac",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Applin",
+        "set": "Stellar Crown",
+        "printed_number": "012/142"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "applin-low-quality",
+      "sha256": "bbc54317c5e13bb8ca2a171a35572250ab8e46e00a05b249087e9c0b405ca4f7",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Applin",
+        "set": "Stellar Crown",
+        "printed_number": "012/142"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "mimikyu-original",
+      "sha256": "366cafe013fc59c6e346376b8a816ea87a1384cb706f56911125e76820e77cbb",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Mimikyu",
+        "set": "Paldean Fates",
+        "printed_number": "037/091"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "mimikyu-low-quality",
+      "sha256": "74fbc59032a8165ad31cbaeaca81c8e8ce3166a4c3980f3ee62a8d3ab4da8226",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Mimikyu",
+        "set": "Paldean Fates",
+        "printed_number": "037/091"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "blitzclique-original",
+      "sha256": "86e86bf234d5ea48f6f61c8a7fe2cce2196f589f8c99bad40316ad7868f7ae3f",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "yugioh",
+      "expected": {
+        "name": "Blitzclique - Breakaway",
+        "set": "Chaos Origins",
+        "printed_number": "CORI-EN051"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "blitzclique-low-quality",
+      "sha256": "e5e76cd6da5567dcc06948435711006c34ed0d55bf6a07f8ae536c731818c630",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "yugioh",
+      "expected": {
+        "name": "Blitzclique - Breakaway",
+        "set": "Chaos Origins",
+        "printed_number": "CORI-EN051"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "greninja-original",
+      "sha256": "a58f42426638e44d5b36933cf47dd6239d58839d3961b46aeb8c9c57ccb454cd",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Mega Greninja ex",
+        "set": "Mega Evolution Promos",
+        "printed_number": "MEP 081"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "greninja-low-quality",
+      "sha256": "b40f911d87b2feafd306f345f90f09224661dba0b05ed61c5b8034f289c522e4",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Mega Greninja ex",
+        "set": "Mega Evolution Promos",
+        "printed_number": "MEP 081"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "eager-original",
+      "sha256": "6b89045db754fcf2487a8059a458fdf44e977a367149b8a1c5d27ca855dfd3d8",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "mtg",
+      "expected": {
+        "name": "Eager Glyphmage",
+        "set": "Secrets of Strixhaven",
+        "printed_number": "SOS 0011"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "eager-low-quality",
+      "sha256": "c86291c26922990e6ffb2eca061c2a8c253c2847ca84693b9577cd26f8f685ee",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "mtg",
+      "expected": {
+        "name": "Eager Glyphmage",
+        "set": "Secrets of Strixhaven",
+        "printed_number": "SOS 0011"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "stadium-original",
+      "sha256": "27054ea8caf5160fce355d28f17bb6cf638b77285ca5330b4ee7143d0bdb8cfa",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "mtg",
+      "expected": {
+        "name": "Stadium Tidalmage",
+        "set": "Secrets of Strixhaven",
+        "printed_number": "SOS 0232"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "stadium-low-quality",
+      "sha256": "bd66497cdef47f3f7aabcbf64f002607bd94b778ad31f5a437fc3c15204aad11",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "mtg",
+      "expected": {
+        "name": "Stadium Tidalmage",
+        "set": "Secrets of Strixhaven",
+        "printed_number": "SOS 0232"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "charizard-original",
+      "sha256": "d1293280b052456f82043f9df053bfeebfed488f8f03b05671aa3aeed64ff91f",
+      "dimensions": [
+        1152,
+        1536
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Charizard",
+        "set": "Team Up",
+        "printed_number": "14/181",
+        "grader": "PSA",
+        "grade": "9"
+      },
+      "status": "passed_identity"
+    },
+    {
+      "id": "charizard-low-quality",
+      "sha256": "25ca8e69ddf6e663659115b4c5d75728b54a94f81aaa7b036f42d02906181f4e",
+      "dimensions": [
+        768,
+        1024
+      ],
+      "game": "pokemon",
+      "expected": {
+        "name": "Charizard",
+        "set": "Team Up",
+        "printed_number": "14/181",
+        "grader": "PSA",
+        "grade": "9"
+      },
+      "status": "passed_identity"
+    }
+  ]
+}

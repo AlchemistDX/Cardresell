@@ -593,4 +593,13 @@ for (const claim of [`<strong>${counts.true} are confirmed tax-inclusive</strong
     `"${claim.replace(/<\/?strong>/g, '')}"`);
 }
 
+const acceptance = JSON.parse(readFileSync(join(ROOT,'docs/acceptance/major-games-cases.json'),'utf8'));
+const published = JSON.parse(readFileSync(join(ROOT,'benchmarks/major-games-identification-20261029.json'),'utf8'));
+T.check('published identity sample has sixteen unique image hashes',published.cases.length===16 && new Set(published.cases.map(c=>c.sha256)).size===16);
+T.check('public evidence matches the final recorded acceptance',published.application_commit===acceptance.application_commit && JSON.stringify(published.results)===JSON.stringify(acceptance.identity_results));
+T.check('public evidence excludes photo paths and certificate identifiers',published.cases.every(c=>!('file' in c)&&!('observed' in c)));
+T.check('every public case matches the recorded identity and hash',published.cases.every(c=>{const original=acceptance.cases.find(a=>a.id===c.id);return original && original.sha256===c.sha256 && original.status===c.status && JSON.stringify(original.expected)===JSON.stringify(c.expected);}));
+T.check('published count derives from passing cases, not a stale summary',published.results.automatic_correct===published.cases.filter(c=>c.status==='passed_identity').length && acceptance.summary.automatic_correct===published.results.automatic_correct);
+T.check('accuracy page exposes dated scope and evidence link',accuracy.includes('data-identity-count="'+published.results.executed+'"') && accuracy.includes(published.application_commit) && accuracy.includes('/benchmarks/major-games-identification-20261029.json') && accuracy.includes('not a general accuracy score'));
+T.check('public record retains finish and grade-price limits',published.limitations.some(x=>x.includes('finish')) && published.limitations.some(x=>x.includes('exact-grade price')));
 T.done();

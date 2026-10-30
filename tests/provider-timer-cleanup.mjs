@@ -185,6 +185,15 @@ try {
     assert.equal(measured.groups[0].cost_usd, null, 'token counts are not an invoice');
     cases++;
   }
+  for (const operation of ['card_ocr_id','ocr_read','slab_id']) {
+    const records=[10,20,30,100].map((duration_ms,i)=>JSON.stringify({event:'provider_attempt',version:1,attempt_id:`00000000-0000-0000-0000-00000000000${i}`,provider:'ximilar',operation,mode:'identify',model:null,outcome:i===3?'failure':'success',reason:i===3?'timeout':null,duration_ms,input_images:i===3?null:1}));
+    const measured=summarizeProviderUsage([...records,records[0]]),group=measured.groups[0];
+    assert.equal(measured.attempts,4,`${operation} cannot disappear from cost observations`);
+    assert.equal(measured.duplicates,1);assert.equal(group.failures,1);
+    assert.equal(group.duration_ms_median,25);assert.equal(group.duration_ms_p95,100);
+    assert.equal(group.input_images.reported_total,3);assert.equal(group.input_images.unknown_attempts,1);
+    assert.equal(group.cost_usd,null,'observed operations are not billed amounts');cases++;
+  }
   const unsupported = { ...observations.at(-1), model: 'unrecognized-model' };
   assert.equal(summarizeProviderUsage([JSON.stringify(unsupported)]).attempts, 0);
   cases++;

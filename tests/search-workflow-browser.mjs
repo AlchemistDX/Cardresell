@@ -10,7 +10,7 @@ const assets=referencedHashedAssets(),html=readFileSync(join(ROOT,'index.html'),
 const source=base=>readFileSync(assets.find(a=>a.base===base).path,'utf8');
 function pick(src,names){return parse(src,{ecmaVersion:'latest'}).body.filter(n=>n.type==='FunctionDeclaration'&&names.includes(n.id.name)).map(n=>src.slice(n.start,n.end)).join('\n');}
 const core=source('core'),ui=source('ui');
-const funcs=pick(core,['_snapSearchReq','_searchReqStillCurrent','_invalidateCardSearch','doSearch','searchPokemon','_addCatalogButton'])+'\n'+pick(ui,['openSearchModal','openCatalog','_renderCatalogActions','closeSearchModal','_closeCatalogChip','_renderCatalogFromDrop','_storeCatalogRows','_applyFilters','_makeCatalogGridCell','_makeCatalogRow']);
+const funcs=pick(core,['_snapSearchReq','_searchReqStillCurrent','_invalidateCardSearch','doSearch','searchPokemon','_addCatalogButton'])+'\n'+pick(ui,['openSearchModal','openCatalog','_renderCatalogActions','closeSearchModal','_closeCatalogChip','_renderCatalogFromDrop','_catalogSearchMatches','_storeCatalogRows','_applyFilters','_makeCatalogGridCell','_makeCatalogRow']);
 const inputHandlers=core.slice(core.indexOf("searchInput.addEventListener('input'"),core.indexOf("document.getElementById('searchBtn').addEventListener"));
 const fixture=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')+`<script>
 let activeGame='pokemon',searchTimeout=null,calls=0,picked=null,mode='normal';
@@ -66,5 +66,30 @@ try{for(const width of [390,1280]){
  check(await page.locator('#searchResultsModal').isHidden(),'late reply does not reopen full results');
  await page.evaluate(()=>{_invalidateCardSearch();searchInput.value='Pikachu';searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true}));});
  check(await page.locator('#searchResultsModal').isHidden(),'IME confirmation does not submit a search');
+ for (const mode of ['grid','list']) {
+  await page.evaluate(mode=>{
+   closeSearchModal();window._catViewMode=mode;
+   const rows=[['Squirtle','Base Set','007/102'],['Charizard ex','Base Set','006/102'],['Charizard','Base Set 2','004/130'],['Charizard','Base Set','004/102']];
+   dropList.innerHTML=rows.map(([name,set,num],idx)=>`<div class="drop-item" data-idx="${idx}" data-set="${set}" data-number="${num}"><div class="drop-name">${name}</div><div class="drop-price">$${idx+1}</div></div>`).join('');
+   dropList.querySelectorAll('.drop-item').forEach(el=>el.onclick=()=>window.fixtureSelected=el.dataset.idx);
+   document.getElementById('searchResultsModal').style.display='flex';
+   _renderCatalogFromDrop('Charizard Base Set 004/102',dropList.querySelectorAll('.drop-item'));
+  },mode);
+  await page.evaluate(()=>{_catAllRows=_catalogSearchMatches(_catAllRows,'Charizard Base Set');_catQuery='Charizard Base Set';_applyFilters();});
+  check(await page.locator('[data-catalog-suggestion]').count()===3,'Base Set 2 is a broader suggestion for Base Set '+mode);
+  check(await page.locator('.cat-result').count()===4,'matching labels never discard candidates '+mode);
+  check(await page.locator('.cat-result').first().getAttribute('data-idx')==='3','full name/set/number match precedes broader fallback suggestions '+mode);
+  check(await page.locator('[data-catalog-suggestion]').count()===3,'broader names and collector fractions stay labelled '+mode);
+  check((await page.locator('[data-catalog-match-summary]').textContent()).startsWith('1 result matches'),'summary counts matching rows '+mode);
+  await page.evaluate(()=>{_catPriceDir=1;_applyFilters();});
+  check(await page.locator('.cat-result').first().getAttribute('data-idx')==='0','explicit price sorting still orders all candidates '+mode);
+  check(await page.locator('[data-catalog-suggestion]').count()===3,'suggestion labels survive price sort '+mode);
+  await page.locator('.cat-result[data-idx="3"]').click();check(await page.evaluate(()=>fixtureSelected)==='3','reordered row selects its original identity '+mode);
+ }
+ const matching=await page.evaluate(()=>{
+  const rows=[{name:'Lightning Bolt',cardSet:'Magic 2010',cardNum:'146'},{name:'Bolt Bend',cardSet:'Magic 2010',cardNum:'146'},{name:'Blue-Eyes White Dragon',cardSet:'Legend of Blue Eyes',cardNum:'LOB-EN001'}];
+  return ['Lightning Bolt','Lightning Bolt Magic 2010 146','Blue Eyes White Dragon LOB EN001','lightning blt','146'].map(q=>_catalogSearchMatches(rows,q).filter(r=>r.matchesSearch).map(r=>r.name));
+ });
+ check(JSON.stringify(matching)===JSON.stringify([['Lightning Bolt'],['Lightning Bolt'],['Blue-Eyes White Dragon'],[],['Lightning Bolt','Bolt Bend']]),'major-game punctuation, collector-only and misspelled queries stay honest');
  check(errors.length===0,errors.join('\n'));await page.close();
 }console.log(`search-workflow-browser: ${checks} passed, 0 failed -- SUITE COMPLETE, exit=0`);}finally{await browser.close();await new Promise(r=>server.close(r));}

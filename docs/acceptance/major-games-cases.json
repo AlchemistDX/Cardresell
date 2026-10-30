@@ -280,14 +280,6 @@
       "observed": "Team Up #14; PSA 9; certificate 51044018; no verified grade price"
     }
   ],
-  "summary": {
-    "executed": 16,
-    "automatic_identities": 12,
-    "reviews": 4,
-    "wrong_automatic_identities_observed": 0,
-    "launch_accepted": false,
-    "ending_id_credits": 361
-  },
   "deployment_id": "dpl_GeyjXpHqc1MKbRivhyGgDrxuDdxV",
   "identity_results": {
     "executed": 16,
@@ -295,5 +287,22 @@
     "review": 0,
     "wrong_automatic_observed": 0
   },
-  "executed_on_utc": "2026-10-29"
+  "executed_on_utc": "2026-10-29",
+  "superseded_summary_not_final": {
+    "executed": 16,
+    "automatic_identities": 12,
+    "reviews": 4,
+    "wrong_automatic_identities_observed": 0,
+    "launch_accepted": false,
+    "ending_id_credits": 361
+  },
+  "summary": {
+    "executed": 16,
+    "automatic_correct": 16,
+    "review": 0,
+    "wrong_automatic_observed": 0,
+    "scope": "final targeted production acceptance",
+    "ending_id_credits": 340,
+    "general_accuracy_claim": false
+  }
 }

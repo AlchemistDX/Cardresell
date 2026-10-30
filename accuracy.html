@@ -86,7 +86,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
 <main>
 
 <h1>Accuracy &amp; Methodology</h1>
-<span class="updated">Last updated · Oct 14, 2026 · Fee verification dates are shown separately</span>
+<span class="updated">Last updated · Oct 29, 2026 · Fee verification dates are shown separately</span>
 
 <p>CardResell helps card sellers compare estimated proceeds and choose a selling route. That only works if you can trust the numbers. This page publishes exactly how we calculate them, where the source data comes from, and what we know we get wrong.</p>
 
@@ -98,6 +98,7 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <a href="#graded">Graded price sanity checks</a>
   <a href="#fees">Marketplace fees</a>
   <a href="#grading">Estimated grade scans</a>
+  <a href="#identification-check">Identification check</a>
   <a href="#coverage">Card database coverage</a>
   <a href="#limits">Known limits</a>
   <a href="/changelog">Product changelog</a>
@@ -236,6 +237,22 @@ footer.site a{margin:0 .5rem;color:var(--text-muted);font-weight:600}
   <li><strong>We don't claim "within N points of PSA."</strong> We haven't published a validation set yet. The roadmap is a 100-card gold-set audit (paired PSA slabs + our estimate) — when that ships, the results land on this page with the raw comparison, not marketing copy.</li>
 </ul>
 <p>Use grade scans to decide whether it's worth paying $25+ to submit a card. Don't use them to price a slab you don't own yet.</p>
+
+<h2 id="identification-check">Published identification check</h2>
+<p><strong>October 29, 2026: targeted regression check, not a general accuracy score.</strong> Eight supplied physical cards were tested with their original front photo and one synthetic reduced-quality copy each. All <strong data-identity-count="16">16 attempts</strong> returned the expected identity automatically, with no candidate manually selected. These were development examples, not an independent or random sample of customer photos.</p>
+<table><thead><tr><th>Game</th><th>Card and printing checked</th><th>Original / reduced quality</th></tr></thead><tbody>
+<tr><td>Pokémon</td><td>Dusclops — Vivid Voltage #070/185</td><td>Automatic / automatic</td></tr>
+<tr><td>Pokémon</td><td>Applin — Stellar Crown #012/142</td><td>Automatic / automatic</td></tr>
+<tr><td>Pokémon</td><td>Mimikyu — Paldean Fates #037/091</td><td>Automatic / automatic</td></tr>
+<tr><td>Pokémon</td><td>Mega Greninja ex — Mega Evolution Promos #081</td><td>Automatic / automatic</td></tr>
+<tr><td>Pokémon</td><td>Charizard — Team Up #14/181, PSA 9 label</td><td>Automatic / automatic</td></tr>
+<tr><td>Magic</td><td>Eager Glyphmage — Secrets of Strixhaven #11</td><td>Automatic / automatic</td></tr>
+<tr><td>Magic</td><td>Stadium Tidalmage — Secrets of Strixhaven #232</td><td>Automatic / automatic</td></tr>
+<tr><td>Yu-Gi-Oh!</td><td>Blitzclique - Breakaway — Chaos Origins #CORI-EN051</td><td>Automatic / automatic</td></tr>
+</tbody></table>
+<p>The reduced-quality copies used a 1024-pixel maximum side, JPEG quality 65, 80% brightness and a 0.35-pixel blur radius. This is a repeatable stress transformation, not a substitute for testing real camera problems. Identity means the expected card/set/number; it does not certify authenticity or physical finish. Both Magic cards retained a labelled base-printing estimate. Charizard had no verified price for its PSA 9 grade and did not inherit a raw price.</p>
+<p>Other supplied examples still require review: the original second-anniversary Luffy photo and two sports cards. Union Arena remains unsupported. A separate degraded Luffy photo passed, which does not turn its original-photo result into a pass. Grading predictions and listing-price accuracy are separate measurements.</p>
+<p>Tested application: <code>5c137dbcd6da2dc1da891b523bf0a131f1c9eb19</code>. <a href="/benchmarks/major-games-identification-20261029.json">Read the test manifest, image hashes and limitations (JSON)</a>. Photo files are not publicly redistributed. Results apply to that dated build and sample; newer releases require their own acceptance evidence.</p>
 
 <h2 id="coverage">Card database coverage</h2>
 <p>Catalogue coverage varies by game, set, language, and printing. A missing result does not mean a card does not exist. Confirm the set, number, variant, language, and condition before using a price. Available market prices are not a guarantee of recent sold transactions; eBay sold results may be unavailable inside the app. Use the marketplace search links to review comparable sales yourself, or enter a price you have verified.</p>
