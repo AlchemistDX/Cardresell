@@ -54,4 +54,13 @@ The main eight-card Pokémon/Magic/Yu-Gi-Oh benchmark, including Greninja, was *
 
 ## Release
 
-Release checks passed. Production commit, deployment and live verification will be recorded after deployment completes.
+- Application commit: `f613a493f7e558c976566941d3e47d4f4b73a4f3`.
+- Production deployment: `dpl_FPbT3ttGno9jMwgvBhBzFXHP5qvm`, **READY** on 31 October 2026 at 16:07:23 UTC. Production aliases include `www.cardresell.org` and `cardresell.org`.
+- Public HTTPS verification returned **200** for the entry HTML and all six changed JavaScript bundles. All seven responses matched the tested files byte for byte.
+- Live signed-out browser verification showed **Collection CSV**, the expanded draft guide, **Save to Files**, the `ebay-draft` filename distinction and the Seller Hub upload link. The DOM referenced all six new bundle names.
+- The bounded runtime review returned five `DEP0169 url.parse()` deprecation warnings, grouped as a pre-existing warning first seen in June. It returned no additional application exception group. This short observation is not a guarantee of error-free production.
+- No real account writes, paid scans, purchases, Seller Hub uploads or live listings were performed by this verification.
+
+![Published draft guide, signed out](screenshots/owner-video-release-2026-10-31.jpg)
+
+The most useful short phone recheck is Machoke → Create draft (price and photo), Machoke → View price & fees → Create draft (same photo), and Froslass catalogue recovery (price or a clear unavailable state). Record one attempt per path. The original main-game benchmark and broader camera/account checks above remain separate acceptance work.
