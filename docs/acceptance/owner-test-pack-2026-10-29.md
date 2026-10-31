@@ -1,16 +1,16 @@
 # CardResell owner test pack
 
-Prepared October 29, 2026. **Updated October 31: two owner phone recordings reviewed.** See [the observed results and fixes](owner-video-review-2026-10-31.md). One actual eBay CSV import reached an editable draft with its photo, title, price and quantity. Binder identification was 7/9 automatic plus two manual recoveries. The main-eight benchmark, full camera lifecycle and second-device checks below remain unrun in these recordings.
+Prepared October 29, 2026. **Updated October 31: phone recordings reviewed and sample priorities clarified by the owner.** See [the observed results and fixes](owner-video-review-2026-10-31.md). One actual eBay CSV import reached an editable draft with its photo, title, price and quantity. Binder identification was 7/9 automatic plus two manual recoveries. Fresh-card acceptance, the full camera lifecycle and second-device checks below remain open. The supplied named cards are regression examples, not the required owner test set.
 
-Use https://www.cardresell.org on your actual iPhone in Safari. Allow roughly 20–30 minutes, plus eBay's processing time. The software baseline is production commit `41fec9a5854d7a562749000c24c0a40a185d0308`. If a later release is installed, record its date/time rather than assuming this build.
+Use https://www.cardresell.org on your actual iPhone in Safari. The software baseline is production commit `f613a493f7e558c976566941d3e47d4f4b73a4f3`. If a later release is installed, record its date/time rather than assuming this build. The short workflow recheck can be recorded separately from the wider scanner and device checks; one long phone recording is unnecessary.
 
 You need your cards, your normal CardResell account, access to your eBay Seller Hub, and optionally a second device. Start a screen recording after signing in; keep passwords, codes and payment details out of it. No new subscription purchase or AI grade submission is required. Identification submissions can consume ID credits: note the displayed balance and submit each chosen photo once. A deliberate repeat is a separate attempt.
 
-## 1. Start with Greninja
+## 1. Short recheck with any suitable card
 
 1. Open Card Lookup and note your plan and ID credit balance.
-2. Scan the supplied Mega Greninja ex front using the normal ID scan flow.
-3. Confirm the result is **Mega Greninja ex, Mega Evolution Promo, #081**. Provider wording may include “ME:” or “- 081”. Another Greninja printing is a failure, even if its picture looks similar.
+2. Choose a card from your collection, preferably a full art, SIR or other special printing you would normally scan individually. Scan it using the normal ID scan flow. No particular card name is required.
+3. Check the exact name, set, printed number and language/edition where applicable against the physical card. Another printing is a failure, even if its name or picture looks similar. Check finish separately.
 4. Note whether it identified automatically, asked you to choose, or failed. Record approximate seconds from submission to a usable result.
 5. Check that the price source and available low/high values are labelled. Do not compare against an old dollar amount: prices change. Missing data must remain unavailable, not become an invented range.
 6. Confirm fee/net-payout comparisons appear without opening a special fee dropdown or pressing Calculate. The optional detailed breakdown may stay collapsed.
@@ -18,24 +18,24 @@ You need your cards, your normal CardResell account, access to your eBay Seller 
 
 **Pass:** correct identity, usable next step, comparison visible, no unexplained duplicate credit charge. An identification review is recorded as review, not automatic success.
 
-## 2. Check the main games
+Check both draft-entry routes when practical: **Create draft** directly from a scan, and **View price & fees → Create draft**. Each must retain that physical copy's photo, identity, finish and available price. Reuse the current result when possible; do not rescan solely for a duplicate test. If another scan is necessary, use another suitable card and count it as another attempt. If catalogue recovery is needed naturally, its selected printing must receive a matching quote or a clear unavailable state. Do not force a failure just to exercise recovery.
 
-Use the same process for the other seven cards. Use ordinary handheld photos with all card edges visible; include one mildly tilted or imperfectly lit shot. Do not make the text completely unreadable. The earlier original/degraded results are reference evidence, not a guarantee that this new run will pass.
+## 2. Check unfamiliar cards in the workflows people will use
 
-| Card | Expected set / printed number | Result: automatic / review / wrong / failed | Seconds | Credit change / error |
-|---|---|---|---|---|
-| Mega Greninja ex | Mega Evolution Promo / 081 | — | — | — |
-| Dusclops | Vivid Voltage / 070/185 | — | — | — |
-| Applin | Stellar Crown / 012/142 | — | — | — |
-| Mimikyu | Paldean Fates / 037/091 | — | — | — |
-| Charizard, PSA 9 | Team Up / 14/181; PSA 9 | — | — | — |
-| Eager Glyphmage | Secrets of Strixhaven / 11 | — | — | — |
-| Stadium Tidalmage | Secrets of Strixhaven / 232 | — | — | — |
-| Blitzclique - Breakaway | Chaos Origins / CORI-EN051; 1st Edition shown on card | — | — | — |
+Prioritize Pokémon, Magic and Yu-Gi-Oh! Use fresh cards chosen before viewing scanner results, with identities and printings checked independently. Keep their images out of scanner tuning until the evaluation finishes. Choose freely within the following mix; there is no required list of card names. These priorities reflect the owner's expected use, not measured customer usage.
 
-Record finish separately: Applin appears reverse holo and the two Magic photos are foil. Correct name/set/number does not prove finish recognition. A labelled base-printing estimate is acceptable as an explicit limitation; silently claiming an exact foil price is not. For Charizard, the app must retain PSA 9 and must not substitute a raw value when an exact-grade price is missing.
+| Workflow | Main coverage | What to record |
+|---|---|---|
+| Individual scans | Mostly full arts, Pokémon SIRs and relevant special printings in each game; include older, rare, promo and similar-art printings | Exact printing, automatic/review/wrong/failed outcome, time, finish and quote availability |
+| Binder pages | Ordinary commons/uncommons alongside rare, full-art, foil and reverse-holo cards; sleeves, different pockets and repeated physical copies | Every occupied pocket, missed/duplicate pockets, exact identity per pocket and retained photo/copy association |
+| Real phone conditions | Natural handheld glare, mild blur, tilt, shadows and imperfect framing across both workflows | Original first-attempt result and any later recovery separately; unreadable cases must fail or request review honestly |
+| Graded cards | Grade/company visible on the label; keep separate from raw-card results | Grade retained, no raw price substituted for a missing exact-grade quote |
 
-Optional after the main eight: Luffy, Noi, Make the Potion, Satoru Gojo, LeBron and Josh Sweat complete the supplied 14-card sample. Luffy's original and the two sports cards previously required review; Union Arena was unsupported. Record these outcomes honestly, separately from the main-game acceptance.
+For each attempt record: game; single/binder and pocket; expected name/set/number/language/edition; result; seconds; finish; quote source or unavailable; credit change/error. Include failures and keep the initial denominator unchanged after corrections. Repeated photos are attempts, not additional independent cards. A page with nine saved cards after two manual recoveries is seven automatic identities plus two recoveries, not nine automatic successes.
+
+Correct name/set/number does not prove finish recognition. A labelled base-printing estimate is acceptable as an explicit limitation; silently claiming an exact foil price is not. Finish selection stays optional and editable; this test record must not become a mandatory questionnaire in the scanning flow.
+
+The supplied 14 cards and the earlier eight-card Pokémon/Magic/Yu-Gi-Oh! results remain development regressions. Repeat those internally when a relevant change needs checking; they do not replace fresh-card evaluation or require the owner to find those cards again. Supporting games and sports remain separate coverage, with unsupported outcomes recorded honestly.
 
 ## 3. Check search, fees and the simple workflow
 
@@ -90,7 +90,9 @@ Phone model / iOS version:
 Browser:
 Plan shown:
 Starting → ending ID credits:
-Main-game results (table above):
+Fresh-card results (game, single/binder, exact printing, outcome, seconds):
+Binder occupied / automatically correct / manual recovery / wrong / missed pockets:
+Finish uncertain / price unavailable:
 Camera failures (step names):
 Search / fees / workflow: pass / fail / not run:
 eBay upload: accepted __ / rejected __ / still processing:

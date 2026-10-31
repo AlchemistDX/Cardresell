@@ -46,7 +46,7 @@ The main eight-card Pokémon/Magic/Yu-Gi-Oh benchmark, including Greninja, was *
 
 ## Remaining acceptance
 
-1. Repeat the failed Machoke custom-camera path once on the patched phone build, then the original main-game cards. Record automatic identity separately from manual review. Do not claim a population accuracy rate from these convenience samples.
+1. Recheck the patched custom-camera flow with fresh cards chosen before seeing scanner results. No particular card is required: prioritize full arts/SIRs and relevant special printings for individual scans, and ordinary cards plus mixed finishes for binder pages. The original examples remain internal regressions. Record automatic identity separately from manual review, and every occupied binder pocket including omissions. Do not claim a population accuracy rate from these convenience samples.
 2. Physical Safari permission retry, rotation, background/resume, network recovery and second-device collection checks remain untested. Same-session navigation is not a substitute.
 3. Both draft-entry photo paths have automated regression evidence and still need a physical-phone recheck. Missing provider timestamps or source links remain explicitly unavailable; they are not invented. Seller Hub item specifics must still be reviewed and completed.
 4. The observed eBay import closes the **one real sample accepted/editable** gate. It does not prove every game, slab, item-specific field, bulk CSV or direct publishing path. eBay Connect still does not provide market-wide individual sold transactions or automatic publishing.
@@ -63,4 +63,6 @@ The main eight-card Pokémon/Magic/Yu-Gi-Oh benchmark, including Greninja, was *
 
 ![Published draft guide, signed out](screenshots/owner-video-release-2026-10-31.jpg)
 
-The most useful short phone recheck is Machoke → Create draft (price and photo), Machoke → View price & fees → Create draft (same photo), and Froslass catalogue recovery (price or a clear unavailable state). Record one attempt per path. The original main-game benchmark and broader camera/account checks above remain separate acceptance work.
+The short phone recheck can use any suitable card: scan → Create draft (price and photo), and scan → View price & fees → Create draft (that copy's photo). Reuse a result where possible; if another scan is needed, another card is fine. If catalogue recovery occurs naturally, check its price or clear unavailable state. No need to recreate a named-card failure or make another long video. Fresh-card evaluation and the broader camera/account checks above remain separate acceptance work.
+
+**Owner clarification, October 31:** the supplied cards were arbitrary collection examples. Individual scans are expected to emphasize SIRs, full arts and special/old/rare printings, while ordinary cards matter heavily for binder scans. The revised [owner test pack](owner-test-pack-2026-10-29.md) and [pilot protocol](seller-pilot-protocol-2026-10-29.md) use those priorities. Inspection of this release's changes found general camera framing, OCR cleanup, exact-printing price checks and copy/photo handoff rules, not production exceptions for Machoke, Froslass, Dwebble or Greninja. This code review establishes the scope of the fixes; it does not measure unseen-card accuracy or close scanner acceptance.
