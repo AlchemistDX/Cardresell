@@ -2,6 +2,8 @@
 
 ## Position and evidence boundary
 
+**October 31 update:** [Owner phone recordings and follow-up fixes](owner-video-review-2026-10-31.md) establish one accepted editable Seller Hub draft with its seller photo, title, price and quantity. Other item specifics, direct publishing, the full physical-camera checklist and second-device journey remain open. The observed binder result was seven automatic identities plus two manual recoveries. Historical “actual Seller Hub import remains open” statements below describe the October 29 baseline; the one-sample gate now has evidence.
+
 Build the seller workflow in order: identify the exact printing → understand the price → compare proceeds → prepare the listing → track the physical copy and actual profit. A longer feature menu is not proof of a better seller workflow.
 
 This review combines current repository acceptance records and first-party competitor documentation. Competitor feature descriptions are their claims, not independent accuracy tests. Earlier CardResell tests remain evidence for their tested releases only. Do not convert a 14-card convenience sample into a public accuracy percentage.

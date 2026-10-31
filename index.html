@@ -2219,7 +2219,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <div id="scanPreviewWrap" style="display:none;position:relative;width:min(42vw,160px);text-align:center">
         <img id="scanPreviewImg" style="width:100%;border-radius:10px;display:block;box-shadow:0 8px 32px rgba(0,0,0,.5)" alt="Card" />
         <!-- Success checkmark overlay on image -->
-        <div id="scanSuccessBadge" style="display:none;position:absolute;top:-8px;right:-8px;width:26px;height:26px;background:#4ade80;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;box-shadow:0 2px 8px rgba(74,222,128,.5)">✓</div>
+        <div id="scanSuccessBadge" style="display:none;position:absolute;top:-8px;right:-8px;width:26px;height:26px;background:#4ade80;border-radius:50%;align-items:center;justify-content:center;font-size:.85rem;box-shadow:0 2px 8px rgba(74,222,128,.5)">✓</div>
       </div>
     </div>
     <!-- Spinner (shown while scanning) -->
@@ -2228,6 +2228,19 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <div id="scanStatus" aria-live="polite" style="color:#fff;font-size:.95rem;font-weight:600;text-align:center;max-width:320px;line-height:1.5">Reading your card…</div>
     <div id="scanResult" style="color:rgba(255,255,255,.7);font-size:.82rem;max-width:340px;text-align:center;line-height:1.5"></div>
+    <p id="scanPriceSummary" hidden role="status" style="margin:0;max-width:340px;text-align:center;line-height:1.5;color:#f5cf68"></p>
+    <!-- Dynamic action buttons — swapped based on scan state -->
+    <div id="scanActionBtns" style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:320px;margin-top:.25rem">
+      <!-- Shown while scanning -->
+      <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
+      <!-- Shown after success -->
+      <button id="scanCreateDraftBtn" type="button" onclick="createSingleScanDraft()" style="display:none;padding:.7rem 1rem;background:#2563eb;color:white;border:0;border-radius:12px;font-weight:800;min-height:48px;width:100%">Create draft</button>
+      <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View price &amp; fees →</button>
+      <button id="scanWrongCardBtn" onclick="openWrongCardPicker()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.12);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">🔀 Wrong card? Fix for free</button>
+      <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
+      <!-- Shown after failure -->
+      <button id="scanRetryBtn" onclick="retryIdScan()" style="display:none;padding:.65rem 1.5rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:12px;font-weight:800;font-size:.88rem;width:100%;cursor:pointer">📷 Try Again</button>
+    </div>
     <!-- Grading affiliate CTA — shown after scan when card is raw or grader detected -->
     <div id="scanGradeCTA">
       <div class="sgc-label">&#127942; Get It Graded</div>
@@ -2241,18 +2254,6 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
         <a href="https://www.beckett.com/grading/submit" id="sgcBGSBtn" target="_blank" rel="noopener" class="grade-cta-btn bgs">&#127942; BGS</a>
         <a href="https://www.gosgc.com/submit-cards" id="sgcSGCBtn" target="_blank" rel="noopener" class="grade-cta-btn sgc">&#127942; SGC</a>
       </div>
-    </div>
-    <!-- Dynamic action buttons — swapped based on scan state -->
-    <div id="scanActionBtns" style="display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:320px;margin-top:.25rem">
-      <!-- Shown while scanning -->
-      <button id="scanCancelBtn" onclick="cancelScan()" style="padding:.55rem 1.25rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:none;border-radius:99px;font-weight:600;font-size:.85rem;width:100%;cursor:pointer">Cancel</button>
-      <!-- Shown after success -->
-      <button id="scanCreateDraftBtn" type="button" onclick="createSingleScanDraft()" style="display:none;padding:.7rem 1rem;background:#2563eb;color:white;border:0;border-radius:12px;font-weight:800;min-height:48px;width:100%">Create draft</button>
-      <button id="scanViewCardBtn" onclick="cancelScan()" style="display:none;padding:.7rem 1.5rem;background:var(--gold);color:#000;border:none;border-radius:12px;font-weight:900;font-size:.95rem;width:100%;cursor:pointer">View Card Prices →</button>
-      <button id="scanWrongCardBtn" onclick="openWrongCardPicker()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.12);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">🔀 Wrong card? Fix for free</button>
-      <button id="scanAnotherBtn" onclick="scanAnother()" style="display:none;padding:.55rem 1.25rem;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:99px;font-weight:700;font-size:.82rem;width:100%;cursor:pointer">📷 Scan Another Card</button>
-      <!-- Shown after failure -->
-      <button id="scanRetryBtn" onclick="retryIdScan()" style="display:none;padding:.65rem 1.5rem;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:12px;font-weight:800;font-size:.88rem;width:100%;cursor:pointer">📷 Try Again</button>
     </div>
   </div>
   <div class="cat-row" id="catRow" style="margin-top:.6rem">
@@ -3051,8 +3052,8 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
     </div>
     <p>Your CSV creates drafts for you to finish in eBay. eBay Connect is optional for this workflow.</p>
     <ol>
-      <li><strong>Download your file.</strong> Review your saved card details, price, quantity and photos. Use Download on one draft, or select several and choose Download selected drafts. Keep the downloaded .csv file.</li>
-      <li><strong>Upload in Seller Hub.</strong> Sign in to eBay and open Reports → Upload. Choose Upload template (or Start upload), then select your .csv file. If asked, choose Listings / Create drafts.</li>
+      <li><strong>Download your file.</strong> Review your saved card details, price, quantity and photos. Use eBay CSV on one draft, or select several and choose Download selected drafts. The filename starts with <strong>ebay-draft</strong> and ends with <strong>.csv</strong>. On iPhone, tap Share → <strong>Save to Files</strong> and choose Downloads.</li>
+      <li><strong>Upload in Seller Hub.</strong> Sign in to eBay and open Reports → Upload. Choose Upload template (or Start upload), then select that <strong>ebay-draft .csv</strong> file from Files → Downloads. A <strong>Collection CSV</strong> is a backup, and a JPG is a photo; neither is an eBay upload template. If asked, choose Listings / Create drafts.</li>
       <li><strong>Check the upload results.</strong> Look in Recent uploads for errors or the downloadable results report. Choose Complete listings for the accepted draft upload. Check the results before uploading again to avoid duplicate drafts.</li>
       <li><strong>Finish and publish in eBay.</strong> Review photos, condition, item specifics, price and quantity. Complete shipping, returns and payment details, review eBay’s fees, then publish when ready.</li>
     </ol>
@@ -3137,7 +3138,7 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
       <button onclick="openAddFlip('hold')" style="padding:.42rem .85rem;background:var(--gold);color:#000;border:none;border-radius:var(--radius-md);font-size:.78rem;font-weight:800;cursor:pointer">+ Add Card</button>
       <button id="ebayConnectionBtn" hidden onclick="CardResellEbayConnect.open()" style="min-height:44px;padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">Connect eBay</button>
       <button id="collectionImportBtn" onclick="CardResellCollectionImport.open()" style="min-height:44px;padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">Import CSV</button>
-      <button onclick="exportCollection()" style="padding:.42rem .85rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">⬇ Export CSV</button>
+      <button onclick="exportCollection()" style="padding:.42rem .85rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer">⬇ Collection CSV</button>
       <button onclick="refreshCollectionPrices()" id="colRefreshBtn" style="padding:.42rem .85rem;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">↻ Refresh Prices</button>
       <details class="collection-more"><summary>More</summary><div>      <button onclick="clearCollection()" id="colClearBtn" title="Remove all cards from your Collection (irreversible)" style="padding:.42rem .85rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:#f87171;border-radius:var(--radius-md);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s">Clear collection</button></div></details>
       <span id="colLastUpdated" style="font-size:.65rem;color:var(--text-muted);margin-left:auto"></span>
@@ -3986,13 +3987,13 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 
 <script defer src="/js/config.5fb220f2.js"></script>
 <script defer src="/js/scan-request.7f8d4a04.js"></script>
-<script defer src="/js/scan-text-recovery.6fca7cf3.js"></script>
+<script defer src="/js/scan-text-recovery.dc1165d0.js"></script>
 <script defer src="/js/grading-paths.06e5b2dc.js"></script>
 <script defer src="/js/sale-corrections.ba658815.js"></script>
 <script defer src="/js/inventory-edits.827690a8.js"></script>
 <script defer src="/js/price-evidence.1543160d.js"></script>
-<script defer src="/js/search-catalog.5cb938c1.js"></script>
-<script defer src="/js/core.ebb71974.js"></script>
+<script defer src="/js/search-catalog.5a24e024.js"></script>
+<script defer src="/js/core.1ae7d9c1.js"></script>
 <script defer src="/js/sale-recovery.17ec92d7.js"></script>
 <style id="membership-shop-styles">
 .membership-shop { box-sizing:border-box; width:min(740px,calc(100vw - 32px)); max-height:90dvh; overflow-y:auto; margin:auto; padding:28px; border:1px solid var(--border,#454545); border-radius:16px; background:var(--surface,#171717); color:var(--text,#fafafa); font:inherit; }
@@ -4075,11 +4076,11 @@ white-space:normal;max-width:min(92vw,34rem);width:max-content;text-align:center
 </style>
 <script defer src="/js/membership-shop.045bc4d7.js"></script>
 <script defer src="/js/photo-guide.276e535b.js"></script>
-<script defer src="/js/scan-finish.222e86c4.js"></script>
-<script defer src="/js/ui.759878a1.js"></script>
+<script defer src="/js/scan-finish.c5515738.js"></script>
+<script defer src="/js/ui.8410945f.js"></script>
 <script defer src="/js/bulk-match-review.2c551fd9.js"></script>
 <script defer src="/js/bulk-workflow.7ca209d0.js"></script>
-<script defer src="/js/bulk-lookup.662fcc67.js"></script>
+<script defer src="/js/bulk-lookup.15659470.js"></script>
 <script defer src="/js/selling-plan.ef5261ae.js"></script>
 <script defer src="/js/selling-advice.c92014b4.js"></script>
 <style>

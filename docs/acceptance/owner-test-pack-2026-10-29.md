@@ -1,6 +1,6 @@
 # CardResell owner test pack
 
-Prepared October 29, 2026. **Status: ready to run; no new owner-test results recorded.**
+Prepared October 29, 2026. **Updated October 31: two owner phone recordings reviewed.** See [the observed results and fixes](owner-video-review-2026-10-31.md). One actual eBay CSV import reached an editable draft with its photo, title, price and quantity. Binder identification was 7/9 automatic plus two manual recoveries. The main-eight benchmark, full camera lifecycle and second-device checks below remain unrun in these recordings.
 
 Use https://www.cardresell.org on your actual iPhone in Safari. Allow roughly 20–30 minutes, plus eBay's processing time. The software baseline is production commit `41fec9a5854d7a562749000c24c0a40a185d0308`. If a later release is installed, record its date/time rather than assuming this build.
 

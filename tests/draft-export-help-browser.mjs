@@ -51,6 +51,7 @@ try {
       if (url.origin !== origin) return route.abort();
       if (/\/js\/auth\.[a-f0-9]+\.js$/.test(url.pathname)) return route.fulfill({ contentType: 'text/javascript', body: '// Fixture session supplied at the auth boundary.' });
       if (url.pathname.startsWith('/api/')) {
+        if (url.pathname === '/api/tcg-price') return route.fulfill({status:503,json:{error:'Synthetic price supplied at provider boundary.'}});
         if (failRead && url.pathname === '/api/drafts' && url.searchParams.has('id') && request.method() === 'GET') return route.fulfill({ status: 503, json: { error: 'Fixture read unavailable.' } });
         const response = await route.fetch({ url: local + url.pathname + url.search });
         return route.fulfill({ response });
@@ -128,6 +129,22 @@ try {
     check((await guide.getByRole('status').innerText()).includes('could not save'), 'storage failure is explained');
     await close(); failRead = false; await downloadOne();
     check(await guide.isHidden(), 'blocked storage still suppresses automatic help for this session');
+    if (width === 390) {
+      // A quick tap from the single-scan screen must retain the quote through
+      // the real draft handler and its store, not only a mocked create call.
+      await page.evaluate(async () => {
+        _bulkFetchPrice=async()=>({marketPrice:20.43,variant:'holofoil',prices:{holofoil:{market:20.43}},tcgplayerUrl:'https://www.tcgplayer.com/product/fixture'});
+        _singleScanDraft=null;_lastScanFrontBase64=null;
+        _pendingIdScanCard={name:'Machoke',number:'177',setName:'151',cardType:'pokemon',groundedId:'sv3pt5-177'};
+        document.getElementById('scanOverlay').style.display='flex';_setScanBtns('success');
+        await createSingleScanDraft();
+      });
+      const scanId=await page.evaluate(()=>_crLastDraftId);
+      const saved=await (await fetch(local+'/api/drafts?id='+encodeURIComponent(scanId),{headers:{Authorization:'Bearer '+token}})).json();
+      const draft=saved.draft || saved;
+      check(draft.price===20.43 && draft.priceSource==='comp','single-scan quote reaches real saved draft');
+      check(draft.card?.finish==='Holofoil','single-scan finish reaches real saved draft');
+    }
     check(errors.length === 0, errors.join('; '));
     await context.close();
   }

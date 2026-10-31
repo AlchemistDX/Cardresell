@@ -161,19 +161,30 @@
       const yours = node('div','',compare); node('p','Your photo',yours); picture(row.objectUrl || row.imageDataUrl,'Your card',yours);
       const reference = node('div','',compare); node('p','Catalogue printing',reference); picture(card.imageUrl,'Selected catalogue printing',reference);
       node('p','Check the artwork, set and number against your card. You can set its condition and finish in the batch.',confirm);
-      if(card.catalogCard) node('p','This catalog confirms identity only. No market price is included.',confirm);
+      if(card.catalogCard) node('p','This catalog confirms identity. We’ll check for a matching price when you use this printing.',confirm);
       if (card.cardType === 'mtg') node('p','We’ll also try to recover other cards from this set. No extra scan credits.',confirm);
       const actions = node('div','',confirm,{class:'lookup-actions'});
-      node('button','Back to results',actions,{type:'button'}).onclick=()=>{confirm.hidden=true;searchView.hidden=false;submit.focus()};
+      node('button','Back to results',actions,{type:'button'}).onclick=()=>{s.generation++;confirm.hidden=true;searchView.hidden=false;submit.focus()};
       const use = node('button','Use this printing',actions,{type:'button',class:'lookup-primary'});
-      use.onclick = () => {
+      use.onclick = async () => {
         if (!current(s)) return close();
+        if (use.disabled) return;
+        const generation = s.generation;
+        use.disabled = true; use.textContent = 'Checking price…';
+        let info = card.info;
+        if (info?.marketPrice == null && typeof window._scanFetchIdentifiedPrice === 'function') {
+          const quote = await window._scanFetchIdentifiedPrice(card);
+          if (quote) info = quote;
+        }
+        if (!current(s) || generation !== s.generation || confirm.hidden) return;
+
         // Update this physical copy in place. Photo, scan/copy IDs, quantity,
         // condition and seller metadata remain intact; nothing is saved yet.
-        const {info,...identity} = card;
+        const {info:embeddedPrice,...identity} = card;
         searches.delete(row);
         Object.assign(row,identity,{catalogCard:card.catalogCard || null,success:true,manualIdentity:true,providerNeedsReview:false,providerConfirmed:false,error:'',definiteMiss:false,photoRejected:false,
           textRescue:false,marketPrice:null,priceVariant:'',priceSource:null,tcgplayerUrl:'',unavailableReason:''});
+        if (info) Object.assign(row,{marketPrice:info.marketPrice ?? null,priceSource:info.marketPrice == null ? null : 'comp',tcgplayerUrl:info.tcgplayerUrl || ''});
         window._scanApplyFinishReview?.(row,info);
         close();
         window._bulkUpdateRow?.(row.rowId,row);

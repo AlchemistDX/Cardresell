@@ -93,7 +93,7 @@
     const hit = value => ({name:index.get(value),cardType:game});
     if (index.has(q)) return hit(q);
     // A short sleeve-noise token before an otherwise exact title is common.
-    const clean = q.replace(/^[a-z]{1,2} /,'');
+    const clean = q.replace(/^[a-z]{1,2} /,'').replace(/ [a-z]$/,'');
     if (clean !== q && index.has(clean)) return hit(clean);
     if (/[^\x00-\x7f]/.test(q)) return null; // Native names require an exact read.
     const limit = Math.min(2,Math.floor(q.replace(/\s/g,'').length * .15));

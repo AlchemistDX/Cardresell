@@ -81,10 +81,11 @@ try {
    }
    await page.locator('.lookup-results button').first().click();
    check(width+' '+game+': choosing requires explicit approval',await page.evaluate(()=>row.success),false);
-   check(width+' '+game+': identity-only price label is visible',await page.getByText('This catalog confirms identity only. No market price is included.').isVisible());
+   check(width+' '+game+': identity confirmation explains the next price check',await page.getByText('This catalog confirms identity. We’ll check for a matching price when you use this printing.').isVisible());
    if(game==='yugioh')check('YGO does not substitute a card-wide image',await page.locator('.lookup-compare img').count(),1);
    if(process.env.CR_SHOT_DIR&&game==='onepiece')await page.screenshot({path:process.env.CR_SHOT_DIR+'/catalog-binder-'+width+'.png'});
    await page.getByRole('button',{name:'Use this printing',exact:true}).click();
+   await page.locator('#bulkLookupDialog').waitFor({state:'detached'});
    const confirmed=await page.evaluate(()=>({game:row.catalogCard.game,name:row.cardName,set:row.setName,number:row.cardNumber,id:row.groundedId,success:row.success,price:row.marketPrice,jp:row.isJapanese,copy:row.copyUids,cost:row.acquisitionCost,location:row.location}));
    check(width+' '+game+': approved catalog identity has no invented price',[confirmed.success,confirmed.price,confirmed.game,confirmed.jp],[true,null,game,game==='pokemonjp']);
    check(width+' '+game+': physical copy and seller data survive',[confirmed.copy,confirmed.cost,confirmed.location],[['physical-copy'],1.25,'Box A']);

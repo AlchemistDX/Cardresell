@@ -179,6 +179,7 @@ function reviewCollectionFinish(id) {
 
 function _scanMarkCard(card, pending) {
   if (!card || card.game==='sports') return card;
+  if (typeof _scanCarryCopyToLookup === 'function') _scanCarryCopyToLookup(card, pending);
   const info={prices:Object.fromEntries((card.priceVariants||[]).filter(v=>!isGradedVariant(v.key)).map(v=>[v.key,v.market]))};
   Object.assign(card,{_finishPricesVerified:true,finishReviewRequired:false,finishConfirmed:false,finishEstimated:true,finish:'',finishKey:''},_scanFinishFields(pending));
   const options=_scanFinishOptions(info);
@@ -241,4 +242,37 @@ function _scanPriceBasisHtml(row) {
   return '<details class="scan-price-basis"><summary>'+label+'</summary><div>'
     + [basis,finish,condition,priced ? 'Amount is per copy, before fees, shipping and purchase cost. Provider update time is not available here.' : 'Enter your own price or check the card details.'].map(t=>'<p>'+_esc(t)+'</p>').join('')
     + '</div></details>';
+}
+
+// Pricing can be absent in identity-only catalogues. Share the same bounded
+// quote path between a single scan and an explicitly selected batch printing.
+async function _scanFetchIdentifiedPrice(row) {
+  if (!row || row.grader || row.cardType === 'sports' || typeof _bulkFetchPrice !== 'function') return null;
+  let timer;
+  try {
+    const id = /^(tcgdex|tcgplayer|ygoprodeck):/.test(row.groundedId || '') ? '' : row.groundedId;
+    const reads = [Promise.resolve().then(() => _bulkFetchPrice(row.cardName, row.setName, row.cardNumber,
+      row.cardType, row.isJapanese, id, row.rarity, row.foilHint))];
+    // The public Pokémon catalogue can stall through several retries before
+    // reaching its fallback. Let our priced catalogue answer independently.
+    // Require the selected set and number, and keep its finish-specific data.
+    if (row.cardType === 'pokemon' && !row.isJapanese && row.cardNumber && row.setName
+        && typeof _bulkTcgPriceFetch === 'function') reads.push((async () => {
+      const feed = await _bulkTcgPriceFetch(row.cardName, row.cardNumber, row.setName, row.rarity);
+      const number = n => String(n || '').split('/')[0].trim().replace(/^0+(?=\d)/,'').toLowerCase();
+      if (!feed || number(feed.cardNumber) !== number(row.cardNumber)
+          || _bulkSetMatchScore(feed.setName,row.setName) < 2) return null;
+      const keys = {normal:'normal',holofoil:'holofoil',reverseholofoil:'reverseHolofoil'};
+      const finish = key => keys[String(key).toLowerCase().replace(/\s/g,'')] || key;
+      return {marketPrice:feed.market,variant:finish(feed.variant || ''),
+        prices:Object.fromEntries(Object.entries(feed.allVariants || {}).map(([k,v])=>[finish(k),v])),
+        imageUrl:feed.imageUrl || '',tcgplayerUrl:feed.url || '',
+        matchedNumber:feed.cardNumber,matchedSet:feed.setName};
+    })());
+    const usable = info => typeof info?.marketPrice === 'number' && Number.isFinite(info.marketPrice) && info.marketPrice >= 0;
+    return await Promise.race([
+      Promise.any(reads.map(read => read.then(info => { if (!usable(info)) throw Error('No quote'); return info; }))).catch(() => null),
+      new Promise(resolve => { timer = setTimeout(() => resolve(null), 12000); }),
+    ]);
+  } finally { clearTimeout(timer); }
 }

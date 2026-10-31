@@ -18,7 +18,7 @@
         .replace(/\s+(?:[lw]v?\.?\s*\d+|hp\s*\d+|\d+\s*hp)\b.*$/i,'')
         .replace(/\s+\d{2,3}(?:\s|$).*$/,'');
       return s.trim();
-    }).filter(s=>s.length>=3 && s.length<=100 && /\p{L}{3}/u.test(s) &&
+    }).filter(s=>s.length>=3 && s.length<=60 && /\p{L}{3}/u.test(s) &&
       !/^(?:creature|instant|sorcery|enchantment|artifact|trainer|stage \d|hp \d|evolves|illustrat|copyright)\b/i.test(s)))];
     // A binder pocket may begin with sleeve/background noise. Consider the
     // readable lines in the strip, not just its first two OCR lines.
@@ -111,7 +111,13 @@
         finally {canvas.width=canvas.height=1;}
         for(const name of names(data?.text,game)) {
           if(!current())return null;const key=name.toLocaleLowerCase();if(seen.has(key))continue;
-          seen.add(key);reads.push(name);
+          seen.add(key);
+          // OCR can turn sleeve glare/background into a long sentence of
+          // fragments. Keep catalogue checks, but do not offer that as a name.
+          const words=name.match(/\p{L}+/gu)||[];
+          const readable=words.length<=6 && words.filter(w=>w.length<=2).length<=Math.max(1,Math.floor(words.length/3))
+            && (typeof data?.confidence!=='number' || data.confidence>=40);
+          if(readable)reads.push(name);
           if(options.lookup && lookups++<6) {
             options.onProgress?.('Checking the printed name…');
             let hit=null;
